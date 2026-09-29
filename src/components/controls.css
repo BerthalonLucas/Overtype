@@ -1,0 +1,144 @@
+/* Shared controls of the settings and the setup (src/components/controls.tsx).
+   One size rhythm: controls 32 px high (lg 40), icons 16 px, radius 6 on controls, 10 on groups.
+   Every glyph sits in a grid cell with place-items: center; nothing is nudged by hand. */
+:root {
+  --ui-control-h: 32px;
+  --ui-radius: 6px;
+  --ui-group-radius: 10px;
+  --ui-accent: #3563e9;
+  --ui-accent-hover: #2a55c9;
+  --ui-accent-text: #fff;
+  --ui-card: rgb(255 255 255 / .72);
+  --ui-card-border: rgb(var(--ink-rgb) / .07);
+  --ui-divider: rgb(var(--ink-rgb) / .07);
+  --ui-popover-bg: #fff;
+  --ui-popover-shadow: 0 8px 28px rgb(0 0 0 / .14), 0 0 0 .5px rgb(0 0 0 / .1);
+  --ui-option-hover: rgb(var(--ink-rgb) / .06);
+  --ui-switch-off-border: rgb(var(--ink-rgb) / .55);
+  --ui-switch-off-thumb: rgb(var(--ink-rgb) / .7);
+  --ui-input-underline: rgb(var(--ink-rgb) / .35);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ui-accent: #91bff7; --ui-accent-hover: #a9cdf9; --ui-accent-text: #0e2440;
+    --ui-card: rgb(255 255 255 / .045); --ui-card-border: rgb(255 255 255 / .06); --ui-divider: rgb(0 0 0 / .32);
+    --ui-popover-bg: rgb(44 47 53); --ui-popover-shadow: 0 10px 32px rgb(0 0 0 / .45), 0 0 0 .5px rgb(255 255 255 / .12);
+    --ui-option-hover: rgb(255 255 255 / .07);
+    --ui-switch-off-border: rgb(255 255 255 / .6); --ui-switch-off-thumb: rgb(255 255 255 / .78);
+    --ui-input-underline: rgb(255 255 255 / .38);
+  }
+}
+:root[data-theme="dark"] {
+  --ui-accent: #91bff7; --ui-accent-hover: #a9cdf9; --ui-accent-text: #0e2440;
+  --ui-card: rgb(255 255 255 / .045); --ui-card-border: rgb(255 255 255 / .06); --ui-divider: rgb(0 0 0 / .32);
+  --ui-popover-bg: rgb(44 47 53); --ui-popover-shadow: 0 10px 32px rgb(0 0 0 / .45), 0 0 0 .5px rgb(255 255 255 / .12);
+  --ui-option-hover: rgb(255 255 255 / .07);
+  --ui-switch-off-border: rgb(255 255 255 / .6); --ui-switch-off-thumb: rgb(255 255 255 / .78);
+  --ui-input-underline: rgb(255 255 255 / .38);
+}
+
+.ui-spin { animation: ui-spin 900ms linear infinite; }
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* Buttons: inline-flex, centred both ways, fixed height; the icon is a 16 px box. */
+.ui-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: var(--ui-control-h); padding: 0 14px; border: 0; border-radius: var(--ui-radius); font: inherit; font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; color: var(--text); background: var(--quiet-bg); transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease; }
+.ui-button > svg { flex: none; display: block; }
+.ui-button[data-size="lg"] { height: 40px; padding: 0 20px; font-size: 14px; border-radius: 8px; }
+.ui-button[data-variant="primary"] { color: var(--ui-accent-text); background: var(--ui-accent); }
+.ui-button[data-variant="primary"]:hover:not(:disabled) { background: var(--ui-accent-hover); }
+.ui-button[data-variant="secondary"] { box-shadow: inset 0 0 0 1px var(--ui-card-border); }
+.ui-button[data-variant="secondary"]:hover:not(:disabled) { background: var(--pressed); }
+.ui-button[data-variant="ghost"] { color: var(--link); background: transparent; padding: 0 10px; }
+.ui-button[data-variant="ghost"]:hover:not(:disabled) { background: var(--hover); }
+.ui-button[data-variant="danger"] { color: var(--error-text); background: transparent; box-shadow: inset 0 0 0 1px var(--ui-card-border); }
+.ui-button[data-variant="danger"]:hover:not(:disabled) { background: rgb(209 67 67 / .1); }
+.ui-button:disabled { opacity: .45; cursor: default; }
+.ui-button:focus-visible, .ui-icon-button:focus-visible, .ui-select-trigger:focus-visible, .ui-switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ui-icon-button { display: inline-grid; place-items: center; width: var(--ui-control-h); height: var(--ui-control-h); padding: 0; border: 0; border-radius: var(--ui-radius); color: var(--text-muted); background: transparent; transition: background-color 120ms ease, color 120ms ease; }
+.ui-icon-button > svg { display: block; }
+.ui-icon-button:hover:not(:disabled) { color: var(--text); background: var(--hover); }
+.ui-icon-button:disabled { opacity: .4; cursor: default; }
+
+/* Switch (Windows 11): 40 × 20 track, 12 px thumb off, 14 px on. The grid centres the thumb
+   vertically; its side gap equals the vertical one ((18 − thumb) / 2: 3 px off, 2 px on), so it
+   sits concentric in both round ends. Travel = inner width − thumb − 2 × 2 px, from the CSS only. */
+.ui-switch { --w: 40px; --h: 20px; flex: none; display: inline-grid; align-items: center; justify-items: start; width: var(--w); height: var(--h); padding: 0; border: 1px solid var(--ui-switch-off-border); border-radius: 999px; background: transparent; transition: background-color 140ms ease, border-color 140ms ease; }
+.ui-switch-thumb { display: block; width: 12px; height: 12px; margin-left: 3px; border-radius: 50%; background: var(--ui-switch-off-thumb); transition: transform 160ms cubic-bezier(.2, .8, .2, 1), width 120ms ease, height 120ms ease, background-color 140ms ease; }
+.ui-switch:hover:not(:disabled) .ui-switch-thumb { width: 14px; height: 14px; margin-left: 2px; }
+.ui-switch[data-state="checked"] { border-color: var(--ui-accent); background: var(--ui-accent); }
+.ui-switch[data-state="checked"] .ui-switch-thumb { width: 14px; height: 14px; margin-left: 2px; background: var(--ui-accent-text); transform: translateX(calc(var(--w) - 2px - 14px - 4px)); }
+.ui-switch:disabled { opacity: .45; cursor: default; }
+
+/* Select and combobox trigger: the field look, value left, chevron right. */
+.ui-select-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 160px; height: var(--ui-control-h); padding: 0 8px 0 11px; border: 1px solid var(--settings-field-border); border-radius: var(--ui-radius); font: inherit; font-size: 13px; color: var(--settings-text); background: var(--settings-field); text-align: left; }
+.ui-select-trigger:hover:not(:disabled) { border-color: rgb(var(--ink-rgb) / .24); }
+.ui-select-trigger:disabled { opacity: .5; cursor: default; }
+.ui-select-trigger[data-placeholder] { color: var(--text-subtle); }
+.ui-select-icon { flex: none; display: block; color: var(--text-subtle); }
+.ui-combobox-trigger { width: 100%; }
+.ui-combobox-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-popover { z-index: 50; min-width: var(--radix-select-trigger-width, var(--radix-popover-trigger-width)); max-height: min(340px, var(--radix-select-content-available-height, var(--radix-popover-content-available-height))); overflow: hidden; border-radius: 8px; color: var(--settings-text); background: var(--ui-popover-bg); box-shadow: var(--ui-popover-shadow); font-size: 13px; }
+.ui-select-viewport { padding: 4px; }
+.ui-option { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; padding: 6px 10px; border-radius: 5px; outline: none; cursor: default; user-select: none; }
+.ui-option[data-highlighted], .ui-option[data-selected="true"] { background: var(--ui-option-hover); }
+.ui-option[data-state="checked"]::before, .ui-option[aria-selected="true"]::before { content: none; }
+.ui-option-check { flex: none; color: var(--ui-accent); }
+.ui-option-text { display: grid; gap: 1px; min-width: 0; }
+.ui-option-text span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-option-text small { font-size: 11.5px; color: var(--text-subtle); }
+.ui-combobox-content { display: flex; flex-direction: column; }
+.ui-command { display: flex; flex-direction: column; min-height: 0; }
+.ui-command-search { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 12px; border-bottom: 1px solid var(--ui-divider); color: var(--text-subtle); }
+.ui-command-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: none; font: inherit; font-size: 13px; color: var(--settings-text); background: transparent; }
+.ui-command-list { max-height: 280px; overflow: auto; padding: 4px; }
+.ui-command-empty { padding: 14px 10px; color: var(--text-subtle); font-size: 12.5px; }
+
+/* Slider (Radix): a 4 px track, a 20 px thumb with the accent core. */
+.ui-slider-control { display: inline-flex; align-items: center; gap: 12px; }
+.ui-slider { position: relative; display: flex; align-items: center; width: 150px; height: 20px; touch-action: none; user-select: none; }
+.ui-slider-track { position: relative; flex: 1; height: 4px; border-radius: 999px; background: rgb(var(--ink-rgb) / .2); }
+.ui-slider-range { position: absolute; height: 100%; border-radius: 999px; background: var(--ui-accent); }
+.ui-slider-thumb { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--settings-field); box-shadow: 0 0 0 1px rgb(var(--ink-rgb) / .12), 0 1px 3px rgb(0 0 0 / .2); }
+.ui-slider-thumb::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--ui-accent); transition: transform 120ms ease; }
+.ui-slider-thumb:hover::after { transform: scale(1.2); }
+.ui-slider-thumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ui-slider-control output { min-width: 40px; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; color: var(--text-muted); }
+
+/* Fields: label row, input, one line of hint or problem. The focused input gets the accent
+   underline of Windows 11 (an inset shadow: no layout shift). */
+.ui-field { display: grid; gap: 6px; min-width: 0; }
+.ui-field-label { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ui-field-label label { font-size: 13px; font-weight: 500; color: var(--settings-text); }
+.ui-input { width: 100%; height: var(--ui-control-h); padding: 0 11px; border: 1px solid var(--settings-field-border); border-radius: var(--ui-radius); font: inherit; font-size: 13px; color: var(--settings-text); background: var(--settings-field); box-shadow: inset 0 -1px 0 var(--ui-input-underline); outline: none; transition: box-shadow 120ms ease, border-color 120ms ease; }
+.ui-input::placeholder { color: var(--text-subtle); opacity: 1; }
+.ui-input:focus { box-shadow: inset 0 -2px 0 var(--ui-accent); }
+.ui-field[data-invalid] .ui-input { box-shadow: inset 0 -2px 0 var(--fail); }
+.ui-field-hint, .ui-field-problem { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-subtle); }
+.ui-field-problem { color: var(--error-text); }
+.ui-secret { position: relative; display: flex; align-items: center; }
+.ui-secret .ui-input { padding-right: 150px; }
+.ui-secret-note { position: absolute; right: 40px; font-size: 11.5px; color: var(--text-subtle); pointer-events: none; }
+.ui-secret-eye { position: absolute; right: 2px; width: 28px; height: 28px; }
+
+/* Groups and rows (Windows 11 settings cards). */
+.ui-group { display: grid; gap: 8px; }
+.ui-group-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.ui-group-heading h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--settings-text); }
+.ui-group-heading p { margin: 2px 0 0; font-size: 12.5px; color: var(--text-subtle); }
+.ui-group-card { display: grid; overflow: hidden; border: 1px solid var(--ui-card-border); border-radius: var(--ui-group-radius); background: var(--ui-card); }
+.ui-row { display: grid; gap: 10px; padding: 12px 16px; }
+.ui-row + .ui-row { border-top: 1px solid var(--ui-divider); }
+.ui-row-main { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 36px; }
+.ui-row[data-stack] .ui-row-main { flex-wrap: wrap; }
+.ui-row-copy { display: grid; gap: 2px; min-width: 0; }
+.ui-row-copy strong { font-size: 13.5px; font-weight: 500; }
+.ui-row-copy small { font-size: 12px; line-height: 1.45; color: var(--text-subtle); }
+.ui-row-control { display: inline-flex; align-items: center; gap: 10px; flex: none; }
+
+.ui-status { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted); }
+.ui-status i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--ink-rgb) / .3); }
+.ui-status[data-state="ok"] i { background: var(--ok); }
+.ui-status[data-state="error"] i { background: var(--fail); }
+.ui-status[data-state="pending"] i { background: var(--pending); }
+.ui-status[data-state="running"] i { background: var(--ui-accent); animation: ui-pulse 1.1s ease-in-out infinite; }
+@keyframes ui-pulse { 50% { opacity: .35; } }

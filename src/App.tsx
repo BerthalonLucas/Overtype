@@ -8,6 +8,7 @@ import { Icon, Segmented, SettingSwitch } from './ui';
 import { bridge } from './bridge';
 import { GlassOverlay } from './GlassOverlay';
 import { HaloWindow } from './halo/HaloWindow';
+import { SetupWindow } from './setup/SetupWindow';
 import { useTranslation } from './useTranslation';
 import { shareSettings, useSettings } from './useSettings';
 import { useDocumentPreferences } from './preferences';
@@ -348,6 +349,7 @@ export function App() {
   useDocumentPreferences(settings);
   useEffect(() => { document.body.className = `flowtranslate-window flowtranslate-${windowName}`; return () => { document.body.className = ''; }; }, [windowName]);
   const content = windowName === 'settings' ? <SettingsWindow />
+    : windowName === 'setup' ? <SetupWindow />
     : windowName === 'halo' ? <HaloWindow />
     : windowName === 'overlay' && (bridge.native || standaloneDemo) ? <OverlayWindow standaloneDemo={standaloneDemo} />
     : <DemoWindow />;

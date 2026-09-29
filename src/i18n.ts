@@ -1,11 +1,17 @@
 import { useSyncExternalStore } from 'react';
 import type { Language } from './types';
+import { setupMessages } from './setup/messages.i18n';
+import { connectionMessages } from './connection/messages.i18n';
+import { settingsPagesMessages } from './settings/pages/messages.i18n';
 
 // The interface language (docs/DA-PLAN.md, lot 1): English by default, French complete.
 // No dependency: one typed dictionary, `t(key, params)`, and a hook that follows
 // settings.language. Action names are user data and never pass through here; the
 // French messages Rust sends stay as they are until the error codes of lot 10.
 const dictionary = {
+  ...setupMessages,
+  ...connectionMessages,
+  ...settingsPagesMessages,
   // Overlay: the glass, its pill and its menu.
   'glass.copy': { en: 'Copy translation', fr: 'Copier la traduction' },
   'glass.more': { en: 'More options', fr: 'Plus d’options' },

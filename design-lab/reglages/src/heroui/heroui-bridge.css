@@ -1,0 +1,32 @@
+/* HeroUI mapped onto the lab tokens. Unlayered, so it beats HeroUI's layered theme. Only inside
+   <HeroScope themed> (class ft-heroui-themed); a plain <HeroScope> keeps HeroUI's own look. */
+.heroui-scope { font-family: var(--ft-font); color: var(--foreground); }
+.heroui-scope.ft-heroui-themed {
+  --accent: var(--ft-accent);
+  --accent-foreground: var(--ft-on-accent);
+  --accent-hover: var(--ft-accent-hover);
+  --accent-soft: var(--ft-accent-soft);
+  --accent-soft-foreground: var(--ft-accent-text);
+  --focus: var(--ft-accent);
+  --link: var(--ft-accent-text);
+  --background: var(--ft-bg);
+  --foreground: var(--ft-text);
+  --surface: var(--ft-surface);
+  --surface-foreground: var(--ft-text);
+  --muted: var(--ft-text-3);
+  --default: rgb(var(--ft-ink-rgb) / .07);
+  --default-hover: rgb(var(--ft-ink-rgb) / .11);
+  --default-foreground: var(--ft-text);
+  --field-background: var(--ft-field);
+  --field-foreground: var(--ft-text);
+  --field-placeholder: var(--ft-text-3);
+  --border: rgb(var(--ft-ink-rgb) / .14);
+  --separator: var(--ft-line);
+  --danger: var(--ft-danger);
+  --success: var(--ft-ok);
+  --warning: var(--ft-warn);
+  --radius: calc(var(--ft-r-control) * .67);
+}
+.ft-heroui-portal { position: relative; z-index: 100; }
+.ft-hero-proof { display: grid; gap: 10px; }
+.ft-hero-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

@@ -1,0 +1,29 @@
+.ft-connection { display: grid; gap: 16px; }
+.ft-connection .ft-field-hint b { font-weight: 500; color: var(--ft-text-2); }
+.ft-linklike { padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--ft-accent-text); text-decoration: none; }
+.ft-linklike:hover { text-decoration: underline; }
+.ft-linklike:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 2px; border-radius: 3px; }
+.ft-connection-check { overflow: hidden; display: grid; gap: 10px; }
+
+.ft-trace { list-style: none; margin: 0; padding: 10px 12px; display: grid; gap: 2px; border-radius: var(--ft-r-control); background: rgb(var(--ft-ink-rgb) / .04); }
+.ft-trace-step { display: grid; font-size: 12.5px; color: var(--ft-text-2); }
+.ft-trace-row { display: grid; grid-template-columns: 20px 86px 1fr auto; align-items: center; gap: 8px; min-height: 26px; }
+.ft-trace-fix { display: grid; gap: 6px; padding: 0 0 6px 28px; line-height: 1.45; color: var(--ft-text-2); }
+.ft-trace-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ft-trace-step[data-state="error"] .ft-trace-detail { font-weight: 600; }
+.ft-trace-icon { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ft-text-3); }
+.ft-trace-icon i { display: block; width: 6px; height: 6px; border-radius: 50%; background: rgb(var(--ft-ink-rgb) / .25); }
+.ft-trace-step[data-state="ok"] .ft-trace-icon { color: #fff; background: var(--ft-ok); }
+[data-ft-theme="dark"] .ft-trace-step[data-state="ok"] .ft-trace-icon, [data-ft-theme="dark"] .ft-trace-step[data-state="error"] .ft-trace-icon { color: #0b0d0c; }
+.ft-trace-step[data-state="error"] .ft-trace-icon { color: #fff; background: var(--ft-danger); }
+.ft-trace-step[data-state="running"] .ft-trace-icon { color: var(--ft-accent-text); }
+.ft-trace-step[data-state="skipped"], .ft-trace-step[data-state="waiting"] { color: var(--ft-text-3); }
+.ft-trace-name { font-weight: 500; color: var(--ft-text); }
+.ft-trace-step[data-state="skipped"] .ft-trace-name, .ft-trace-step[data-state="waiting"] .ft-trace-name { color: var(--ft-text-3); }
+.ft-trace-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-trace-step[data-state="error"] .ft-trace-detail { color: var(--ft-danger); }
+.ft-trace-ms { font-variant-numeric: tabular-nums; color: var(--ft-text-3); }
+
+.ft-connection-error { display: grid; gap: 4px; padding: 10px 12px; border-radius: var(--ft-r-control); background: color-mix(in srgb, var(--ft-danger) 9%, transparent); font-size: 12.5px; line-height: 1.45; color: var(--ft-text-2); }
+.ft-connection-error strong { font-size: 13px; color: var(--ft-text); font-weight: 600; }
+.ft-connection-error-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

@@ -1,0 +1,52 @@
+/* Heartbeat variants of the welcome mark (src/journey/variants.jsx). Transform + opacity only.
+   Every layer sits in the same grid cell, so rings and glow stay concentric with the mark. */
+.jr-heart { --hs: 88px; position: relative; display: inline-grid; grid-template: var(--hs) / var(--hs); place-items: center; width: var(--hs); height: var(--hs); isolation: isolate; }
+.jr-heart > * { grid-area: 1 / 1; }
+.jr-heart-mark { display: grid; place-items: center; will-change: transform; }
+.jr-heart-mark .ft-appmark { box-shadow: 0 14px 34px rgb(0 0 0 / .22), 0 2px 6px rgb(0 0 0 / .12), inset 0 0 0 .5px rgb(255 255 255 / .14); }
+.jr-heart-ring {
+  width: var(--hs); height: var(--hs); border-radius: calc(var(--hs) * .28);
+  box-shadow: 0 0 0 1.5px rgb(var(--ft-accent-rgb) / .9); opacity: 0; z-index: -1; will-change: transform, opacity;
+}
+.jr-heart-glow {
+  width: calc(var(--hs) * 1.9); height: calc(var(--hs) * 1.9); border-radius: 50%; z-index: -2; opacity: 0;
+  background: radial-gradient(closest-side, rgb(188 130 243 / .38), rgb(141 159 255 / .22) 45%, transparent 72%);
+  will-change: transform, opacity;
+}
+
+/* 1. anneau — lub-dub + a ring leaving on each beat */
+.jr-heart[data-beat="anneau"] .jr-heart-mark,
+.jr-heart[data-beat="double"] .jr-heart-mark { animation: jr-lubdub 2.4s cubic-bezier(.3, 0, .3, 1) infinite; }
+.jr-heart[data-beat="anneau"] .jr-heart-ring { animation: jr-ring 2.4s cubic-bezier(.2, .7, .3, 1) infinite; }
+.jr-heart[data-beat="anneau"] .jr-heart-ring-2 { animation-name: jr-ring-2; }
+@keyframes jr-lubdub {
+  0%, 38%, 100% { transform: scale(1); }
+  8% { transform: scale(1.07); }
+  16% { transform: scale(.985); }
+  24% { transform: scale(1.04); }
+}
+@keyframes jr-ring {
+  0%, 4% { transform: scale(1); opacity: 0; }
+  8% { transform: scale(1.04); opacity: .55; }
+  46% { transform: scale(1.62); opacity: 0; }
+  100% { transform: scale(1.62); opacity: 0; }
+}
+@keyframes jr-ring-2 {
+  0%, 20% { transform: scale(1); opacity: 0; }
+  24% { transform: scale(1.03); opacity: .35; }
+  58% { transform: scale(1.45); opacity: 0; }
+  100% { transform: scale(1.45); opacity: 0; }
+}
+
+/* 2. double — beat only (rules above), rings stay hidden */
+
+/* 3. halo — slow breath, iridescent glow on the in-breath */
+.jr-heart[data-beat="halo"] .jr-heart-mark { animation: jr-breath 3.2s cubic-bezier(.45, 0, .55, 1) infinite; }
+.jr-heart[data-beat="halo"] .jr-heart-glow { animation: jr-glow 3.2s cubic-bezier(.45, 0, .55, 1) infinite; }
+@keyframes jr-breath { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.045); } }
+@keyframes jr-glow { 0%, 100% { transform: scale(.82); opacity: .15; } 50% { transform: scale(1); opacity: .95; } }
+
+/* Reduced motion: still mark, no rings (the global safety net would stop them after one run). */
+[data-ft-reduced="true"] .jr-heart-ring { display: none; }
+[data-ft-reduced="true"] .jr-heart-glow { opacity: .5; animation: none; }
+[data-ft-reduced="true"] .jr-heart-mark { animation: none; }

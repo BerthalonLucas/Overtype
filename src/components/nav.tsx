@@ -52,7 +52,8 @@ export function TabList({ label, children, className = '' }: { label: string; ch
   </TabsPrimitive.List>;
 }
 export function Tab({ value, icon, page, children, badge, className = '' }: { value: string; icon?: ReactNode; page?: string; children: ReactNode; badge?: ReactNode; className?: string }) {
-  return <TabsPrimitive.Trigger value={value} className={`ft-tab ${className}`} data-ft-page={page ?? value}>
+  // The title names the tab when a narrow window keeps the icons only.
+  return <TabsPrimitive.Trigger value={value} className={`ft-tab ${className}`} data-ft-page={page ?? value} title={typeof children === 'string' ? children : undefined}>
     {icon && <span className="ft-tab-icon" aria-hidden="true">{icon}</span>}
     <span className="ft-tab-label">{children}</span>
     {badge}

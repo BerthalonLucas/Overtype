@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SettingsWindow } from '../App';
+import { SettingsWindow } from '../settings/SettingsWindow';
 import { HaloScene } from '../halo/HaloWindow';
 import { GlassOverlay } from '../GlassOverlay';
 import { useTranslation } from '../useTranslation';

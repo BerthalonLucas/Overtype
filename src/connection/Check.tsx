@@ -125,12 +125,13 @@ export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: s
 function CheckDraw() {
   return <svg className="ft-trace-check" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.6 6.3l2.2 2.2L9.4 3.6" /></svg>;
 }
-export function useDuration() {
+// A duration in the interface's language: milliseconds, then seconds from `secondsFrom` on.
+export function useDuration(secondsFrom = 10_000) {
   const t = useT();
   const language = useLanguage();
-  return useCallback((ms: number) => ms >= 10_000
+  return useCallback((ms: number) => ms >= secondsFrom
     ? t('conn.seconds', { seconds: new Intl.NumberFormat(locales[language], { maximumFractionDigits: 1 }).format(ms / 1000) })
-    : t('conn.ms', { ms: new Intl.NumberFormat(locales[language]).format(Math.max(0, Math.round(ms))) }), [t, language]);
+    : t('conn.ms', { ms: new Intl.NumberFormat(locales[language]).format(Math.max(0, Math.round(ms))) }), [t, language, secondsFrom]);
 }
 
 // The live trace, « balayage ». On a failure, the gesture, the system's words and the actions sit

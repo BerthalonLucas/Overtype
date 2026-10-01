@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Icon, IconButton, iconFromLucide } from '../ui';
+import { motion } from 'motion/react';
+import { ArrowDown, ArrowUp } from 'lucide-react';
+import { Icon, iconFromLucide } from '../ui';
 import { useT } from '../i18n';
+import { IconButton, ICON, Switch } from '../components/controls';
+import { useTx } from '../components/motion';
 import type { ActionDefinition, Settings } from '../types';
 import { addToGrid, gridLimit, letterProblem, moveInGrid, nextLetter, removeFromGrid, withoutKey, type LetterProblem } from './grid';
 
@@ -10,13 +14,16 @@ import { addToGrid, gridLimit, letterProblem, moveInGrid, nextLetter, removeFrom
 // to the free instruction alone (review of bc57857, finding 7).
 
 type Props = { settings: Settings; persist: (settings: Settings, immediate: boolean) => void };
-// « In the menu »: the Îlot's tiles in their order (6 at most, decision 6), each with its
-// letter. Up/down buttons move a tile (keyboard included); a letter is checked here, in
-// line, before anything is saved.
+// « In the menu » (design-lab/reglages/src/settings/pages/Actions.jsx): every action in one
+// ordered list, the Îlot's tiles first in their order (6 at most, decision 6), each with its
+// letter, arrows to move it (keyboard included) and a switch that takes it in or out of the menu.
+// A letter is checked here, in line, before anything is saved.
 export function MenuGrid({ settings, persist }: Props) {
   const t = useT();
+  const tx = useTx();
   const grid = settings.menuActionIds.map(id => settings.actions.find(action => action.id === id)).filter((action): action is ActionDefinition => Boolean(action));
   const others = settings.actions.filter(action => !settings.menuActionIds.includes(action.id));
+  const canAdd = grid.length < gridLimit;
   // An invalid letter stays in its field with its reason, unsaved.
   const [drafts, setDrafts] = useState<Record<string, { letter: string; problem: LetterProblem }>>({});
   // A moved row is re-inserted in the DOM, which drops the focus: give it back to its button.
@@ -31,38 +38,39 @@ export function MenuGrid({ settings, persist }: Props) {
     setRefocus(null);
   }, [refocus]);
   const move = (id: string, delta: -1 | 1) => { persist({ ...settings, menuActionIds: moveInGrid(settings.menuActionIds, id, delta) }, true); setRefocus(`${id}\n${delta < 0 ? 'up' : 'down'}`); };
+  const forget = (id: string) => setDrafts(({ [id]: _removed, ...rest }) => rest);
   const setLetter = (action: ActionDefinition, typed: string) => {
     const letter = nextLetter(typed, drafts[action.id]?.letter ?? action.key ?? '');
     const problem = letterProblem(letter, action.id, settings.actions);
     setDrafts(({ [action.id]: _previous, ...rest }) => problem ? { ...rest, [action.id]: { letter, problem } } : rest);
     if (!problem) persist({ ...settings, actions: settings.actions.map(item => item.id !== action.id ? item : letter ? { ...item, key: letter } : withoutKey(item)) }, true);
   };
+  const toggle = (action: ActionDefinition, on: boolean) => { forget(action.id); persist(on ? addToGrid(settings, action.id) : removeFromGrid(settings, action.id), true); };
   const ref = (key: string) => (element: HTMLButtonElement | null) => { if (element) buttons.current.set(key, element); else buttons.current.delete(key); };
-  return <div className="menu-grid">
-    <div className="subsection-heading"><div><h3>{t('grid.title')}</h3><p>{t('grid.intro')}</p></div></div>
-    {grid.length ? <ol className="grid-list" aria-label={t('grid.list')}>{grid.map((action, index) => {
-      const draft = drafts[action.id];
-      const letterId = `grid-letter-${action.id}`;
-      const glyph = iconFromLucide(action.icon);
-      return <li key={action.id} className="grid-item" data-invalid={draft ? true : undefined}>
-        <span className="grid-index" aria-hidden="true">{index + 1}</span>
-        <span className="grid-glyph" data-icon={glyph}>{glyph && <Icon name={glyph} size={15} />}</span>
-        <span className="grid-name">{action.name || t('actions.untitled')}</span>
-        <input id={letterId} className="grid-letter" aria-label={t('grid.letter', { name: action.name })} aria-invalid={draft ? true : undefined} aria-describedby={draft ? `${letterId}-problem` : undefined} value={draft?.letter ?? action.key ?? ''} autoComplete="off" spellCheck={false} onFocus={event => event.currentTarget.select()} onChange={event => setLetter(action, event.target.value)} />
-        <span className="grid-moves">
-          <IconButton ref={ref(`${action.id}\nup`)} label={t('grid.up', { name: action.name })} disabled={index === 0} onClick={() => move(action.id, -1)}><Icon name="up" size={14} /></IconButton>
-          <IconButton ref={ref(`${action.id}\ndown`)} label={t('grid.down', { name: action.name })} disabled={index === grid.length - 1} onClick={() => move(action.id, 1)}><Icon name="chevron" size={14} /></IconButton>
-          <IconButton label={t('grid.remove', { name: action.name })} onClick={() => { setDrafts(({ [action.id]: _removed, ...rest }) => rest); persist(removeFromGrid(settings, action.id), true); }}><Icon name="close" size={14} /></IconButton>
-        </span>
-        {draft && <p id={`${letterId}-problem`} className="row-warning grid-problem" role="alert">{t(draft.problem.key, draft.problem.params)}</p>}
-      </li>;
-    })}</ol> : <p className="settings-help">{t('grid.empty')}</p>}
-    {grid.length < gridLimit
-      ? others.length > 0 && <label className="grid-add">{t('grid.add')}<select value="" onChange={event => { if (event.target.value) persist(addToGrid(settings, event.target.value), true); }}>
-        <option value="">{t('grid.addPlaceholder')}</option>
-        {others.map(action => <option key={action.id} value={action.id}>{action.name || t('actions.untitled')}</option>)}
-      </select></label>
-      : <p className="settings-help">{t('grid.full')}</p>}
-    <p className="settings-help">{t('grid.free')}</p>
-  </div>;
+  const row = (action: ActionDefinition, index: number, inMenu: boolean) => {
+    const draft = drafts[action.id];
+    const letterId = `grid-letter-${action.id}`;
+    const glyph = iconFromLucide(action.icon);
+    const name = action.name || t('actions.untitled');
+    return <motion.li key={action.id} layout="position" transition={tx('smooth')} className="st-grid-row" data-off={inMenu ? undefined : ''} data-invalid={draft ? true : undefined} data-action={action.id}>
+      <span className="st-grid-index" aria-hidden="true">{inMenu ? index + 1 : ''}</span>
+      <span className="st-grid-tile" data-icon={glyph} aria-hidden="true">{glyph && <Icon name={glyph} size={16} />}</span>
+      <span className="st-grid-name">{name}</span>
+      <span className="st-grid-letter">
+        {/* Out of the menu an action keeps no letter (grid.ts): the field waits for it to come back. */}
+        <input id={letterId} aria-label={t('grid.letter', { name })} aria-invalid={draft ? true : undefined} aria-describedby={draft ? `${letterId}-problem` : undefined} value={draft?.letter ?? action.key ?? ''} maxLength={4}
+          disabled={!inMenu} autoComplete="off" spellCheck={false} onFocus={event => event.currentTarget.select()} onChange={event => setLetter(action, event.target.value)} />
+      </span>
+      <span className="st-grid-moves">
+        <IconButton ref={ref(`${action.id}\nup`)} size="sm" label={t('grid.up', { name })} disabled={!inMenu || index === 0} onClick={() => move(action.id, -1)}><ArrowUp {...ICON} size={15} /></IconButton>
+        <IconButton ref={ref(`${action.id}\ndown`)} size="sm" label={t('grid.down', { name })} disabled={!inMenu || index === grid.length - 1} onClick={() => move(action.id, 1)}><ArrowDown {...ICON} size={15} /></IconButton>
+      </span>
+      <Switch checked={inMenu} disabled={!inMenu && !canAdd} onCheckedChange={on => toggle(action, on)} label={t('page.actions.inMenu', { name })} />
+      {draft && <p id={`${letterId}-problem`} className="st-grid-problem" role="alert">{t(draft.problem.key, draft.problem.params)}</p>}
+    </motion.li>;
+  };
+  return <ol className="st-grid-list" data-field="grid" aria-label={t('grid.list')}>
+    {grid.map((action, index) => row(action, index, true))}
+    {others.map(action => row(action, -1, false))}
+  </ol>;
 }

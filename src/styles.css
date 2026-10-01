@@ -4,7 +4,7 @@
 body { margin: 0; min-width: 0; min-height: 100vh; }
 body.flowtranslate-overlay { min-width: 0; }
 /* The native settings WebView is opaque edge to edge, in the theme's plain fill. */
-body.flowtranslate-settings { min-height: 0; background: var(--settings-bg); }
+body.flowtranslate-settings { height: 100vh; min-height: 0; overflow: hidden; background: var(--ft-bg); }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
@@ -17,79 +17,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .preview-backgrounds button[aria-pressed="true"] { border-color: currentColor; background: rgba(255,255,255,.12); }
 .standalone-demo[data-preview-background="dark"] :is(.preview-label, .preview-backgrounds) { color: #b7c1d0; }
 
-/* Settings window: 520 px, opaque, home-made title bar, height follows content. */
-.settings-window { position: relative; width: 520px; max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; color: var(--settings-text); font-size: 13px; line-height: 1.4; background: var(--settings-bg); }
-.settings-loading { min-height: 200px; padding: 24px 18px; gap: 12px; align-items: flex-start; }
-.settings-loading h1 { margin: 0; font-size: 18px; }
-.settings-titlebar { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 12px 0 18px; user-select: none; cursor: default; }
-.settings-mark { display: grid; place-items: center; width: 18px; height: 18px; margin-right: 2px; }
-.settings-mark svg { display: block; border-radius: 5px; }
-.settings-brand { font-size: 13px; font-weight: 600; }
-.settings-titlebar h1 { margin: 0 auto 0 0; font-size: 13px; font-weight: 400; color: var(--text-subtle); }
-.close-settings { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; color: var(--text-muted); background: transparent; transition: background-color 140ms ease; }
-.close-settings:hover { color: var(--text); background: var(--hover); }
-.settings-body { display: flex; flex-direction: column; gap: 20px; padding: 6px 18px 16px; }
-.settings-window h2 { margin: 0; padding: 0 2px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-subtle); }
-.settings-window section { display: flex; flex-direction: column; gap: 4px; }
-.setting-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 52px; padding: 8px 12px 8px 14px; border-radius: 8px; background: var(--settings-row); }
-.setting-copy { display: grid; gap: 2px; min-width: 0; }
-.setting-copy strong { font-size: 13.5px; font-weight: 500; }
-.setting-copy small { font-size: 12px; color: var(--text-subtle); }
-.setting-copy .setting-notice { color: var(--text-muted); }
-.segmented { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--segment-track); }
-.segmented button { padding: 5px 12px; border: 0; border-radius: 6px; font-size: 12.5px; color: var(--text-muted); background: transparent; transition: background-color 140ms ease, color 140ms ease; }
-.segmented button:hover { color: var(--text); }
-.segmented button[data-state="on"] { color: var(--segment-on-text); font-weight: 600; background: var(--segment-on-bg); box-shadow: var(--segment-on-shadow); }
-.setting-switch { flex: none; width: 40px; height: 22px; padding: 2px; border: 1px solid rgb(var(--ink-rgb) / .1); border-radius: 999px; background: var(--switch-off); transition: background-color 140ms ease; }
-.setting-switch[data-state="checked"] { border-color: transparent; background: var(--switch-on); }
-.switch-thumb { display: block; width: 18px; height: 18px; border-radius: 50%; background: var(--switch-thumb); box-shadow: 0 1px 2px rgba(0,0,0,.18); }
-.setting-switch[data-state="checked"] .switch-thumb { background: var(--switch-thumb-on); }
-.shortcut-control { display: flex; align-items: center; gap: 10px; flex: none; }
-.keycaps { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; border-radius: 6px; outline: none; }
-.keycaps kbd { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 7px; border-radius: 6px; font: inherit; font-size: 11.5px; font-weight: 600; background: var(--keycap-bg); box-shadow: var(--keycap-shadow); }
-.keycaps[data-capturing] { padding: 0 8px; background: var(--capture-bg); }
-.keycaps em { font-style: normal; font-size: 11.5px; color: var(--link); }
-.keycaps:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* The Settings window of 0.6: src/settings/settings.css and src/components/ (--ft-* tokens). */
 .text-button { height: 28px; padding: 0 6px; border: 0; border-radius: 6px; color: var(--link); font-size: 12.5px; background: transparent; transition: background-color 140ms ease; }
 .text-button:hover:not(:disabled) { background: var(--hover); }
 .text-button:disabled { opacity: .5; cursor: default; }
-.row-warning { margin: 2px 14px 0; font-size: 11.5px; color: var(--warning-text); }
-.history { display: flex; flex-direction: column; padding: 2px 12px 4px 14px; border-radius: 8px; background: var(--settings-row); }
-.history article { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.history article > div { min-width: 0; }
-.history p { margin: 0 0 2px; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.history small, .empty-history, .history-foot small { font-size: 11px; color: var(--text-subtle); }
-.empty-history { margin: 8px 0; }
-.history-remove { width: 26px; height: 26px; border-radius: 8px; color: var(--text-muted); }
-.history-foot { display: flex; align-items: center; justify-content: space-between; padding: 6px 0 2px; }
-.section-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 0; border: 0; border-radius: 6px; color: inherit; background: transparent; }
-.section-toggle h2 { padding-bottom: 0; }
-.section-toggle svg { color: var(--text-subtle); transition: transform 140ms ease; }
-.section-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
-.connection .profile { display: grid; gap: 8px; margin-top: 4px; padding: 10px 14px 12px; border-radius: 8px; background: var(--settings-row); }
-.profile-heading { display: flex; align-items: center; gap: 10px; }
-.profile-heading strong { font-size: 13.5px; font-weight: 500; }
-.profile-heading .text-button { margin-left: auto; }
-.connection-state { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-subtle); }
-.connection-state i { width: 6px; height: 6px; border-radius: 50%; background: rgb(var(--ink-rgb) / .3); }
-.connection-state[data-state="ok"] i { background: var(--ok); }
-.connection-state[data-state="unknown"] i { background: var(--pending); }
-.connection-state[data-state="error"] i { background: var(--fail); }
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.settings-window label { display: grid; gap: 4px; font-size: 11.5px; color: var(--text-subtle); }
-.settings-window input { width: 100%; height: 30px; padding: 0 9px; border: 1px solid var(--settings-field-border); border-radius: 6px; color: var(--settings-text); font-size: 12.5px; background: var(--settings-field); }
-.settings-window input::placeholder { color: var(--text-subtle); opacity: 1; }
-.settings-window input:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
-.secret { position: relative; }
-.secret small { position: absolute; right: 9px; bottom: 8px; font-size: 11.5px; color: var(--text-subtle); pointer-events: none; }
-.secret input { padding-right: 132px; }
-.preview-note { padding: 4px 2px 0; font-size: 11px; color: var(--text-subtle); }
-.settings-window footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 44px; padding: 0 18px; border-top: 1px solid var(--line); font-size: 11.5px; color: var(--text-subtle); }
-.save-status { display: inline-flex; align-items: center; gap: 6px; }
-.save-status svg { color: var(--ok); }
-.save-status .retry { height: 24px; padding: 0 4px; color: var(--error-text); }
-.settings-meta { display: inline-flex; align-items: center; gap: 4px; }
-.settings-meta .text-button { height: 24px; padding: 0 4px; }
 .primary-action, .quiet-action { min-height: 30px; border: 0; border-radius: 10px; padding: 6px 12px; font-size: 12px; font-weight: 600; }
 .primary-action { color: var(--primary-text); background: var(--primary-bg); }
 .quiet-action { color: var(--text); background: var(--quiet-bg); }
@@ -103,98 +34,10 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .initialization-error { width: 380px; padding: 16px; border-radius: 28px; color: var(--text); font-size: 13px; }
 @media (max-height: 250px) { .preview-label { display: none; } }
 
-/* Flexible settings window: fixed title/footer, one scrollable body. */
-body.flowtranslate-settings { height: 100vh; overflow: hidden; }
-.settings-window { width: 100%; max-width: none; height: 100vh; min-height: 0; overflow: hidden; }
-.settings-titlebar, .settings-window footer { flex: none; }
-.settings-scroll { flex: 1; min-height: 0; overflow: hidden; }
-.settings-scroll-viewport { width: 100%; height: 100%; }
-.settings-scrollbar { display: flex; width: 12px; padding: 3px; user-select: none; touch-action: none; }
-.settings-scrollbar:hover { background: rgb(var(--ink-rgb) / .035); }
-.settings-scroll-thumb { flex: 1; position: relative; min-height: 36px; border-radius: 999px; background: rgb(var(--ink-rgb) / .3); transition: background-color 140ms ease; }
-.settings-scrollbar:hover .settings-scroll-thumb { background: rgb(var(--ink-rgb) / .5); }
-.settings-body { padding: 8px 22px 24px; gap: 24px; }
-.settings-window :is(select, textarea) { width: 100%; min-width: 0; border: 1px solid var(--settings-field-border); border-radius: 7px; color: var(--settings-text); background: var(--settings-field); font: inherit; }
-.settings-window select { min-height: 34px; padding: 5px 8px; color-scheme: var(--settings-scheme); }
-.settings-window textarea { min-height: 90px; padding: 10px; resize: vertical; font: 12px/1.5 "Cascadia Code", Consolas, monospace; }
-.settings-window textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
-.section-heading p, .settings-help { margin: 3px 2px 0; color: var(--text-subtle); font-size: 12px; }
-.section-heading .text-button { flex: none; }
-.default-action { max-width: 280px; margin: 4px 0 10px; }
-.action-list, .shortcut-list { display: grid; gap: 8px; padding: 0; margin: 0; min-width: 0; border: 0; }
-.action-card, .shortcut-card { border: 1px solid var(--line); border-radius: 10px; background: var(--settings-row); }
-.action-card summary { display: flex; align-items: center; gap: 12px; padding: 12px; cursor: pointer; list-style: none; font-weight: 500; }
-.action-card summary::-webkit-details-marker { display: none; }
-.action-card summary small { margin-left: auto; color: var(--text-subtle); font-size: 11px; font-weight: normal; }
-.action-card[open] summary svg { transform: rotate(180deg); }
-.action-editor { display: grid; gap: 10px; padding: 0 12px 12px; }
-.action-editor small { color: var(--text-subtle); }
-.action-editor code { color: var(--link); }
-.action-editor .text-button { justify-self: start; }
-.shortcut-card { display: grid; gap: 12px; padding: 12px; }
-.shortcut-card-heading { display: flex; align-items: center; gap: 9px; font-size: 12px; color: var(--text-subtle); }
-.shortcut-card-heading .icon-button { width: 26px; height: 26px; margin-left: auto; color: inherit; }
-.shortcut-control { justify-content: space-between; }
-.shortcut-options { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
-.settings-help { line-height: 1.5; margin-top: 8px; }
-.save-error-detail { flex: none; margin: 0; padding: 4px 22px 10px; color: var(--error-text); font-size: 12px; }
-.settings-resize-grip { position: absolute; right: 0; bottom: 0; padding: 0; width: 16px; height: 16px; border: 0; color: rgb(var(--ink-rgb) / .35); background: transparent; cursor: nwse-resize; font-size: 11px; }
-
-/* Îlot sections (lot 13): the same rows, cards and keycaps; sub-headings inside a section. */
-.settings-window h3 { margin: 0; font-size: 13px; font-weight: 600; }
-.subsection-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 14px 0 4px; }
-.subsection-heading p { margin: 2px 0 0; color: var(--text-subtle); font-size: 12px; }
-.subsection-heading .text-button { flex: none; }
-.actions-settings > h2 + .subsection-heading, .actions-settings > h2 + .menu-grid .subsection-heading { margin-top: 0; }
-.settings-window .setting-select { flex: 0 1 200px; width: auto; min-width: 140px; }
-.shortcut-row { flex-wrap: wrap; }
-.shortcut-row .setting-copy { flex: 1 1 200px; }
-.shortcut-notice { margin: 0; line-height: 1.4; }
-.shortcut-row .shortcut-notice { flex: 1 0 100%; }
-.shortcut-notice[data-ok] { color: var(--text-subtle); }
-.shortcut-suggestion .text-button { margin-left: -6px; }
-/* « Restore default settings »: its question wraps under the copy when the row is narrow. */
-.reset-row { flex-wrap: wrap; }
-.reset-row .setting-copy { flex: 1 1 220px; }
-.reset-confirm { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.reset-row .row-warning { flex: 1 0 100%; margin: 0; }
-.setting-sub { margin-left: 18px; }
-.range-control { display: inline-flex; align-items: center; gap: 10px; flex: none; }
-.settings-window .range-control input { width: 132px; height: 22px; padding: 0; border: 0; background: transparent; accent-color: var(--switch-on); }
-.range-control output { min-width: 34px; font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; }
-.menu-grid { display: grid; gap: 4px; }
-.grid-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.grid-item { display: grid; grid-template-columns: 16px 18px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 44px; padding: 6px 8px 6px 12px; border-radius: 8px; background: var(--settings-row); }
-.grid-index { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text-subtle); text-align: right; }
-.grid-glyph { display: grid; place-items: center; color: var(--text-muted); }
-.grid-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.settings-window .grid-letter { width: 34px; height: 28px; padding: 0; text-align: center; font-weight: 600; text-transform: uppercase; }
-.settings-window .grid-letter[aria-invalid="true"] { border-color: var(--fail); }
-.grid-moves { display: inline-flex; gap: 2px; }
-.grid-moves .icon-button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 6px; color: var(--text-muted); background: transparent; }
-.grid-moves .icon-button:hover:not(:disabled) { color: var(--text); background: var(--hover); }
-.grid-moves .icon-button:disabled { opacity: .35; cursor: default; }
-.grid-problem { grid-column: 3 / -1; margin: 0; }
-.grid-add { max-width: 280px; margin-top: 4px; }
-.action-buttons { display: flex; flex-wrap: wrap; gap: 4px; }
-.profiles { display: grid; gap: 4px; }
-.profiles:empty { display: none; }
-
-/* A field reached by a direct link: amber wash and ring, two pulses of 1.4 s (2.8 s in all,
-   design-lab/src/app.css .s-field.is-target), then it fades. The spread shadows paint around
-   the field without moving anything. Reduced motion (styles.css above) keeps it still. */
-[data-field] { border-radius: 8px; transition: background-color 300ms ease, box-shadow 300ms ease; }
-[data-field][data-target] { background: var(--target-bg); box-shadow: 0 0 0 4px var(--target-bg), 0 0 0 5.5px var(--target-ring); animation: field-pulse 1.4s ease-in-out 2; }
+/* A field reached by a direct link (src/settings/fields.ts): amber wash and ring, two pulses of
+   1.4 s (2.8 s in all, design-lab/src/app.css .s-field.is-target), then it fades. The spread
+   shadows paint around the field without moving anything. Reduced motion keeps it still. */
+[data-field] { transition: background-color 300ms ease, box-shadow 300ms ease; }
+[data-field][data-target] { border-radius: 8px; background: var(--target-bg); box-shadow: 0 0 0 4px var(--target-bg), 0 0 0 5.5px var(--target-ring); animation: field-pulse 1.4s ease-in-out 2; }
 @keyframes field-pulse { 50% { box-shadow: 0 0 0 4px var(--target-bg), 0 0 0 8px var(--target-glow); } }
 :root[data-motion="reduced"] [data-field][data-target] { animation: none; }
-
-@media (max-width: 540px) {
-  .setting-row { align-items: flex-start; flex-wrap: wrap; gap: 8px; }
-  .setting-row .setting-copy { flex: 1 1 240px; }
-  .segmented { flex-wrap: wrap; }
-  .shortcut-options, .field-grid { grid-template-columns: 1fr; }
-  .section-heading, .subsection-heading { flex-wrap: wrap; }
-  .setting-sub { margin-left: 10px; }
-}
-

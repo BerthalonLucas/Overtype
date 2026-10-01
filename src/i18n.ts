@@ -87,6 +87,9 @@ const dictionary = {
   'result.error.target_changed': { en: 'Text changed — not replaced', fr: 'Texte modifié, rien remplacé' },
   'result.error.not_editable': { en: 'Read-only text, not replaced', fr: 'Texte non modifiable, rien remplacé' },
   'result.error.keys_held': { en: 'Keys held down, not replaced', fr: 'Touches enfoncées, rien remplacé' },
+  // 0.6: the paste changed nothing (a PDF in a browser); the window runs as administrator.
+  'result.error.read_only': { en: 'Read-only text, not replaced', fr: 'Texte en lecture seule, rien remplacé' },
+  'result.error.protected_window': { en: 'Administrator window — can’t be read', fr: 'Fenêtre administrateur, lecture impossible' },
   'result.error.too_long': { en: 'Selection too long (max 6,000 characters)', fr: 'Sélection trop longue (6 000 caractères max)' },
   'result.error.no_selection': { en: 'Select some text first', fr: 'Sélectionnez d’abord du texte' },
   'result.error.protected_field': { en: 'Protected field, not read', fr: 'Champ protégé, rien lu' },
@@ -160,7 +163,7 @@ const dictionary = {
   'settings.menu': { en: 'Menu', fr: 'Menu' },
   'settings.menuShortcut': { en: 'Shortcut', fr: 'Raccourci' },
   'settings.menuShortcutField': { en: 'Menu shortcut', fr: 'Raccourci du menu' },
-  'settings.menuShortcutHelp': { en: 'Opens the menu beside the selected text.', fr: 'Ouvre le menu à côté du texte sélectionné.' },
+  'settings.menuShortcutHelp': { en: 'Select some text, then press these keys: the menu opens beside it.', fr: 'Sélectionnez du texte, puis appuyez sur ces touches : le menu s’ouvre à côté.' },
   'settings.menuShortcutHelpV4': { en: 'Runs the default action on the selected text.', fr: 'Lance l’action par défaut sur le texte sélectionné.' },
   'settings.menuShortcutOff': { en: 'Off. Record a combination to turn it on.', fr: 'Désactivé. Enregistrez une combinaison pour l’activer.' },
   'settings.defaultAction': { en: 'Default action', fr: 'Action par défaut' },
@@ -183,9 +186,9 @@ const dictionary = {
   'after.strategyHelp': { en: 'Ctrl+Z in the app, or {app} pastes the original back.', fr: 'Ctrl+Z dans l’application, ou {app} recolle l’original.' },
   'after.strategyKeystroke': { en: 'Ctrl+Z', fr: 'Ctrl+Z' },
   'after.strategyRepaste': { en: 'Paste original', fr: 'Recoller l’original' },
-  'after.changedWords': { en: 'Highlight changed words', fr: 'Surligner les mots changés' },
-  'after.changedWordsHelp': { en: 'The words the model changed, until your next action in the text.', fr: 'Les mots changés par le modèle, jusqu’à la prochaine action dans le texte.' },
-  'after.changedWordsSeconds': { en: 'Highlight time', fr: 'Durée du surlignage' },
+  'after.changedWords': { en: 'Highlight changed words', fr: 'Mettre en valeur les mots changés' },
+  'after.changedWordsHelp': { en: 'The words the model changed, until your next action in the text.', fr: 'Les mots changés par le modèle, jusqu’à votre prochaine action dans le texte.' },
+  'after.changedWordsSeconds': { en: 'Highlight time', fr: 'Durée de la mise en valeur' },
   'after.changedWordsSecondsHelp': { en: 'The longest it stays without an action.', fr: 'Le plus longtemps qu’il reste sans action.' },
   'after.placement': { en: 'Pill position', fr: 'Position de la pilule' },
   'after.placementHelp': { en: 'Never over the new text.', fr: 'Jamais sur le nouveau texte.' },
@@ -211,19 +214,19 @@ const dictionary = {
   'settings.defaultProfile': { en: 'Default profile', fr: 'Profil par défaut' },
   'settings.defaultProfileHelp': { en: 'Quality: slower, better phrasing. Can be changed from the bubble menu.', fr: 'Qualité : plus lent, meilleures tournures. Changeable depuis le menu de la bulle.' },
   'settings.textSize': { en: 'Text size', fr: 'Taille du texte' },
-  'settings.textSizeHelp': { en: 'Short glass 16, 18 or 20 px; reader 22, 24 or 26 px. The reader takes half the screen.', fr: 'Verre court 16, 18 ou 20 px ; lecteur 22, 24 ou 26 px. Le lecteur occupe la moitié de l’écran.' },
+  'settings.textSizeHelp': { en: 'Short glass 16, 18 or 20 px; reader 22, 24 or 26 px.', fr: 'Verre court 16, 18 ou 20 px ; lecteur 22, 24 ou 26 px.' },
   'settings.textNormal': { en: 'Normal', fr: 'Normale' },
   'settings.textLarge': { en: 'Large', fr: 'Grande' },
   'settings.textXLarge': { en: 'Extra large', fr: 'Très grande' },
   'settings.autoClose': { en: 'Auto close', fr: 'Fermeture automatique' },
-  'settings.autoCloseHelp': { en: 'The estimated reading time, then a fade. Hovering, scrolling or pinning holds it.', fr: 'Le temps de lecture estimé, puis un fondu. Survoler, faire défiler ou épingler la retient.' },
+  'settings.autoCloseHelp': { en: 'The estimated reading time, then a fade. Hovering or pinning holds it.', fr: 'Le temps de lecture estimé, puis un fondu. Survoler ou épingler la retient.' },
   'settings.closeFast': { en: 'Fast', fr: 'Rapide' },
   'settings.closeNormal': { en: 'Normal', fr: 'Normale' },
   'settings.closeSlow': { en: 'Slow', fr: 'Lente' },
   'settings.closeNever': { en: 'Never', fr: 'Jamais' },
   'settings.device': { en: 'On this device', fr: 'Sur cet appareil' },
   'settings.history': { en: 'Keep encrypted history', fr: 'Conserver l’historique chiffré' },
-  'settings.historyHelp': { en: '7 days, 100 entries, protected by Windows (DPAPI). Nothing leaves the device.', fr: '7 jours, 100 entrées, protégé par Windows (DPAPI). Rien ne quitte l’appareil.' },
+  'settings.historyHelp': { en: '7 days, 100 entries, protected by Windows. Nothing leaves the device.', fr: '7 jours, 100 entrées, protégé par Windows. Rien ne quitte l’appareil.' },
   'settings.historyRemove': { en: 'Delete this entry', fr: 'Supprimer cette entrée' },
   'settings.historyEmpty': { en: 'No saved translations.', fr: 'Aucune traduction enregistrée.' },
   'settings.historyCountOne': { en: '{count} entry', fr: '{count} entrée' },
@@ -231,9 +234,9 @@ const dictionary = {
   'settings.historyClear': { en: 'Delete all', fr: 'Tout supprimer' },
   'settings.deleteFailed': { en: 'Deletion failed.', fr: 'La suppression a échoué.' },
   'settings.autostart': { en: 'Start when you sign in', fr: 'Lancer à l’ouverture de session' },
-  'settings.autostartHelp': { en: 'Only the notification area icon shows at rest.', fr: 'Seule l’icône de notification est visible au repos.' },
+  'settings.autostartHelp': { en: 'Only the notification area icon shows at rest.', fr: 'Seule l’icône de la zone de notification est visible au repos.' },
   'settings.reset': { en: 'Default settings', fr: 'Réglages par défaut' },
-  'settings.resetHelp': { en: 'Every setting goes back to a fresh install’s, except your connection, history, language and start at sign-in.', fr: 'Chaque réglage revient à celui d’une nouvelle installation, sauf votre connexion, l’historique, la langue et le lancement à l’ouverture de session.' },
+  'settings.resetHelp': { en: 'Everything goes back to a fresh install, except your connection, history, language and start at sign-in.', fr: 'Tout revient à une nouvelle installation, sauf votre connexion, l’historique, la langue et le lancement à l’ouverture de session.' },
   'settings.resetAction': { en: 'Restore…', fr: 'Rétablir…' },
   'settings.resetConfirm': { en: 'Your own actions and shortcuts will be removed. Restore the default settings?', fr: 'Vos propres actions et raccourcis seront supprimés. Rétablir les réglages par défaut ?' },
   'settings.resetConfirmAction': { en: 'Restore default settings', fr: 'Rétablir les réglages par défaut' },
@@ -321,6 +324,8 @@ const dictionary = {
 } satisfies Record<string, Record<Language, string>>;
 
 export type MessageKey = keyof typeof dictionary;
+// A message as it is written, its parameters unfilled (the tests read it).
+export const rawMessage = (language: Language, key: MessageKey): string => dictionary[key][language];
 export const messageKeys = Object.keys(dictionary) as MessageKey[];
 export type Params = Record<string, string | number>;
 export type Translate = (key: MessageKey, params?: Params) => string;

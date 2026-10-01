@@ -29,7 +29,7 @@ type Props = {
 
 function Entry({ entry, open, onOpenChange }: { entry: DiagEntry; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT();
-  const duration = useDuration();
+  const duration = useDuration(1000);
   const message = redact(entryMessage(entry, t));
   const detail = ([
     [t('diag.colStep'), stepName(entry.step, t)],

@@ -1,9 +1,16 @@
-/* Réglages (src/settings/). Only --ft-* tokens; round things are even-sized grid cells centred both
+/* The Settings window (src/settings/), ported from the design lab (design-lab/reglages/src/
+   settings/settings.css). Only --ft-* tokens; round things are even-sized grid cells centred both
    ways. Animations: transform / opacity, except the disclosures (Radix Collapsible height, the
    standard shadcn pattern) which animate a small subtree. */
 
-/* ——— Window layout ——— */
-.ft-settings { position: absolute; inset: 0; display: grid; grid-template-columns: var(--ft-sidebar-w) 1fr; }
+/* ——— Window layout: matte, edge to edge; the title bar (32 px) lies over the content ——— */
+.ft-settings-window { --ft-titlebar-h: 32px; position: relative; width: 100%; height: 100vh; min-height: 0; overflow: hidden; background: var(--ft-win-bg); }
+.ft-settings { position: absolute; inset: 0; display: grid; grid-template-columns: var(--ft-sidebar-w) minmax(0, 1fr); }
+.st-loading { position: absolute; inset: 0; display: grid; align-content: center; justify-items: center; gap: 10px; padding: 24px; text-align: center; }
+.st-loading h1 { margin: 6px 0 0; font-family: var(--ft-font-display); font-size: var(--ft-title-size); font-weight: var(--ft-title-weight); }
+.st-loading p { margin: 0; max-width: 360px; font-size: 13.5px; line-height: 1.45; color: var(--ft-text-2); }
+.st-loading-actions { display: flex; gap: 8px; margin-top: 8px; }
+.st-resize-grip { position: absolute; right: 0; bottom: 0; z-index: 40; width: 14px; height: 14px; cursor: nwse-resize; }
 .ft-settings-sidebar {
   display: grid; grid-template-rows: auto auto 1fr auto; grid-template-columns: minmax(0, 1fr); gap: 12px; min-height: 0; min-width: 0;
   padding: calc(var(--ft-titlebar-h) + 2px) 10px 12px; background: var(--ft-sidebar-bg);
@@ -70,7 +77,6 @@
   display: inline-flex; align-items: center; gap: 10px; height: 36px; padding: 0 8px 0 14px; border-radius: 999px;
   font-size: 13px; font-weight: 500; color: var(--ft-text);
   background: var(--ft-popover-bg); box-shadow: var(--ft-popover-shadow);
-  -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
 }
 .st-toast:not(:has(.st-toast-keys)) { padding-right: 14px; }
 .st-toast-keys { display: inline-flex; gap: 3px; }
@@ -205,21 +211,15 @@
 .st-after-doc p { margin: 0; }
 .st-after-muted { color: var(--ft-text-3); }
 .st-after-new { margin: 6px 0 !important; color: var(--ft-text); }
-/* Changed words (Lucas, 30/09): the TEXT itself is luminous — a soft iridescence in the letters and
-   a faint glow around them — instead of a coloured box over it. Same family as the app's halo
-   (iris → violet → rose), deeper on light grounds, pastel on dark ones, so it stays easy to read
-   (each hue ≥ 4.5:1 on the document). Reusable anywhere: class .ft-lit (alias .st-changed). */
-.st-changed, .ft-lit {
-  --lit-1: 74 86 214; --lit-2: 132 64 196; --lit-3: 190 58 112; --lit-glow: 150 110 255; --lit-a: .38;
-  color: rgb(var(--lit-2)); background: linear-gradient(90deg, rgb(var(--lit-1)), rgb(var(--lit-2)) 55%, rgb(var(--lit-3)));
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 .5px rgb(var(--lit-glow) / .5)) drop-shadow(0 0 6px rgb(var(--lit-glow) / var(--lit-a)));
-}
-:root[data-theme="dark"] :is(.st-changed, .ft-lit) { --lit-1: 168 182 255; --lit-2: 206 170 255; --lit-3: 255 168 190; --lit-glow: 190 160 255; --lit-a: .45; }
-mark.st-changed { padding: 0; border-radius: 0; }
-/* The app's result pill (ResultPill DOM + result.css, theme from app-theme.css on .dm-app). */
-.dm-app.st-app { position: absolute; inset: auto; z-index: 2; pointer-events: auto; transform-origin: 100% 0; }
-.st-app-shape { border-radius: 14px; -webkit-backdrop-filter: blur(24px) saturate(150%); backdrop-filter: blur(24px) saturate(150%); }
+/* The app's own result pill (the content of src/result/ResultPill.tsx on the Îlot's surface,
+   src/menu/ilot.css, src/result/result.css), placed by the preview. */
+.ilot.st-app { position: absolute; z-index: 2; display: block; transform-origin: 100% 0; }
+.st-app-shape { border-radius: 14px; }
+/* The two styles of the changed words, each on the same sentence (src/halo/halo.css .halo-lit). */
+.st-style-cards { padding-top: 4px; }
+.st-style-cards .st-card-art { height: auto; padding: 14px 12px; background: var(--ft-field); box-shadow: inset 0 0 0 .5px rgb(var(--ft-ink-rgb) / .1); }
+.st-style-art { font-size: 12.5px; line-height: 1.5; color: var(--ft-text); text-align: left; }
+.st-dependent > .st-group-pad { position: relative; padding-left: calc(var(--ft-row-px) + 42px); }
 .st-after-end { display: inline-block; width: 0; height: 1em; vertical-align: text-bottom; }
 .st-after-stage[data-placement="below"] { padding-bottom: 46px; }
 
@@ -284,38 +284,8 @@ mark.st-changed { padding: 0; border-radius: 0; }
 .st-size-preview { overflow: hidden; }
 .st-size-preview p { margin: 2px 0 0; padding: 10px 14px; border-radius: var(--ft-r-control); background: rgb(var(--ft-ink-rgb) / .045); color: var(--ft-text); line-height: 1.5; }
 
-/* Loaders (copied from the app's src/loaders/loaders.css, ink from the lab). */
-.st-ldr { display: inline-flex; align-items: center; justify-content: center; flex: none; position: relative; color: rgb(var(--ft-ink-rgb)); }
-.st-perle { width: var(--size); height: var(--size); border-radius: 50%; overflow: hidden; isolation: isolate; box-shadow: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .12), 0 1px 6px rgb(188 130 243 / .45); animation: st-perle-b 2.4s cubic-bezier(.45,0,.55,1) infinite; }
-.st-perle::before { content: ""; position: absolute; inset: -30%; background: conic-gradient(from 0deg, #BC82F3, #F5B9EA, #8D9FFF, #AA6EEE, #FF6778, #FFBA71, #C686FF, #BC82F3); filter: blur(2.5px); animation: st-spin 3s linear infinite; }
-.st-perle::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 34% 28%, rgb(255 255 255 / .9) 0, rgb(255 255 255 / 0) 42%), radial-gradient(circle at 70% 80%, rgb(255 255 255 / 0) 50%, rgb(255 255 255 / .35) 100%); }
-@keyframes st-perle-b { 0%, 100% { transform: scale(.9); } 50% { transform: scale(1); } }
-@keyframes st-spin { to { transform: rotate(1turn); } }
-.st-neb { --amp: 3px; width: var(--size); height: var(--size); border-radius: 50%; overflow: hidden; isolation: isolate; background: rgb(255 255 255 / .55); box-shadow: inset 0 0 0 .5px rgb(var(--ft-ink-rgb) / .12); }
-.st-neb i { position: absolute; left: 15%; top: 15%; width: 70%; height: 70%; border-radius: 50%; filter: blur(2px); mix-blend-mode: multiply; }
-.st-neb i:nth-child(1) { background: #8D9FFF; animation: st-neb1 3.1s ease-in-out infinite alternate; }
-.st-neb i:nth-child(2) { background: #FF6778; animation: st-neb2 3.7s ease-in-out infinite alternate; }
-.st-neb i:nth-child(3) { background: #FFBA71; animation: st-neb3 4.3s ease-in-out infinite alternate; }
-@keyframes st-neb1 { 0% { transform: translate(calc(var(--amp) * -1), calc(var(--amp) * -.66)) scale(.9); } 50% { transform: translate(calc(var(--amp) * .66), calc(var(--amp) * -1)) scale(1.1); } 100% { transform: translate(var(--amp), calc(var(--amp) * .66)) scale(.95); } }
-@keyframes st-neb2 { 0% { transform: translate(var(--amp), calc(var(--amp) * .33)) scale(1); } 50% { transform: translate(calc(var(--amp) * -.66), var(--amp)) scale(.85); } 100% { transform: translate(calc(var(--amp) * -1), calc(var(--amp) * -.66)) scale(1.1); } }
-@keyframes st-neb3 { 0% { transform: translate(0, var(--amp)) scale(.85); } 50% { transform: translate(var(--amp), calc(var(--amp) * -.33)) scale(1.05); } 100% { transform: translate(calc(var(--amp) * -.66), calc(var(--amp) * -1)) scale(.9); } }
-:root[data-theme="dark"] .st-neb { background: rgb(255 255 255 / .12); }
-:root[data-theme="dark"] .st-neb i { mix-blend-mode: screen; }
-.st-sinus { overflow: visible; }
-.st-sinus path { fill: none; stroke-width: 1.5; stroke-linecap: round; opacity: .9; mix-blend-mode: multiply; }
-:root[data-theme="dark"] .st-sinus path { mix-blend-mode: screen; }
-.st-sinus .s1 { stroke: #8D9FFF; animation: st-sin1 1.2s linear infinite; }
-.st-sinus .s2 { stroke: #FF6778; animation: st-sin2 1.68s linear infinite reverse; }
-.st-sinus .s3 { stroke: #FFBA71; animation: st-sin3 2.28s linear infinite; }
-.st-sinus .amp { transform-box: view-box; transform-origin: 14px 6px; animation: st-sin-amp 2.4s cubic-bezier(.45,0,.55,1) infinite alternate; }
-@keyframes st-sin1 { to { transform: translateX(12px); } }
-@keyframes st-sin2 { to { transform: translateX(16px); } }
-@keyframes st-sin3 { to { transform: translateX(20px); } }
-@keyframes st-sin-amp { from { transform: scaleY(.35); } to { transform: scaleY(1); } }
-:root[data-motion="reduced"] :is(.st-ldr, .st-ldr *, .st-ldr::before, .st-ldr::after) { animation-play-state: paused !important; }
-
 /* ——— Serveur ——— */
-.st-servers { display: grid; gap: 12px; }
+.st-servers { position: relative; display: grid; gap: 12px; }
 .st-server { border-radius: var(--ft-r-group); overflow: hidden; background: var(--ft-group-bg); box-shadow: var(--ft-group-border), var(--ft-group-rim), var(--ft-group-shadow); }
 .st-server-head { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 16px var(--ft-row-px); }
 .st-server-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--ft-page-soft); color: var(--ft-page-text); transition: background-color var(--ft-t) ease, color var(--ft-t) ease; }
@@ -391,7 +361,7 @@ mark.st-changed { padding: 0; border-radius: 0; }
 .st-log-status { display: flex; justify-content: flex-end; }
 .st-http { display: grid; place-items: center; height: 18px; padding: 0 4px; border-radius: 4px; font-size: 11px; color: var(--ft-text-2); box-shadow: inset 0 0 0 1px rgb(var(--ft-ink-rgb) / .16); }
 .st-http[data-bad] { background: var(--ft-text); color: var(--ft-content-bg); box-shadow: none; font-weight: 600; }
-.st-log-ms { text-align: right; font-variant-numeric: tabular-nums; color: var(--ft-text-3); }
+.st-log-ms { white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; color: var(--ft-text-3); }
 .st-log .st-chevron { color: var(--ft-text-3); }
 .st-log-detail { display: grid; gap: 4px; margin: 0; padding: 2px 14px 12px calc(14px + 92px + 10px + 14px + 10px); }
 .st-log-detail div { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; }
@@ -401,21 +371,7 @@ mark.st-changed { padding: 0; border-radius: 0; }
 .st-log-empty strong { font-size: 13.5px; font-weight: 600; color: var(--ft-text); }
 .st-log-empty .ft-button { margin-top: 8px; }
 
-/* ——— Lab panel (standalone section only, outside the window) ——— */
-.st-labpanel { position: absolute; left: 16px; top: 16px; width: 180px; display: grid; gap: 10px; z-index: 5; }
-.st-labpanel section { display: grid; gap: 8px; padding: 12px; border-radius: 12px; font-size: 12px; line-height: 1.45; color: var(--ft-text-2);
-  background: rgb(var(--ft-surface-rgb) / .82); -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
-  box-shadow: 0 8px 24px rgb(0 0 0 / .1), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .12); }
-.st-labpanel h4 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ft-text-3); }
-.st-labpanel p { margin: 0; }
-.st-labpanel-keys { display: inline-flex; gap: 3px; vertical-align: -3px; margin-right: 2px; }
-.st-labpanel-link { justify-self: start; padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--ft-accent-text); }
-.st-labpanel-link:hover { text-decoration: underline; }
-.st-labpanel-link:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 2px; border-radius: 3px; }
-.st-labpanel-vote { display: grid; gap: 4px; padding-top: 8px; box-shadow: inset 0 1px 0 var(--ft-line); }
-.st-labpanel-vote > span:first-child { font-size: 11.5px; line-height: 1.35; color: var(--ft-text-2); }
 .st-search input:focus, .st-search input:focus-visible { outline: none; }
-.st-labpanel-page { font-weight: 600; color: var(--ft-text); }
 .st-server-facts { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; margin: 0; padding: 12px var(--ft-row-px) 14px calc(var(--ft-row-px) + 54px); box-shadow: inset 0 1px 0 var(--ft-row-divider); }
 .st-server-facts div { display: grid; gap: 2px; min-width: 0; }
 .st-server-facts dt { font-size: 11.5px; color: var(--ft-text-3); }
@@ -433,9 +389,6 @@ mark.st-changed { padding: 0; border-radius: 0; }
 .st-topbar span { font-size: 13px; font-weight: 600; color: var(--ft-text); transform: translateY(4px); transition: transform var(--ft-t-slow) var(--ft-ease-out); }
 .st-topbar[data-show] span { transform: none; }
 
-/* Phone: the lab panel under the window (portalled into the stage's aside) */
-.ft-stage-aside .st-labpanel { position: static; width: auto; padding: 12px; grid-template-columns: 1fr; }
-
 /* Sidebar hover: a whisper of ink, clearly lighter than the selection pill (the pill never
    follows the mouse; a hover that looked like it would read as if it did). */
 .ft-settings .ft-tab:hover:not([data-state="active"]) { background: rgb(var(--ft-ink-rgb) / .03); }
@@ -447,3 +400,47 @@ mark.st-changed { padding: 0; border-radius: 0; }
 .st-fact-wait { display: inline-flex; align-items: center; gap: 6px; color: var(--ft-text-3); }
 .st-server { -webkit-user-select: none; user-select: none; }
 .st-server :is(input, textarea) { -webkit-user-select: text; user-select: text; }
+
+/* ——— What the app adds to the lab's pages ——— */
+/* The indicators are the app's own (src/loaders): a little larger in their card. */
+.st-ind-pill .ldr { transform: scale(1.35); }
+.st-row-problem { margin: 0; padding: 0 var(--ft-row-px) var(--ft-row-py); font-size: 12.5px; line-height: 1.45; color: var(--ft-danger); }
+.ft-row > .st-row-problem, .ft-group-card > .st-row-problem { padding: 0 var(--ft-row-px) var(--ft-row-py); }
+.ft-group-card > .st-row-problem { padding-top: var(--ft-row-py); }
+.st-save-error { margin-bottom: calc(var(--ft-section-gap) * -.35); }
+.st-save[data-status="error"] { top: -2px; }
+/* The recorder at rest, its notices: saved (quiet), a warning from Windows, a proposal. */
+.st-recorder-value { display: inline-flex; }
+.st-recorder-value[data-off] { opacity: .5; }
+.st-recorder .shortcut-notice { margin: 0; font-size: 12px; line-height: 1.45; }
+.st-recorder .shortcut-notice[data-ok] { color: var(--ft-text-3); }
+.st-recorder .shortcut-notice[data-warning] { color: var(--ft-warn); }
+.st-recorder .shortcut-suggestion .ft-button { margin-left: -10px; }
+.ft-row[data-stack] > .st-recorder { padding: 0 var(--ft-row-px) var(--ft-row-py); }
+.st-binding-edit .st-recorder { min-width: 0; }
+.st-instr-name { grid-template-columns: minmax(0, 1fr); }
+.st-instr-name[data-two] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+.st-instr-name > div { display: grid; gap: 6px; min-width: 0; }
+.st-instr-actions { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.st-grid-letter input:disabled { opacity: var(--ft-disabled); }
+.st-try-reply b { font-weight: 500; color: var(--ft-danger); }
+.st-history-head time { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A narrow window (the minimum is 720 px; a browser preview may go below): the sidebar keeps its
+   icons only, the content keeps its rows. */
+@media (max-width: 640px) {
+  .ft-settings-window { --ft-sidebar-w: 56px; --ft-page-px: 16px; }
+  .ft-settings-app span, .ft-settings-foot, .ft-tab-label, .st-search { display: none; }
+  .ft-settings-app { justify-content: center; padding: 0; }
+  .ft-tab { grid-template-columns: auto; justify-content: center; padding: 0; }
+  .st-tab-badge { position: absolute; right: 4px; top: 4px; }
+  .st-cards { grid-template-columns: minmax(0, 1fr); }
+  .st-page > .ft-page-header { padding-right: 0; }
+  .st-save { position: static; }
+  .ft-row-main { flex-wrap: wrap; }
+  .st-server-head { grid-template-columns: minmax(0, 1fr); }
+  .st-server-icon { display: none; }
+  .st-binding-edit, .st-instr-edit, .st-dependent .ft-row-main, .st-dependent > .st-group-pad { padding-left: var(--ft-row-px); }
+  .st-binding-edit { grid-template-columns: minmax(0, 1fr); }
+  .st-toast-host { left: 56px; }
+}

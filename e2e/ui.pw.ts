@@ -365,10 +365,12 @@ test('the short glass menu overlays the glass under the pill, in the same materi
   expect(Math.round(before!.x + before!.width - (menuBounds!.x + menuBounds!.width))).toBe(16);
   expect(menuBounds!.width).toBe(196);
   expect(menuBounds!.height).toBeLessThanOrEqual(menuLayout.reserve);
-  // The lab's painted glass (light here): diagonal sheen over the vertical fill, a 0.5 px hairline.
-  // Chromium keeps alpha on 8 bits: the sheen's .0375 (.25 × .15) reads back as 0.04.
+  // The painted material of 0.6, the fallback of the real glass (light here): a soft light from the
+  // top over the lab's grain and an opaque fill, the luminous rim over a 0.5 px edge (src/theme.css).
   const material = await bubble.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, shadow: getComputedStyle(el).boxShadow }));
-  expect(material.image).toBe('linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.04) 30%, rgba(0, 0, 0, 0) 60%), linear-gradient(rgb(252, 252, 254), rgba(252, 252, 254, 0.94))');
+  expect(material.image).toMatch(/^linear-gradient\(rgba\(255, 255, 255, 0\.5\), rgba\(255, 255, 255, 0\) 46%\), url\("data:image\/svg\+xml,.*feTurbulence.*"\), none$/);
+  await expect(bubble).toHaveCSS('background-color', 'rgb(250, 249, 253)');
+  expect(material.shadow).toContain('rgba(255, 255, 255, 0.5) 0px 0px 0px 0.5px inset');
   expect(material.shadow).toContain('0px 0px 0px 0.5px');
   expect(await menu.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, shadow: getComputedStyle(el).boxShadow }))).toEqual(material);
   expect(await menu.evaluate(el => !!el.closest('.glass-overlay'))).toBe(true);

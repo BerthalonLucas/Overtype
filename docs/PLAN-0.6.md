@@ -221,6 +221,15 @@ export type DiagEntry = { id: number; at: string; run?: string; step: DiagStep; 
 | `fn open_demo(app, window) -> Result<(), String>` / `fn close_demo(app, window, done: bool) -> Result<(), String>` | `openDemo()` / `closeDemo(done)` | Fenêtre `demo` (§3) : cache `setup`, joue ; à la fermeture remontre `setup` et lui émet `demo-ended { done }`. |
 | `fn open_settings(app, field: Option<String>, page: Option<String>)` (existe, `lib.rs:1547`) | `openSettings(field?, page?)` | `page` ∈ ids du §4.1 ; émet `settings-focus-field { field?, page? }`. |
 
+Verre réel (contrat détaillé dans `docs/VERRE-0.6.md`, « Synchroniser la forme sans décalage ») :
+`fn glass_morph(window: WebviewWindow, state, generation: u64, from: GlassShape, to: GlassShape, curve: GlassCurve)`
+avec `GlassShape = { x, y, width, height, radius }` (px CSS relatifs à la fenêtre) et
+`GlassCurve = { id: 'morph' | 'enter' | 'exit' | 'move' | 'instant'; durationMs: number; points: [number, number][] }`
+(les points viennent de `src/motion/tokens.ts`, le front reste la seule source des courbes). TS :
+`bridge.glassMorph(generation, from, to, curve): Promise<void>`. `GlassMaterial` devient `'painted' | 'glass'`
+(un fichier qui contient `acrylic` est lu comme `glass`) ; défaut `glass`, `painted` proposé en secours dans
+Apparence. Rust pose `data-backdrop="glass"` sur `<html>` quand le verre réel est prêt.
+
 L'**état du setup** n'a pas de commande à part : c'est `settings.setupDone` (lu par `get_settings`), plus
 `?replay=1` dans l'URL de la fenêtre. Fermer le setup avant la fin ne change rien : il se rouvre au prochain
 lancement et au clic sur l'icône de la zone de notification.
@@ -233,7 +242,6 @@ lancement et au clic sur l'icône de la zone de notification.
 | `diagnostic` | `DiagEntry` | `settings`, `setup` |
 | `demo-ended` | `{ done: boolean }` | `setup` |
 | `settings-focus-field` (existe) | `{ field?: SettingsField; page?: string }` | `settings` |
-| `backdrop` (si l'essai §6.1 est retenu) | `{ captureId: string; x: number; y: number; width: number; height: number; image: string }` | `overlay` |
 | `halo` (existe) | `HaloEvent` + `masks?: { rect: Rect; image: string }[]` + `style?: ChangedWordsStyle` (phase `marks`) | `halo` |
 
 ### 2.1 La sonde (Rust, nouveau `src-tauri/src/probe.rs`)
@@ -269,9 +277,9 @@ contient une clé donnée en entrée, quelle que soit l'erreur.
 | Label | URL | Taille | Matière | Cadre | Création |
 |---|---|---|---|---|---|
 | `settings` | `/?window=settings` | **860 × 600**, min 720 × 480, redimensionnable, centrée | mate, `transparent: false` | `decorations: false`, barre de titre maison 32 px (réduire, fermer ; glisser = `drag_settings`) | au démarrage, cachée (`tauri.conf.json:47-60` : seules `width`, `height`, `minWidth`, `minHeight` changent) |
-| `setup` | `/?window=setup` (`&replay=1`) | **620 × 720**, fixe, centrée ; réduite à la zone de travail si l'écran est plus petit (contenu défilant, labo `ScrollArea`) | **verre** : `transparent: true`, `shadow: true`, effet Acrylic de Windows (`set_effects`), coins arrondis par DWM ; repli opaque (`--ft-win-bg`) quand `backdrop::fallback` dit que Windows ne peut pas (`backdrop.rs:47-60`), signalé par `data-backdrop="native" \| "painted"` sur `<html>` | `decorations: false`, bouton fermer, glissable | **à la demande** par `open_setup` (`WebviewWindowBuilder`), détruite à la fermeture (pas de WebView en plus après le premier lancement) |
+| `setup` | `/?window=setup` (`&replay=1`) | **620 × 720**, fixe, centrée ; réduite à la zone de travail si l'écran est plus petit (contenu défilant, labo `ScrollArea`) | **verre** : `transparent: true`, `shadow: true`, le module `glass.rs` de `docs/VERRE-0.6.md` avec une forme fixe (rayon libre, même matière que l'Îlot) ; en secours l'effet Acrylic de Tauri (`set_effects`, coins 8 px) ; repli opaque (`--ft-win-bg`) quand `backdrop::fallback` dit que Windows ne peut pas (`backdrop.rs:47-60`). `data-backdrop="glass"` sur `<html>` quand le verre réel est là | `decorations: false`, bouton fermer, glissable | **à la demande** par `open_setup` (`WebviewWindowBuilder`), détruite à la fermeture (pas de WebView en plus après le premier lancement) |
 | `demo` | `/?window=setup&stage=demo` | 900 × 740 (labo `Journey.jsx:411`), bornée à la zone de travail, centrée | transparente, **sans effet** : la fenêtre de courrier et les calques sont dans la page, donc `backdrop-filter` y floute vraiment | `decorations: false`, `shadow: false`, `skipTaskbar: true` | à la demande par `open_demo`, détruite par `close_demo` |
-| `overlay`, `halo` | inchangées | | §6.1 | | |
+| `overlay`, `halo` | inchangées | | verre réel sous l'overlay : `docs/VERRE-0.6.md` | | |
 
 Quand le setup s'ouvre : au démarrage si `!setupDone` (sauf `--demo*`, `--settings`, ou
 `FLOWTRANSLATE_SKIP_SETUP=1` pour les tests) ; clic sur l'icône ou seconde instance si `!setupDone`
@@ -420,24 +428,24 @@ Après ce commit, chacun reste dans sa zone.
 
 ### 6.1 Risques
 
-1. **Vrai flou derrière l'Îlot, les pilules et la bulle.** Une WebView ne floute pas ce qui est derrière sa
-   fenêtre ; l'Acrylic natif ne tient que sur une forme immobile (`docs/ACRYLIC-TRIAL.md`, recommandation de
-   ne pas le livrer). Piste proposée : Rust lit les pixels de l'écran sous la surface **avant** de la montrer
-   (comme `ground.rs:68-100` lit déjà la couleur), les envoie à l'overlay (événement `backdrop`, en mémoire
-   seulement, jamais stockés ni journalisés), et la page les floute sous le verre (`filter: blur(28px)
-   saturate(…)`, jetons `--ft-float-*`). C'est une photo, pas un flux : à reprendre quand la pilule glisse
-   sous le nouveau texte. **Essai borné (Native + C), avec critère** : captures clair / sombre sur fond
-   chargé, pendant le changement de forme et après le collage, sans zone fausse visible. Si le critère n'est
-   pas tenu : verre peint aux teintes du labo pour l'Îlot et les pilules, vrai flou pour le setup (Acrylic)
-   et la démo (CSS) seulement, et **le dire à Lucas** (il a demandé le vrai flou partout pour la 0.6.0).
-   Ne pas utiliser `WDA_EXCLUDEFROMCAPTURE` : l'Îlot disparaîtrait des captures et des partages d'écran.
+1. **Vrai flou derrière l'Îlot, les pilules et la bulle.** La voie est décrite dans `docs/VERRE-0.6.md`
+   (recherche du 01/10, qui fait foi) : une fenêtre de fond immobile sous l'overlay, le verre dessiné par le
+   compositeur de Windows (`Windows.UI.Composition`, pinceau `HostBackdropBrush`) et découpé par un rectangle
+   arrondi dont Rust anime taille, place et rayon sur **la même courbe** que la page (`glass_morph`, un message
+   par changement de forme). Propriété : Native écrit `src-tauri/src/glass.rs` (remplace l'intérieur de
+   `backdrop.rs`) ; C appelle `glass_morph` depuis `onShapeChange` (`menu/MorphSurface.tsx`), passe la boîte
+   web sur la courbe temporelle du jeton et retire le fond peint sous `data-backdrop="glass"`. Le verre peint
+   reste le rendu par défaut du CSS : si Rust se tait, jamais de trou. **Non vérifiable dans la VM** (pas de
+   GPU) : fluidité, décalage d'une image, qualité du flou → passage obligatoire sur la tour de Lucas avant
+   de dire que c'est bon. Si la sonde de l'étape 1 de VERRE-0.6 échoue : verre peint aux teintes du labo, vrai
+   flou pour la démo (CSS) seulement, et **le dire à Lucas**. Ne pas utiliser `WDA_EXCLUDEFROMCAPTURE`.
 2. **Encre irisée sur le texte d'une autre application.** Le halo est une fenêtre posée sur le texte : pour
    allumer les lettres, Rust lit les pixels des mots changés, en tire un masque (écart à la couleur du fond),
    et la page peint l'encre et la lueur à travers (`mask-image`, `HaloEvent.masks`). À valider sur Word,
    navigateur, VS Code, clair et sombre, ClearType. Sans masque (fond illisible, lecture refusée) : repli sur
    « Éclat » dessiné sans masque (trait fin + halo, aucune case). Les marques partent déjà à la première action.
-3. **Acrylic du setup** : sur certaines versions de Windows 11 une fenêtre Acrylic traîne au déplacement.
-   Fenêtre fixe et petite ; si la gêne est visible, repli Mica ou opaque. La VM n'a pas de GPU : fluidité et
+3. **Verre du setup** : même module que l'Îlot, forme fixe. En secours, l'Acrylic de Tauri : coins de 8 px,
+   matière plate quand la fenêtre perd le focus, traîne possible au déplacement ; sinon opaque. La VM n'a pas de GPU : fluidité et
    qualité du flou **non vérifiables ici**, à faire vérifier par Lucas.
 4. **Migration** : fichiers réels de Lucas (0.5.1, deux profils, clé DPAPI). Sauvegarde `.bak`, tests sur
    copies ; ne jamais tester sur son dossier de données (`FLOWTRANSLATE_DATA_DIR`).
@@ -459,7 +467,8 @@ Après ce commit, chacun reste dans sa zone.
    - A : `tokens.css` → primitives → `connection/` → `SettingsWindow` et pages → e2e.
    - C : **d'abord** `IlotView` et `HaloView` exportés ; puis marques encre / éclat, centrages, matière du verre.
    - B : setup (questions) → démo dès les exports de C → e2e.
-3. **Phase 2, essais natifs** : flou réel (§6.1.1), masque de l'encre (§6.1.2), Acrylic du setup, dans la vraie
+3. **Phase 2, essais natifs** : verre réel (plan en 10 étapes de `docs/VERRE-0.6.md`), masque de l'encre
+   (§6.1.2), verre du setup, dans la vraie
    fenêtre (`--simulate-inference`, serveur factice 127.0.0.1), captures `gdigrab`.
 4. **Phase 3, Intégration** : atelier et références visuelles, `docs/BRIDGE.md`, notes de version, 0.6.0,
    `npm test`, `npm run build`, `npx playwright test`, `cargo test`, `npm run ui:check`, build NSIS.
@@ -472,7 +481,7 @@ Après ce commit, chacun reste dans sa zone.
   restent ceux de l'app ; la démo affiche les vrais noms des réglages.
 - La démo de l'app garde Pause, Revoir, Passer, mais pas le curseur de lecture libre du labo (vrais composants).
 - L'interface montre deux serveurs au plus, comme le labo.
-- Le flou réel de l'Îlot et des pilules dépend de l'essai §6.1.1 ; le renommage ne touche ni l'identifiant ni
+- Le verre réel suit `docs/VERRE-0.6.md` et ne sera jugé que sur la tour de Lucas ; `painted` reste en secours ; le renommage ne touche ni l'identifiant ni
   le dossier de données.
 
 ### 6.4 Les deux stash : ce qui se reprend

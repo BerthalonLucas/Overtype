@@ -139,3 +139,5 @@
 .fx-grid-2 { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 @media (max-width: 760px) { .fx-grid-2 { grid-template-columns: 1fr; } }
 .fx-grid-2 .fx-desk { height: 260px; }
+/* The real connection check (v2): line + folded trace, in the « serveur » page colour. */
+.fx-check { min-height: 170px; padding: 6px 2px; }

@@ -21,7 +21,7 @@ import {
 } from './heroui.jsx';
 import { HeroButtonProof } from '../heroui/HeroDemo.jsx';
 import { CentringBox, CentringToggle, useFollow } from './Centring.jsx';
-import { DIRECTIONS, PALETTES } from '../tokens/index.js';
+import ChosenPrimitives from './Chosen.jsx';
 import { modelOptions } from '../mock/server.js';
 import { defaultShortcut } from '../brand.js';
 import { useTx } from '../lib/motion.js';
@@ -410,8 +410,9 @@ export default function Catalog() {
 
       <nav className="cat-toc" aria-label="Contrôles">
         {controls.map(c => <a key={c.id} href={`#cat-${c.id}`} onClick={e => { e.preventDefault(); document.getElementById(`cat-${c.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>{c.title.split(' (')[0]}</a>)}
-        <a href="#cat-directions" onClick={e => { e.preventDefault(); document.getElementById('cat-directions')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Directions et palettes</a>
       </nav>
+
+      <ChosenPrimitives />
 
       {controls.map(c => (
         <section key={c.id} id={`cat-${c.id}`} className="cat-section">
@@ -422,38 +423,6 @@ export default function Catalog() {
           </div>
         </section>
       ))}
-
-      <section id="cat-directions" className="cat-section">
-        <h2>Les 3 directions côte à côte</h2>
-        <p className="cat-question">Les mêmes réglages en Verre, Mat et Aérien, avec la palette choisie en haut.</p>
-        <div className="lab-grid-3 cat-grid">
-          {DIRECTIONS.map(d => (
-            <Variant key={d.id} id={`catalog.direction-card.${d.id}`} label={d.name} description={d.note} section="catalog">
-              <Scope direction={d.id} className="ft-mini-scope"><MiniSettings /></Scope>
-            </Variant>
-          ))}
-        </div>
-      </section>
-
-      <section className="cat-section">
-        <h2>Palettes (clair puis sombre)</h2>
-        <div className="lab-grid cat-grid">
-          {PALETTES.map(p => (
-            <Variant key={p.id} id={`catalog.palette.${p.id}`} label={p.name} description={p.note} section="catalog">
-              <div className="ft-palette-pair">
-                {['light', 'dark'].map(t => (
-                  <Scope key={t} palette={p.id} theme={t} className="ft-palette-chip">
-                    <span className="ft-palette-tiles">{[1, 2, 3, 4, 5, 6, 7, 8].map(i => <i key={i} style={{ background: `var(--ft-tile-${i})` }} />)}</span>
-                    <strong>Aa</strong><small>Texte secondaire</small>
-                    <Button variant="primary" size="sm">Continuer</Button>
-                    <Switch checked label="Exemple" onCheckedChange={() => {}} />
-                  </Scope>
-                ))}
-              </div>
-            </Variant>
-          ))}
-        </div>
-      </section>
 
       <section className="cat-section">
         <h2>HeroUI avec son propre style</h2>

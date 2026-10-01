@@ -23,6 +23,31 @@ function tailwind(input, output) {
   execFileSync(process.execPath, [tailwindCli, '-i', r(input), '-o', r(output), '--minify'], { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] });
 }
 
+// The demo imports the app's own modules (src/menu, src/motion, src/halo, src/result, src/loaders,
+// src/layout.ts: see src/demo/app.js). Two adjustments, for files outside this folder only:
+//  - bare imports (react, motion, lucide-react…) resolve from THIS folder's node_modules: one React,
+//    one motion in the page (the app's own node_modules would bring a second copy);
+//  - the app's CSS keys its theme and reduced motion on <html> (`:root[data-theme="dark"]`,
+//    `:root[data-motion="reduced"]`); in the lab they live on the demo's `.dm-app` element, so
+//    `:root[` becomes `.dm-app[` (nothing else in those files changes).
+const appSrc = join(root, '..', '..', 'src');
+const insideApp = p => !!p && p.toLowerCase().startsWith(appSrc.toLowerCase());
+const appModules = {
+  name: 'app-modules',
+  setup(b) {
+    b.onResolve({ filter: /^[^./]/ }, async args => {
+      if (!insideApp(args.importer) || args.pluginData === 'app-modules') return undefined;
+      const res = await b.resolve(args.path, { resolveDir: root, kind: args.kind, pluginData: 'app-modules' });
+      return res.errors.length ? undefined : res;
+    });
+    b.onLoad({ filter: /\.css$/ }, async args => {
+      if (!insideApp(args.path)) return undefined;
+      const css = readFileSync(args.path, 'utf8').replace(/:root\[/g, '.dm-app[');
+      return { contents: css, loader: 'css', resolveDir: dirname(args.path) };
+    });
+  },
+};
+
 let heroCache = null;
 async function build() {
   const t0 = Date.now();
@@ -42,7 +67,7 @@ async function build() {
     jsx: 'automatic', minify: true, legalComments: 'none', charset: 'utf8',
     define: { 'process.env.NODE_ENV': '"production"' },
     loader: { '.js': 'jsx' },
-    outdir: r('dist'), entryNames: 'app', logLevel: 'warning',
+    outdir: r('dist'), entryNames: 'app', logLevel: 'warning', plugins: [appModules],
   });
   // 4. Assemble
   const css = ['dist/tw.css', 'dist/heroui.css', 'dist/app.css'].map(f => readFileSync(r(f), 'utf8')).join('\n');
@@ -50,7 +75,7 @@ async function build() {
   const safeCss = css.replace(/<\/style/gi, '<\\/style');
   const body = `<title>Labo Réglages</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="Labo de design des Réglages et du premier lancement : directions, palettes, animations, parcours complet.">
+<meta name="description" content="Labo de design v2 des Réglages et du premier lancement : matières, couleur par page, primitives retenues, parcours complet.">
 <style>
 ${safeCss}
 </style>

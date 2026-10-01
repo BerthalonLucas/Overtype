@@ -1,15 +1,14 @@
-// Design tokens: 3 directions × 6 palettes × 2 themes, all as --ft-* custom properties on the
-// element carrying data-ft-dir / data-ft-palette / data-ft-theme (see <Scope> in src/lab/Scope.jsx).
-import './directions.css';
-import { PALETTES, PALETTE_BY_ID, paletteCss } from './palettes.js';
+// Design tokens, v2: one structure, two neutral bases × two page-colour sets × two themes, all as
+// --ft-* custom properties on the element carrying data-ft-palette / data-ft-pageset / data-ft-theme
+// (see <Scope> in src/lab/Scope.jsx). Materials (window / floating) live in tokens.css.
+import './tokens.css';
+import { PALETTES, PALETTE_BY_ID, PAGE_SETS, PAGE_SET_BY_ID, PAGES, TOPIC_PAGE, pageColor, paletteCss } from './palettes.js';
 
-export { PALETTES, PALETTE_BY_ID };
+export { PALETTES, PALETTE_BY_ID, PAGE_SETS, PAGE_SET_BY_ID, PAGES, TOPIC_PAGE, pageColor };
+export const BASES = PALETTES;
 
-export const DIRECTIONS = [
-  { id: 'verre', name: 'Verre', note: 'Dans la continuité de l’Îlot : verre peint, reflet, ombres douces en couches, fenêtres dépolies, rayons 14–16.' },
-  { id: 'mat', name: 'Mat', note: 'Surfaces opaques, aucune ombre dans la fenêtre, filets fins, noir et blanc francs, rayon 8, grands titres gras, rangées groupées façon Windows 11.' },
-  { id: 'aerien', name: 'Aérien', note: 'Aéré, rangées sans bordure, grande typo d’affichage, tuiles d’icônes colorées façon Réglages iOS, espacements généreux.' },
-];
+// Kept for v1 code that still reads it: there is only one structure now.
+export const DIRECTIONS = [{ id: 'verre', name: 'Verre', note: 'Barre latérale fixe et sobre, rangées groupées en cartes ; fenêtres mates, verre réel pour ce qui flotte.' }];
 export const DIRECTION_BY_ID = Object.fromEntries(DIRECTIONS.map(d => [d.id, d]));
 
 export const THEMES = [
@@ -26,7 +25,13 @@ export const SPEEDS = [
   { id: 10, name: '⅒×' },
 ];
 
-// Palette variables for every palette × theme, injected once.
+// The still-open alternatives (toolbar switches, each with 👍/👎 + note).
+export const SWITCH_STYLES = [
+  { id: 'ours', name: 'Nos primitives', note: 'Radix, ressort Windows 11 : contour, pastille qui grossit au survol puis file avec un léger dépassement.' },
+  { id: 'hero', name: 'HeroUI', note: 'Le vrai interrupteur HeroUI v3 (React Aria), piste pleine et pastille blanche, à nos couleurs.' },
+];
+
+// Palette variables for every base × theme and every page colour, injected once.
 let injected = false;
 export function injectTokens() {
   if (injected || typeof document === 'undefined') return;

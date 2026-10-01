@@ -1,25 +1,28 @@
-// EFFETS — the motion options, live, each with a replay button and a 👍/👎 vote.
-//   heartbeat (3, from src/journey/variants.jsx) · step transitions (3, same file) · switch toggles (3)
-//   row / card hover (3) · live connection trace rows (2) · setup closing into the demo (2)
-//   reveal of the hidden Diagnostic page (2, try the real Ctrl+Maj+M on this page).
+// EFFETS (v2) — only the effects Lucas chose (30/09), live, each with a replay button:
+//   Battement et anneau · Fondu et échelle · Ressort Windows 11 · survol en voile léger ·
+//   trace « balayage » puis repliée (the real ConnectionCheck) · Repli vers la barre des tâches ·
+//   Apparition en place (try the real Ctrl+Maj+M on this page). The v1 alternatives he turned
+//   down (iOS / « Glissé sec » switches, a hover pill that follows the mouse, « Cascade »,
+//   « Fondu enchaîné », « Dépliage et message ») are gone, and so are the « Utiliser » buttons.
 // Rules: transform + opacity only; motion via useTx(), timers via wait() (follow the lab speed);
 // reduced motion: motion's MotionConfig + the CSS safety net; opacity-only fallbacks here.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import * as SwitchPrimitive from '@radix-ui/react-switch';
 import {
-  RotateCcw, Settings2, Keyboard, Sparkles, Replace, Palette, Server, Database, Stethoscope, Globe, Plug, KeyRound, List, Check, Power, Volume2,
+  RotateCcw, Settings2, Keyboard, Sparkles, Replace, Palette, Server, Database, Stethoscope, Globe, Check, Power, Volume2,
 } from 'lucide-react';
 import { Variant } from '../lab/Vote.jsx';
 import { useLab } from '../lab/store.jsx';
 import { useTx, wait } from '../lib/motion.js';
 import { Button, KeyCombo, ICON } from '../ui/index.jsx';
+import { useProbe, ConnectionCheck } from '../connection/Connection.jsx';
 import { AppMark } from '../stage/Desktop.jsx';
 import { appName, defaultShortcut } from '../brand.js';
 import * as JourneyVariants from '../journey/variants.jsx';
 import './effects.css';
 
-const { HEARTBEATS, STEP_TRANSITIONS, Heartbeat, stepMotion, useJourneyPrefs } = JourneyVariants;
+const { HEARTBEATS, STEP_TRANSITIONS, Heartbeat, stepMotion } = JourneyVariants;
 
 // A placeholder when a sibling module does not export what we need (yet).
 function Missing({ file, name }) {
@@ -29,14 +32,10 @@ function Missing({ file, name }) {
 function Replay({ onClick, label = 'Rejouer' }) {
   return <Button size="sm" variant="secondary" icon={<RotateCcw size={14} strokeWidth={1.75} />} onClick={onClick}>{label}</Button>;
 }
-function UseInJourney({ active, onClick }) {
-  return <Button size="sm" variant={active ? 'primary' : 'ghost'} aria-pressed={active} onClick={onClick}>{active ? 'Choisi pour le Parcours' : 'Utiliser dans le Parcours'}</Button>;
-}
 function Tools({ children }) { return <div className="fx-tools">{children}</div>; }
 
 // ————————————————————— 1. Heartbeats —————————————————————
 function HeartbeatCard({ hb }) {
-  const prefs = useJourneyPrefs();
   const [k, setK] = useState(0);
   return (
     <Variant id={`effects.heartbeat.${hb.id}`} label={`Battement de l’accueil : ${hb.label}`} description={hb.description} section="effects">
@@ -45,7 +44,7 @@ function HeartbeatCard({ hb }) {
         <p className="fx-welcome-title">Bienvenue sur {appName}</p>
         <Button size="sm" variant="primary">Commencer le setup</Button>
       </div>
-      <Tools><Replay onClick={() => setK(x => x + 1)} /><UseInJourney active={prefs.heartbeat === hb.id} onClick={() => prefs.setHeartbeat(hb.id)} /></Tools>
+      <Tools><Replay onClick={() => setK(x => x + 1)} /></Tools>
     </Variant>
   );
 }
@@ -58,7 +57,6 @@ const STEPS = [
   { title: 'Tout est prêt', body: () => <span className="fx-done"><Check size={18} strokeWidth={2} /></span> },
 ];
 function StepCard({ st }) {
-  const prefs = useJourneyPrefs();
   const lab = useLab();
   const tx = useTx();
   const [[i, dir], setStep] = useState([0, 1]);
@@ -91,7 +89,7 @@ function StepCard({ st }) {
           <Button size="sm" variant="primary" disabled={i === STEPS.length - 1} onClick={() => go(1)}>Continuer</Button>
         </div>
       </div>
-      <Tools><Replay onClick={replay} label="Tout jouer" /><UseInJourney active={prefs.transition === st.id} onClick={() => prefs.setTransition(st.id)} /></Tools>
+      <Tools><Replay onClick={replay} label="Tout jouer" /></Tools>
     </Variant>
   );
 }
@@ -99,8 +97,6 @@ function StepCard({ st }) {
 // ————————————————————— 3. Switch toggles —————————————————————
 const SWITCH_FX = [
   { id: 'w11', label: 'Ressort Windows 11', description: 'La pastille grossit au survol, puis file avec un petit dépassement. C’est l’interrupteur actuel des primitives.' },
-  { id: 'etire', label: 'Étirement iOS', description: 'À l’appui, la pastille s’allonge vers sa destination, puis se pose. Comme sur iPhone.' },
-  { id: 'sec', label: 'Glissé sec', description: 'Déplacement court, sans dépassement ni grossissement ; seule la couleur change. Le plus sobre.' },
 ];
 function FxSwitch({ fx, checked, onChange, label }) {
   return (
@@ -138,9 +134,7 @@ function SwitchCard({ sw }) {
 
 // ————————————————————— 4. Row hover —————————————————————
 const HOVER_FX = [
-  { id: 'voile', label: 'Voile', description: 'Un voile très léger se pose sous la rangée. Discret, façon Windows 11.' },
-  { id: 'souleve', label: 'Carte soulevée', description: 'Chaque rangée est une carte qui monte d’un pixel avec une ombre douce.' },
-  { id: 'pastille', label: 'Pastille qui suit', description: 'Une seule pastille glisse d’une rangée à l’autre en suivant la souris, comme les menus macOS.' },
+  { id: 'voile', label: 'Voile léger', description: 'Une teinte très légère sous la rangée survolée, rien ne suit la souris. Façon Windows 11.' },
 ];
 const HOVER_ROWS = [
   { icon: Power, title: 'Démarrer avec Windows', value: 'Oui' },
@@ -150,7 +144,6 @@ const HOVER_ROWS = [
 ];
 function HoverCard({ hv }) {
   const [hot, setHot] = useState(null);
-  const tx = useTx();
   const run = useRef(0);
   const replay = async () => {
     const id = ++run.current;
@@ -167,7 +160,6 @@ function HoverCard({ hv }) {
           {HOVER_ROWS.map((r, n) => (
             <button type="button" key={r.title} className="fx-row" data-hot={hot === n ? '' : undefined}
               onMouseEnter={() => setHot(n)} onFocus={() => setHot(n)} onBlur={() => setHot(null)}>
-              {hv.id === 'pastille' && hot === n && <motion.span layoutId="pill" className="fx-row-pill" transition={tx('snappy')} />}
               <span className="fx-row-icon"><r.icon {...ICON} /></span>
               <span className="fx-row-title">{r.title}</span>
               <span className="fx-row-value">{r.value}</span>
@@ -181,59 +173,16 @@ function HoverCard({ hv }) {
 }
 
 // ————————————————————— 5. Live trace —————————————————————
-const TRACE = [
-  { icon: Globe, step: 'Adresse', detail: 'https://llm.exemple.com', ms: 3 },
-  { icon: Plug, step: 'Connexion', detail: 'TLS 1.3 · certificat valide', ms: 84 },
-  { icon: KeyRound, step: 'Clé', detail: 'Bearer •••• 7f3a acceptée', ms: 41 },
-  { icon: List, step: 'Modèles', detail: 'GET /v1/models · 12 modèles', ms: 230 },
-];
-const TRACE_FX = [
-  { id: 'cascade', label: 'Cascade', description: 'Chaque étape apparaît quand elle commence, avec un indicateur qui tourne puis une coche tracée et son temps.' },
-  { id: 'balayage', label: 'Balayage', description: 'Les 4 étapes sont là dès le début, en gris. Un reflet passe sur l’étape en cours, qui s’allume une fois finie.' },
-];
-function useTraceRun() {
-  const [state, setState] = useState({ n: -1, done: -1 });
-  const run = useRef(0);
-  const play = useCallback(async () => {
-    const id = ++run.current;
-    setState({ n: -1, done: -1 });
-    if (!(await wait(250)) || run.current !== id) return;
-    for (let i = 0; i < TRACE.length; i++) {
-      setState({ n: i, done: i - 1 });
-      if (!(await wait(420 + TRACE[i].ms * 1.6)) || run.current !== id) return;
-    }
-    setState({ n: TRACE.length, done: TRACE.length - 1 });
-  }, []);
-  useEffect(() => { play(); return () => { run.current++; }; }, [play]);
-  return [state, play];
-}
-function CheckDraw() {
-  return <svg className="fx-check" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M3 7.4l2.6 2.6L11 4.4" /></svg>;
-}
-function TraceCard({ tr }) {
-  const [{ n, done }, play] = useTraceRun();
-  const tx = useTx();
-  const all = TRACE.length;
+// The real check of the app (src/connection): the 4 steps swept (« balayage »), then folded into
+// « ● Connecté · modèle · ms  Détails ▾ » ; on an error (toolbar « Serveur ») it stays open on the step.
+function TraceCard() {
+  const p = useProbe({ url: 'https://llm.exemple.com', apiKey: 'sk-labo-7f3a', noKey: false, auto: true });
+  const model = p.models[0]?.id;
   return (
-    <Variant id={`effects.trace.${tr.id}`} label={`Trace de connexion : ${tr.label}`} description={tr.description} section="effects">
-      <ol className="fx-trace" data-fx={tr.id} aria-live="polite">
-        {TRACE.map((t, i) => {
-          const state = i <= done ? 'done' : i === n ? 'run' : 'wait';
-          if (tr.id === 'cascade' && state === 'wait') return null;
-          const Row = tr.id === 'cascade' ? motion.li : 'li';
-          const anim = tr.id === 'cascade' ? { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y: 0 }, transition: tx('smooth') } : {};
-          return (
-            <Row key={t.step} className="fx-trace-row" data-state={state} {...anim}>
-              <span className="fx-trace-status">{state === 'done' ? <CheckDraw /> : state === 'run' ? <span className="fx-trace-spin" /> : <span className="fx-trace-dot" />}</span>
-              <span className="fx-trace-icon"><t.icon size={14} strokeWidth={1.5} /></span>
-              <span className="fx-trace-text"><strong>{t.step}</strong><small>{t.detail}</small></span>
-              <span className="fx-trace-ms">{state === 'done' ? `${t.ms} ms` : state === 'run' ? '…' : ''}</span>
-            </Row>
-          );
-        })}
-      </ol>
-      <p className="fx-trace-foot" data-on={n >= all ? '' : undefined}>Connecté · 12 modèles trouvés</p>
-      <Tools><Replay onClick={play} /></Tools>
+    <Variant id="effects.trace.balayage" label="Trace de connexion : balayage, puis repliée" section="effects"
+      description="Les 4 étapes sont là dès le début ; un reflet passe sur celle en cours. Une fois connecté, tout se replie en une ligne. Changez le scénario « Serveur » de la barre pour voir une erreur.">
+      <div className="fx-check" data-ft-page="serveur"><ConnectionCheck probe={p} model={model} /></div>
+      <Tools><Replay onClick={p.run} label="Vérifier à nouveau" /></Tools>
     </Variant>
   );
 }
@@ -241,7 +190,6 @@ function TraceCard({ tr }) {
 // ————————————————————— 6. Setup closing into the demo —————————————————————
 const WINDOW_FX = [
   { id: 'repli', label: 'Repli vers la barre des tâches', description: 'La fenêtre du setup se rétracte vers l’icône de l’app, qui pulse, puis la fenêtre de démo s’ouvre. On comprend où vit l’app.' },
-  { id: 'fondu', label: 'Fondu enchaîné', description: 'Le setup s’efface sur place, la fenêtre de démo monte doucement à sa place. Plus calme.' },
 ];
 function WindowCard({ wf }) {
   const tx = useTx();
@@ -302,7 +250,6 @@ function WindowCard({ wf }) {
 // ————————————————————— 7. Diagnostic reveal —————————————————————
 const DIAG_FX = [
   { id: 'apparait', label: 'Apparition en place', description: 'Un filet, puis « Diagnostic » glisse dans la barre latérale avec un éclat d’accent qui s’éteint.' },
-  { id: 'deplie', label: 'Dépliage et message', description: 'L’entrée se déplie sous les autres, et un petit message dit comment la masquer.' },
 ];
 const SIDEBAR = [
   { icon: Settings2, label: 'Général' }, { icon: Keyboard, label: 'Raccourcis' }, { icon: Sparkles, label: 'Actions' },
@@ -359,57 +306,36 @@ export default function Effects() {
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
   }, []);
+  const pick = (list, id) => list?.filter(v => v.id === id) ?? [];
   return (
     <div className="lab-page-inner fx-page">
       <header>
         <h1>Effets</h1>
-        <p className="lab-page-lead">Chaque animation se rejoue à la demande. Passez la vitesse à ¼× dans la barre du haut pour la regarder au ralenti, et essayez « Mouvement réduit ». Les choix « Utiliser dans le Parcours » s’appliquent tout de suite à la section Parcours.</p>
+        <p className="lab-page-lead">Les effets retenus, tels qu’ils jouent dans le Parcours et les Réglages. Rejouez-les, passez la vitesse à ⅒× pour les voir au ralenti, essayez « Mouvement réduit ».</p>
       </header>
 
       <section className="fx-section">
-        <h2>Battement du logo (accueil)</h2>
-        <p className="fx-question">« Bienvenue sur {appName}. Commencez le setup », avec un battement discret.</p>
-        {HEARTBEATS && Heartbeat
-          ? <div className="lab-grid-3">{HEARTBEATS.map(hb => <HeartbeatCard key={hb.id} hb={hb} />)}</div>
-          : <Missing file="src/journey/variants.jsx" name="HEARTBEATS, Heartbeat" />}
+        <h2>Accueil et setup</h2>
+        <div className="lab-grid-3">
+          {pick(HEARTBEATS, 'anneau').map(hb => <HeartbeatCard key={hb.id} hb={hb} />)}
+          {pick(STEP_TRANSITIONS, 'echelle').map(st => <StepCard key={st.id} st={st} />)}
+          {WINDOW_FX.map(wf => <WindowCard key={wf.id} wf={wf} />)}
+        </div>
       </section>
 
       <section className="fx-section">
-        <h2>Passage d’une question à l’autre (setup)</h2>
-        <p className="fx-question">Une question par écran, comme au premier démarrage d’un iPhone. « Continuer » et « Retour » jouent le sens.</p>
-        {STEP_TRANSITIONS && stepMotion
-          ? <div className="lab-grid-3">{STEP_TRANSITIONS.map(st => <StepCard key={st.id} st={st} />)}</div>
-          : <Missing file="src/journey/variants.jsx" name="STEP_TRANSITIONS, stepMotion" />}
-      </section>
-
-      <section className="fx-section">
-        <h2>Interrupteur qui bascule</h2>
-        <p className="fx-question">Même forme, même centrage ; seul le mouvement change. Cliquez-les, ou « Basculer 4 fois ».</p>
-        <div className="lab-grid-3">{SWITCH_FX.map(sw => <SwitchCard key={sw.id} sw={sw} />)}</div>
-      </section>
-
-      <section className="fx-section">
-        <h2>Survol des rangées des Réglages</h2>
-        <p className="fx-question">Passez la souris (ou Tab) sur les rangées.</p>
-        <div className="lab-grid-3">{HOVER_FX.map(hv => <HoverCard key={hv.id} hv={hv} />)}</div>
-      </section>
-
-      <section className="fx-section">
-        <h2>Trace de connexion en direct</h2>
-        <p className="fx-question">Quand l’app vérifie votre serveur : Adresse → Connexion → Clé → Modèles, chacune avec son temps.</p>
-        <div className="fx-grid-2">{TRACE_FX.map(tr => <TraceCard key={tr.id} tr={tr} />)}</div>
-      </section>
-
-      <section className="fx-section">
-        <h2>Le setup se ferme, la démo commence</h2>
-        <p className="fx-question">« La fenêtre des Réglages se ferme… » puis la fenêtre de démo apparaît.</p>
-        <div className="fx-grid-2">{WINDOW_FX.map(wf => <WindowCard key={wf.id} wf={wf} />)}</div>
+        <h2>Réglages</h2>
+        <div className="lab-grid-3">
+          {SWITCH_FX.map(sw => <SwitchCard key={sw.id} sw={sw} />)}
+          {HOVER_FX.map(hv => <HoverCard key={hv.id} hv={hv} />)}
+          <TraceCard />
+        </div>
       </section>
 
       <section className="fx-section">
         <h2>Révéler la page Diagnostic</h2>
-        <p className="fx-question">Cachée par défaut. Essayez pour de vrai : <KeyCombo keys={['Ctrl', 'Maj', 'M']} size="sm" /> sur cette page (les deux cartes réagissent).</p>
-        <div className="fx-grid-2">{DIAG_FX.map(df => <DiagCard key={df.id} df={df} shown={diag} onToggle={() => setDiag(d => !d)} />)}</div>
+        <p className="fx-question">Cachée par défaut. Essayez pour de vrai : <KeyCombo keys={['Ctrl', 'Maj', 'M']} size="sm" /> sur cette page.</p>
+        <div className="lab-grid-3">{DIAG_FX.map(df => <DiagCard key={df.id} df={df} shown={diag} onToggle={() => setDiag(d => !d)} />)}</div>
       </section>
     </div>
   );

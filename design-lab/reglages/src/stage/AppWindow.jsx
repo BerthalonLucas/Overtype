@@ -6,8 +6,9 @@
 //     <AppWindow key="settings" title="Réglages" width={860} height={600} onClose={…}>…</AppWindow>
 //   )}</AnimatePresence>
 //
-// material: 'solid' (window of the direction) | 'frost' (the setup: frosted window over a sharp
-// desktop — only the window is blurred, Lucas 29/09).
+// material: 'window' (matte, opaque, crisp: Réglages, installer) | 'floating' (REAL glass: the
+// welcome / setup window, blurs the desktop behind it). v1 names still work: 'solid' = window,
+// 'frost' = floating.
 // x / y: desktop pixels of the top-left corner; default = centred in the work area.
 import { forwardRef } from 'react';
 import { motion } from 'motion/react';
@@ -16,8 +17,10 @@ import { useDesktop, AppMark } from './Desktop.jsx';
 import { useTx } from '../lib/motion.js';
 import { appName } from '../brand.js';
 
+const MATERIAL = { window: 'window', solid: 'window', floating: 'floating', frost: 'floating' };
+
 export const AppWindow = forwardRef(function AppWindow({
-  title = appName, width = 860, height = 600, x, y, material = 'solid', onClose, onMinimize,
+  title = appName, width = 860, height = 600, x, y, material = 'window', onClose, onMinimize,
   controls = ['min', 'max', 'close'], showTitle = true, zIndex = 10, className = '', children, style,
   initial, animate, exit, transition, ...rest
 }, ref) {
@@ -29,7 +32,7 @@ export const AppWindow = forwardRef(function AppWindow({
     <motion.div
       ref={ref}
       className={`ft-window ${className}`}
-      data-material={material}
+      data-material={MATERIAL[material] || 'window'}
       role="dialog" aria-label={title}
       style={{ left, top, width, height, zIndex, '--ft-titlebar-h': '32px', ...style }}
       initial={initial ?? { opacity: 0, scale: 0.96, y: 10 }}

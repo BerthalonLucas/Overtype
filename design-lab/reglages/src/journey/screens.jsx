@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
-import { Check, RotateCw, ScrollText, MessageSquareText, Keyboard as KeyboardIcon, MousePointer2, TextCursorInput, Wand2, X } from 'lucide-react';
+import { Check, MessageSquareText, Keyboard as KeyboardIcon, MousePointer2, TextCursorInput, Wand2, X } from 'lucide-react';
 import { Scope } from '../lab/Scope.jsx';
-import { Field, Input, SecretInput, Combobox, Button, KeyCombo, Keycap, Select, Segmented, Spinner, useFieldId, ICON } from '../ui/index.jsx';
-import { useProbe, ProbeTrace } from '../connection/Connection.jsx';
+import { Button, KeyCombo, Keycap, Select, Segmented, Spinner, ICON } from '../ui/index.jsx';
+import { Connection, useProbe } from '../connection/Connection.jsx';
 import { modelOptions, tryModel, diagnostics, STEP_NAMES } from '../mock/server.js';
 import { useTx, wait } from '../lib/motion.js';
 import { ACTIONS, appName, defaultShortcut } from '../brand.js';
@@ -207,36 +207,19 @@ export function ShortcutScreen({ value, onChange, onRecording }) {
 }
 
 // ——— (4) Votre modèle ———
-export function ModelScreen({ value, onChange, onOpenLog, onStatus, urlRef }) {
-  const urlId = useFieldId('url');
-  const keyId = useFieldId('key');
-  const modelId = useFieldId('model');
-  const tx = useTx();
+// The shared connection form (src/connection, owner: Réglages agent): imported, not forked. The
+// setup keeps its own useProbe() and hands it over (`probe`), so it knows when « Continuer » can
+// light up and which check the log should point at. Under it, one sentence to try the model.
+export function ModelScreen({ value, onChange, onOpenLog, onStatus }) {
   const { url, key, noKey, model } = value;
-  const set = patch => onChange(patch);
   const p = useProbe({ url, apiKey: key, noKey });
   const [trial, setTrial] = useState({ state: 'idle' });
   const trialCtrl = useRef(null);
+  const tx = useTx();
 
-  useEffect(() => {
-    if (p.status === 'ok' && p.models.length && !p.models.some(m => m.id === model)) set({ model: p.models[0].id });
-  }, [p.status, p.models]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { onStatus?.(p.status === 'ok' && !!model); }, [p.status, model, onStatus]);
-  useEffect(() => { trialCtrl.current?.abort(); setTrial({ state: 'idle' }); }, [url, key, noKey, model]);
-  useEffect(() => () => trialCtrl.current?.abort(), []);
-
-  const endpoint = p.endpoint;
-  const urlProblem = url.trim() && !endpoint.ok ? `${endpoint.error.title}. ${endpoint.error.fix}` : null;
-  const removed = endpoint.ok ? endpoint.notes.find(n => n.startsWith('/') && n.endsWith(' retiré'))?.slice(0, -' retiré'.length) : null;
-  const urlHint = !url.trim() ? 'Juste l’adresse, sans /v1 : on s’en occupe.'
-    : endpoint.ok ? <>Adresse retenue : <b>{endpoint.display}</b>{removed && <> · « {removed} » retiré, inutile ici</>}</> : null;
-  const keyMissing = endpoint.ok && !key.trim() && !noKey;
-  const options = modelOptions(p.models);
-  const modelHint = !url.trim() ? 'La liste se remplit toute seule depuis votre serveur.'
-    : keyMissing ? 'Renseignez d’abord la clé API.'
-      : p.status === 'running' ? 'Lecture de la liste sur le serveur…'
-        : p.status === 'error' ? 'Liste indisponible tant que la connexion échoue.'
-          : p.status === 'ok' ? `${p.models.length} modèles lus sur le serveur.` : 'La liste se remplit toute seule depuis votre serveur.';
+  useEffect(() => { trialCtrl.current?.abort(); setTrial({ state: 'idle' }); }, [url, key, noKey, model, p.status]);
+  useEffect(() => () => { trialCtrl.current?.abort(); onStatus?.(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tryIt = async () => {
     trialCtrl.current?.abort();
@@ -250,41 +233,18 @@ export function ModelScreen({ value, onChange, onOpenLog, onStatus, urlRef }) {
 
   return (
     <div className="jr-body-form">
-      <Field label="Adresse du serveur" htmlFor={urlId} hint={urlHint} problem={urlProblem}>
-        <Input ref={urlRef} id={urlId} value={url} placeholder="https://llm.exemple.com" inputMode="url" onChange={e => set({ url: e.target.value })} />
-      </Field>
-      <Field label="Clé API" htmlFor={keyId}
-        aside={<button type="button" className="ft-linklike" aria-pressed={noKey} onClick={() => set({ noKey: !noKey, key: noKey ? key : '' })}>{noKey ? 'Mon serveur a une clé' : 'Mon serveur n’a pas de clé'}</button>}
-        hint={noKey ? 'Aucune clé ne sera envoyée.' : key ? null : 'Gardée par Windows, jamais écrite dans le journal.'}>
-        <SecretInput id={keyId} value={key} onChange={v => set({ key: v })} placeholder={noKey ? 'Aucune clé' : 'sk-…'} disabled={noKey} note={key ? 'Protégée par Windows' : undefined} />
-      </Field>
-
+      <Connection value={value} onChange={next => onChange(next)} probe={p} layout="setup"
+        onOpenLog={() => onOpenLog?.(p.probeId)} />
       <AnimatePresence initial={false}>
-        {p.steps.length > 0 && (
-          <motion.div key="check" className="jr-check-block" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tx('smooth')}>
-            <ProbeTrace steps={p.steps} fix={p.status === 'error' ? p.error?.fix : null}
-              actions={p.status === 'error' && p.error ? (
-                <>
-                  <Button size="sm" icon={<RotateCw {...ICON} size={14} />} onClick={p.run}>Vérifier à nouveau</Button>
-                  <Button size="sm" variant="ghost" icon={<ScrollText {...ICON} size={14} />} onClick={() => onOpenLog?.(p.probeId)}>Voir le journal</Button>
-                </>
-              ) : null} />
+        {p.status === 'ok' && model && (
+          <motion.div key="trial" className="jr-trial-row" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={tx('smooth')}>
+            <Button size="sm" variant="ghost" onClick={tryIt} busy={trial.state === 'running'} icon={<MessageSquareText {...ICON} size={14} />}>Essayer avec une phrase</Button>
+            <span className="jr-trial" role="status" aria-live="polite">
+              {trial.state === 'ok' && <><span className="jr-trial-bubble">{trial.reply}</span><span className="jr-trial-ms">{trial.ms.toLocaleString('fr-FR')} ms</span></>}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* While the check fails, the model list has nothing to show: the failed step says why. */}
-      {p.status !== 'error' && <Field label="Modèle" htmlFor={modelId}
-        hint={trial.state === 'ok' ? (
-          <span className="jr-trial" role="status"><span className="jr-trial-bubble">{trial.reply}</span><span className="jr-trial-ms">Réponse en {trial.ms.toLocaleString('fr-FR')} ms</span></span>
-        ) : trial.state === 'running' ? 'Envoi d’une phrase d’essai…' : modelHint}
-        aside={p.status === 'ok' ? <button type="button" className="ft-linklike" onClick={p.run}>Vérifier à nouveau</button> : null}>
-        <div className="jr-model-row">
-          <Combobox id={modelId} label="Modèle" value={model} options={options} onChange={v => set({ model: v })} disabled={p.status !== 'ok'}
-            loading={p.status === 'running'} placeholder={keyMissing ? 'Renseignez d’abord la clé API' : 'Choisir un modèle'} searchPlaceholder="Rechercher un modèle" empty="Aucun modèle ne correspond" />
-          <Button onClick={tryIt} disabled={p.status !== 'ok' || !model} busy={trial.state === 'running'} icon={<MessageSquareText {...ICON} />}>Essayer avec une phrase</Button>
-        </div>
-      </Field>}
     </div>
   );
 }
@@ -340,7 +300,7 @@ export function DemoIntroScreen({ shortcut }) {
           </li>
         ))}
       </ol>
-      <p className="jr-note">Cette fenêtre se ferme le temps de la démo. Vous n’avez rien à faire.</p>
+      <p className="jr-note">Cette fenêtre se range dans la barre des tâches le temps de la démo. Vous n’avez rien à faire.</p>
     </div>
   );
 }

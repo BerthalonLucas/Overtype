@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { setClock } from '../lib/motion.js';
 import { setScenario } from '../mock/server.js';
 
-const KEY = 'ft-labo-reglages-v1';
+const KEY = 'ft-labo-reglages-v2';
 export const SECTIONS = [
   { id: 'parcours', name: 'Parcours complet', short: 'Parcours' },
   { id: 'reglages', name: 'Réglages', short: 'Réglages' },
@@ -14,8 +14,9 @@ export const SECTIONS = [
 ];
 
 const DEFAULTS = {
-  direction: 'verre',
-  palette: 'encre',
+  base: 'porcelaine',     // neutral base: 'porcelaine' | 'papier' (src/tokens/palettes.js)
+  pageSet: 'A',           // one colour per page: set 'A' | 'B'
+  switchStyle: 'ours',    // 'ours' (Radix, ressort Windows 11) | 'hero' (HeroUI v3)
   theme: 'system',
   speed: 1,
   reduced: null,          // null = follow the device
@@ -31,7 +32,11 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULTS;
     const saved = JSON.parse(raw);
-    return { ...DEFAULTS, ...saved, votes: saved.votes || {}, notes: saved.notes || {} };
+    const out = { ...DEFAULTS, ...saved, votes: saved.votes || {}, notes: saved.notes || {} };
+    if (!['porcelaine', 'papier'].includes(out.base)) out.base = DEFAULTS.base;
+    if (!['A', 'B'].includes(out.pageSet)) out.pageSet = DEFAULTS.pageSet;
+    if (!['ours', 'hero'].includes(out.switchStyle)) out.switchStyle = DEFAULTS.switchStyle;
+    return out;
   } catch { return DEFAULTS; }
 }
 function save(state) {
@@ -83,15 +88,18 @@ export function LabProvider({ children }) {
   const resetAll = useCallback(() => { setState({ ...DEFAULTS, toolbarOpen: true }); setRestartKey(k => k + 1); }, []);
 
   const value = useMemo(() => ({
-    ...state, theme: state.theme, resolvedTheme, reduced, systemReduced, restartKey,
+    ...state, theme: state.theme,
+    direction: 'verre', palette: state.base, /* v1 names, kept for older code */ resolvedTheme, reduced, systemReduced, restartKey,
     set, vote, note, restart, resetAll,
   }), [state, resolvedTheme, reduced, systemReduced, restartKey, set, vote, note, restart, resetAll]);
 
   return <LabContext.Provider value={value}>{children}</LabContext.Provider>;
 }
 
-// Everything the lab knows: direction, palette, theme ('light'|'dark'|'system'), resolvedTheme,
-// speed, reduced, section, scenario, restartKey, votes, notes, set(), vote(), note(), restart().
+// Everything the lab knows: base ('porcelaine'|'papier'), pageSet ('A'|'B'), switchStyle
+// ('ours'|'hero'), theme ('light'|'dark'|'system'), resolvedTheme, speed, reduced, section,
+// scenario, restartKey, votes, notes, set(), vote(), note(), restart().
+// (palette = base and direction = 'verre' are kept for v1 code.)
 export function useLab() {
   const ctx = useContext(LabContext);
   if (!ctx) throw new Error('useLab() outside <LabProvider>');

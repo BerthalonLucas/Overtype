@@ -23,7 +23,7 @@ function Entry({ e, open, onOpenChange }) {
     <Collapsible.Root open={open} onOpenChange={onOpenChange} className="st-log-entry" data-level={e.level}>
       <Collapsible.Trigger className="st-log-row">
         <time className="st-log-time">{e.time}</time>
-        <span className="st-log-level" aria-label={e.level === 'error' ? 'Erreur' : e.level === 'ok' ? 'Réussi' : 'Info'}><i /></span>
+        <span className="st-log-level" aria-label={e.level === 'error' ? 'Erreur' : e.level === 'ok' ? 'Réussi' : 'Info'}>{e.level === 'error' ? '✕' : e.level === 'ok' ? '✓' : '·'}</span>
         <span className="st-log-step">{STEP_NAMES[e.step] || e.step}</span>
         <span className="st-log-msg">{e.message}</span>
         <span className="st-log-status">{e.status != null ? <span className="st-http" data-bad={e.status >= 400 ? '' : undefined}>{e.status}</span> : null}</span>

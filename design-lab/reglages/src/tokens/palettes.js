@@ -1,47 +1,21 @@
-// The 6 palettes × 2 themes of the lab. Every colour of the UI comes from here (or from the
-// direction CSS, which mixes these). Rules (checked by scripts/contrast.mjs):
-//   text, text2, text3 and accentText  ≥ 4.5:1 on bg, surface and field;
-//   accent                             ≥ 3:1   on bg and surface (fills, switch, focus);
-//   onAccent on accent                 ≥ 4.5:1 (derived: white or the palette's deep ink);
-//   tile glyph (white or deep ink)     ≥ 3:1   on each tile.
-// Neutrals are tinted toward the accent. `tiles` feed the coloured icon tiles (direction Aérien)
-// and anything decorative; `wall` paints the simulated desktop.
+// Colours of the lab, v2 (Lucas, 30/09): ONE structure, TWO neutral bases he liked, and ONE
+// COLOUR PER PAGE against monotony.
+//
+//   Base neutre   Porcelaine & lavande | Papier & corail — the neutral tint of every surface and
+//                 the default accent (buttons, switch, focus).
+//   Jeu par page  A (vives, the hues he named) | B (poudrées: same lightness and chroma for every
+//                 page, so no page shouts louder than another). Each settings page has a hue used
+//                 for its sidebar icon, the gliding pill, a faint veil at the top of the page; the
+//                 setup questions reuse the colour of their topic (TOPIC_PAGE). Diagnostic = mono.
+//
+// Rules (checked by scripts/contrast.mjs, both themes):
+//   text, text2, text3, accentText ≥ 4.5:1 on bg, surface, field, sidebar;
+//   accent ≥ 3:1 on bg and surface; onAccent on accent ≥ 4.5:1;
+//   page hue ≥ 3:1 (icon) and page text ≥ 4.5:1 on window, sidebar, card and inside the pill.
 
 export const PALETTES = [
   {
-    id: 'encre', name: 'Encre & glacier', note: 'Bleu encre le jour, bleu glacier la nuit. La continuité de l’Îlot.',
-    light: {
-      accent: '#3563E9', accentHover: '#2A55C9', accentText: '#2A55C9', deep: '#0E2440',
-      bg: '#F3F5F9', surface: '#FFFFFF', sidebar: '#EBEEF4', field: '#FFFFFF',
-      text: '#111623', text2: '#4A5263', text3: '#5E6677',
-      wall: ['#BFD1F6', '#8FB0F0', '#EEF3FB', '#DCE6F8'],
-    },
-    dark: {
-      accent: '#91BFF7', accentHover: '#A9CDF9', accentText: '#A9CDF9', deep: '#0E2440',
-      bg: '#0F1218', surface: '#171B23', sidebar: '#0B0E13', field: '#1E232D',
-      text: '#EEF2F8', text2: '#A9B1C0', text3: '#8F97A7',
-      wall: ['#1B3D78', '#0E2440', '#05070C', '#132B55'],
-    },
-    tiles: ['#3563E9', '#0F8FA0', '#6E56F0', '#D9642E', '#C93B6E', '#23875A', '#56657F', '#1F2A44'],
-  },
-  {
-    id: 'graphite', name: 'Graphite & chartreuse', note: 'Gris minéral, une pointe acide. Le plus typé.',
-    light: {
-      accent: '#6C8A00', accentHover: '#7A9A06', accentText: '#536B00', deep: '#101400',
-      bg: '#F2F2EF', surface: '#FFFFFF', sidebar: '#E8E8E3', field: '#FFFFFF',
-      text: '#1A1B17', text2: '#4B4D45', text3: '#62645C',
-      wall: ['#DDE7B0', '#B9CC5C', '#F3F3EE', '#D9D9D2'],
-    },
-    dark: {
-      accent: '#D4F06A', accentHover: '#E0F58E', accentText: '#D4F06A', deep: '#1C2400',
-      bg: '#121311', surface: '#1B1C19', sidebar: '#0D0E0C', field: '#23251F',
-      text: '#F0F1EA', text2: '#B0B3A6', text3: '#95988C',
-      wall: ['#3C4A0E', '#1E2408', '#070806', '#2A2C25'],
-    },
-    tiles: ['#5E7800', '#3F4238', '#9A7B00', '#2B7563', '#8A5A44', '#566478', '#758A12', '#262722'],
-  },
-  {
-    id: 'porcelaine', name: 'Porcelaine & lavande', note: 'Blanc laiteux, violet franc. Doux mais net.',
+    id: 'porcelaine', name: 'Porcelaine', long: 'Porcelaine & lavande', note: 'Blanc laiteux, violet franc. Doux mais net.',
     light: {
       accent: '#5B4BDB', accentHover: '#4B3CC4', accentText: '#4F3FD0', deep: '#1D1450',
       bg: '#F5F4FA', surface: '#FFFFFF', sidebar: '#ECEAF5', field: '#FFFFFF',
@@ -57,7 +31,7 @@ export const PALETTES = [
     tiles: ['#5B4BDB', '#8A58D6', '#C94D86', '#2F7BC4', '#B37A12', '#2F8C76', '#6E6888', '#2B2640'],
   },
   {
-    id: 'papier', name: 'Papier & corail', note: 'Papier chaud, corail vif. Le plus chaleureux.',
+    id: 'papier', name: 'Papier', long: 'Papier & corail', note: 'Papier chaud, corail vif. Le plus chaleureux.',
     light: {
       accent: '#D63A4D', accentHover: '#C22F43', accentText: '#BE3244', deep: '#3B0A12',
       bg: '#F8F5EF', surface: '#FFFDF9', sidebar: '#F0EBE2', field: '#FFFFFF',
@@ -72,49 +46,17 @@ export const PALETTES = [
     },
     tiles: ['#D63A4D', '#D0681C', '#9C7A0E', '#2E826C', '#3F6CC9', '#8C4FB8', '#7A6E62', '#2E2824'],
   },
-  {
-    id: 'sauge', name: 'Sauge & cuivre', note: 'Vert sauge apaisé, cuivre patiné. Organique.',
-    light: {
-      accent: '#AD5A26', accentHover: '#964C1D', accentText: '#9A4F1F', deep: '#3A1A05',
-      bg: '#F1F4F0', surface: '#FFFFFF', sidebar: '#E5EBE3', field: '#FFFFFF',
-      text: '#151A16', text2: '#4A544C', text3: '#5F6A61',
-      wall: ['#C9D8C6', '#9DB59A', '#F4F6F2', '#EAD4C2'],
-    },
-    dark: {
-      accent: '#E8A36F', accentHover: '#F0B98E', accentText: '#F0B98E', deep: '#3A1A05',
-      bg: '#111512', surface: '#19201B', sidebar: '#0C100D', field: '#212923',
-      text: '#EDF2EC', text2: '#AAB6AB', text3: '#8F9C90',
-      wall: ['#2E4A33', '#5A3418', '#070A08', '#1E2B21'],
-    },
-    tiles: ['#5E7F62', '#AD5A26', '#A0701F', '#3F6C7C', '#7E5E8E', '#9A4843', '#66735A', '#2A332C'],
-  },
-  {
-    id: 'nuit', name: 'Nuit & menthe', note: 'Bleu nuit profond, menthe glacée. Taillé pour le sombre.',
-    light: {
-      accent: '#0B8466', accentHover: '#09705A', accentText: '#087359', deep: '#032A20',
-      bg: '#EFF3F5', surface: '#FFFFFF', sidebar: '#E3E9ED', field: '#FFFFFF',
-      text: '#0E1519', text2: '#46535B', text3: '#5B6870',
-      wall: ['#BFE9DB', '#7FD6BC', '#F1F5F7', '#D3DEE5'],
-    },
-    dark: {
-      accent: '#6EE7C3', accentHover: '#8FEFD2', accentText: '#8FEFD2', deep: '#032A20',
-      bg: '#0A0F14', surface: '#111820', sidebar: '#070B0F', field: '#18212A',
-      text: '#EAF2F5', text2: '#A2B2BC', text3: '#8697A2',
-      wall: ['#0F4A3C', '#0B1E33', '#03060A', '#10283A'],
-    },
-    tiles: ['#0B8466', '#1F6FB2', '#6452D9', '#C0632F', '#B8426F', '#16869B', '#51606B', '#111820'],
-  },
 ];
-
 export const PALETTE_BY_ID = Object.fromEntries(PALETTES.map(p => [p.id, p]));
+export const BASES = PALETTES; // v2 name: the neutral base
 
-// Status colours, shared by every palette.
+// Status colours, shared by both bases.
 export const STATUS = {
   light: { ok: '#1B7F52', warn: '#9A5406', danger: '#C22F3D', info: '#2A55C9' },
   dark: { ok: '#7FD3A3', warn: '#F0C27A', danger: '#FF9C8F', info: '#A9CDF9' },
 };
 
-// ——— Colour maths (sRGB, WCAG 2.x) ———
+// ——— Colour maths (sRGB, WCAG 2.x, OKLCH) ———
 export function hexToRgb(hex) {
   const h = hex.replace('#', '');
   const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
@@ -129,12 +71,84 @@ export function contrast(a, b) {
   const [x, y] = [luminance(a), luminance(b)].sort((m, n) => n - m);
   return (x + 0.05) / (y + 0.05);
 }
-// The better of white and the palette's deep ink on a fill.
 export function onColor(fill, deep = '#0B0D12') {
   return contrast('#FFFFFF', fill) >= contrast(deep, fill) ? '#FFFFFF' : deep;
 }
+// a over b with alpha (hex, hex, 0–1) → hex. Used to check text inside a translucent pill.
+export function over(a, b, alpha) {
+  const [x, y] = [hexToRgb(a), hexToRgb(b)];
+  return '#' + x.map((v, i) => Math.round(v * alpha + y[i] * (1 - alpha)).toString(16).padStart(2, '0')).join('');
+}
+export function oklch(L, C, h) {
+  const a = C * Math.cos((h * Math.PI) / 180), b = C * Math.sin((h * Math.PI) / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  const lin = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  ];
+  return '#' + lin.map(v => {
+    const c = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
+    return Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0');
+  }).join('');
+}
 
-// All the CSS custom properties of one palette in one theme (names documented in README).
+// ——— One colour per page ———
+// Pages of the Réglages (ids of SETTINGS_PAGES) and the setup topic that reuses each colour.
+export const PAGES = ['general', 'raccourcis', 'actions', 'apres', 'apparence', 'serveur', 'donnees', 'diagnostic'];
+export const TOPIC_PAGE = { welcome: 'general', apparence: 'apparence', raccourci: 'raccourcis', modele: 'serveur', demo: 'actions', pret: 'general', reglages: 'general' };
+
+// Each hue: [name, C, h] in OKLCH; lightness is set per theme, then tuned for contrast.
+export const PAGE_SETS = [
+  {
+    id: 'A', name: 'A · vives', note: 'Les teintes que vous avez nommées, franches : ardoise, corail, lavande, bleu, ambre, vert d’eau, prune, console.',
+    L: { light: 0.56, dark: 0.80 },
+    hues: {
+      general: ['Ardoise', 0.035, 250], raccourcis: ['Corail', 0.16, 32], actions: ['Lavande', 0.15, 292], apres: ['Bleu', 0.15, 258],
+      apparence: ['Ambre', 0.14, 68], serveur: ['Vert d’eau', 0.10, 185], donnees: ['Prune', 0.13, 342], diagnostic: ['Console', 0, 0],
+    },
+  },
+  {
+    id: 'B', name: 'B · poudrées', note: 'Même luminosité et même intensité pour chaque page, teintes réparties sur le cercle : aucune page ne crie plus fort qu’une autre.',
+    L: { light: 0.57, dark: 0.79 },
+    hues: {
+      general: ['Graphite', 0.02, 70], raccourcis: ['Abricot', 0.09, 50], actions: ['Iris', 0.09, 285], apres: ['Azur', 0.09, 232],
+      apparence: ['Miel', 0.09, 88], serveur: ['Sauge', 0.09, 155], donnees: ['Framboise', 0.09, 5], diagnostic: ['Console', 0, 0],
+    },
+  },
+];
+export const PAGE_SET_BY_ID = Object.fromEntries(PAGE_SETS.map(s => [s.id, s]));
+
+// The grounds a page colour sits on (window content, sidebar, card, field) for a base × theme.
+export function groundsOf(base, theme) {
+  const t = base[theme];
+  return [t.bg, t.sidebar, t.surface, t.field];
+}
+export const PILL_ALPHA = { light: 0.14, dark: 0.2 };
+
+// Walk the lightness away from the grounds until every ground passes `min`.
+function tune(L, C, h, grounds, min, theme) {
+  const step = theme === 'light' ? -0.005 : 0.005;
+  let l = L, hex = oklch(l, C, h);
+  for (let i = 0; i < 80 && grounds.some(g => contrast(hex, g) < min); i++) { l += step; hex = oklch(l, C, h); }
+  return hex;
+}
+// { hue, text } for one page of a set, on a base and theme. hue: icons, pill, veil (≥ 3:1);
+// text: when the page colour writes text (≥ 4.5:1, also inside its own pill).
+export function pageColor(setId, pageId, baseId, theme) {
+  const set = PAGE_SET_BY_ID[setId] || PAGE_SETS[0];
+  const base = PALETTE_BY_ID[baseId] || PALETTES[0];
+  const [name, C, h] = set.hues[pageId] || set.hues.general;
+  const grounds = groundsOf(base, theme);
+  const hue = tune(set.L[theme], C, h, grounds, 3, theme);
+  const pills = grounds.map(g => over(hue, g, PILL_ALPHA[theme]));
+  const text = tune(set.L[theme], C, h, [...grounds, ...pills], 4.5, theme);
+  return { name, hue, text };
+}
+
+// All the CSS custom properties of one base in one theme (names documented in README).
 export function paletteVars(palette, theme) {
   const t = palette[theme];
   const s = STATUS[theme];
@@ -154,6 +168,7 @@ export function paletteVars(palette, theme) {
     '--ft-text': t.text, '--ft-ink-rgb': rgbTriplet(t.text),
     '--ft-text-2': t.text2, '--ft-text-3': t.text3,
     '--ft-ok': s.ok, '--ft-warn': s.warn, '--ft-danger': s.danger, '--ft-info': s.info,
+    '--ft-ok-rgb': rgbTriplet(s.ok), '--ft-warn-rgb': rgbTriplet(s.warn), '--ft-danger-rgb': rgbTriplet(s.danger), '--ft-info-rgb': rgbTriplet(s.info),
     '--ft-wall-1': t.wall[0], '--ft-wall-2': t.wall[1], '--ft-wall-3': t.wall[2], '--ft-wall-4': t.wall[3],
     '--ft-scheme': theme,
   };
@@ -164,13 +179,23 @@ export function paletteVars(palette, theme) {
   return vars;
 }
 
-// One stylesheet for every palette × theme, keyed by attributes on any element (the lab scope,
-// or a nested <Scope> that compares palettes side by side).
+// One stylesheet: every base × theme, then every page colour of every set × base × theme.
+// A page colour resolves on any element carrying data-ft-page="<id>" (or on the scope itself):
+//   --ft-page (hue), --ft-page-rgb, --ft-page-text, --ft-page-soft (pill), --ft-page-veil (top veil).
 export function paletteCss() {
   let css = '';
   for (const p of PALETTES) for (const theme of ['light', 'dark']) {
     const body = Object.entries(paletteVars(p, theme)).map(([k, v]) => `${k}:${v}`).join(';');
     css += `[data-ft-palette="${p.id}"][data-ft-theme="${theme}"]{${body};color-scheme:${theme}}\n`;
+  }
+  for (const set of PAGE_SETS) for (const p of PALETTES) for (const theme of ['light', 'dark']) {
+    const scope = `[data-ft-pageset="${set.id}"][data-ft-palette="${p.id}"][data-ft-theme="${theme}"]`;
+    for (const id of PAGES) {
+      const c = pageColor(set.id, id, p.id, theme);
+      const rgb = rgbTriplet(c.hue);
+      const body = `--ft-page:${c.hue};--ft-page-rgb:${rgb};--ft-page-text:${c.text};--ft-page-soft:rgb(${rgb} / ${PILL_ALPHA[theme]});--ft-page-veil:rgb(${rgb} / ${theme === 'dark' ? 0.13 : 0.09})`;
+      css += `${scope} [data-ft-page="${id}"],${scope}[data-ft-page="${id}"]{${body}}\n`;
+    }
   }
   return css;
 }

@@ -1,7 +1,7 @@
-// The lab toolbar: what to look at (section) and how (direction, palette, theme, speed, reduced
-// motion, simulated server). Its own geometry never changes with the direction, so it stays put
-// while everything below restyles; its colours follow the palette and theme.
-import { useEffect, useState } from 'react';
+// The lab toolbar, v2: what to look at (section) and how (theme, speed, reduced motion, simulated
+// server), plus the alternatives Lucas has not decided yet (neutral base, page-colour set, switch),
+// each with 👍/👎 and a note. Its own geometry never changes; its colours follow base and theme.
+import { useEffect, useRef, useState } from 'react';
 import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
@@ -12,7 +12,7 @@ import { useLab, SECTIONS } from './store.jsx';
 import { usePortalContainer } from './Scope.jsx';
 import { Vote } from './Vote.jsx';
 import { buildChoices, copyText } from './copy.js';
-import { DIRECTIONS, DIRECTION_BY_ID, PALETTES, PALETTE_BY_ID, THEMES, SPEEDS } from '../tokens/index.js';
+import { PALETTES, PALETTE_BY_ID, PAGE_SETS, PAGE_SET_BY_ID, PAGES, pageColor, SWITCH_STYLES, THEMES, SPEEDS } from '../tokens/index.js';
 import { SCENARIOS, SCENARIO_BY_ID } from '../mock/server.js';
 import { AppMark } from '../stage/Desktop.jsx';
 import { Dialog, Button } from '../ui/index.jsx';
@@ -24,7 +24,7 @@ function Seg({ label, value, options, onChange, className = '' }) {
       onValueChange={v => { if (v) onChange(v); }}>
       {options.map(o => (
         <ToggleGroup.Item key={o.id} value={String(o.id)} className="lab-seg-item" title={o.title || o.note}>
-          {o.name}
+          {o.content ?? o.name}
         </ToggleGroup.Item>
       ))}
     </ToggleGroup.Root>
@@ -35,16 +35,17 @@ function Labelled({ label, children }) {
   return <div className="lab-field"><span className="lab-field-label">{label}</span><div className="lab-field-control">{children}</div></div>;
 }
 
-function PalettePicker({ value, onChange }) {
+// Neutral base: a swatch (light half / dark half) + its name.
+function BaseLabel({ p }) {
+  return <span className="lab-seg-rich"><i className="lab-dot" style={{ '--a': p.light.accent, '--b': p.dark.accent }} />{p.name}</span>;
+}
+// Page-colour set: its 7 hues in a strip (in the current base and theme).
+function SetLabel({ set, base, theme }) {
   return (
-    <ToggleGroup.Root type="single" className="lab-swatches" aria-label="Palette" value={value} onValueChange={v => { if (v) onChange(v); }}>
-      {PALETTES.map(p => (
-        <ToggleGroup.Item key={p.id} value={p.id} className="lab-swatch" title={`${p.name} — ${p.note}`} aria-label={p.name}
-          style={{ '--a': p.light.accent, '--b': p.dark.accent, '--bg-a': p.light.bg, '--bg-b': p.dark.bg }}>
-          <i />
-        </ToggleGroup.Item>
-      ))}
-    </ToggleGroup.Root>
+    <span className="lab-seg-rich">
+      <span className="lab-hues" aria-hidden="true">{PAGES.filter(id => id !== 'diagnostic').map(id => <i key={id} style={{ background: pageColor(set.id, id, base, theme).hue }} />)}</span>
+      {set.id}
+    </span>
   );
 }
 
@@ -130,20 +131,12 @@ function useNarrow(query = '(max-width: 700px)') {
   return v;
 }
 
-// The « how » controls (direction, palette, theme, speed, reduced motion, server): one row on a
+// The « how » controls (theme, speed, reduced motion, server, open alternatives): one row on a
 // wide screen, a sheet behind « Labo » on a phone.
 function LabFields() {
   const lab = useLab();
   return (
     <>
-      <Labelled label="Direction">
-        <Seg label="Direction" value={lab.direction} options={DIRECTIONS} onChange={v => lab.set({ direction: v })} />
-        <Vote id={`shell.direction.${lab.direction}`} label={`Direction « ${DIRECTION_BY_ID[lab.direction]?.name} »`} section="shell" note={false} compact />
-      </Labelled>
-      <Labelled label="Palette">
-        <PalettePicker value={lab.palette} onChange={v => lab.set({ palette: v })} />
-        <Vote id={`shell.palette.${lab.palette}`} label={`Palette « ${PALETTE_BY_ID[lab.palette]?.name} »`} section="shell" note={false} compact />
-      </Labelled>
       <Labelled label="Thème">
         <Seg label="Thème" value={lab.theme} options={THEMES} onChange={v => lab.set({ theme: v })} />
       </Labelled>
@@ -163,6 +156,30 @@ function LabFields() {
   );
 }
 
+// The alternatives Lucas has not decided yet, each with 👍/👎 + note.
+function OpenChoices() {
+  const lab = useLab();
+  const base = PALETTE_BY_ID[lab.base];
+  const set = PAGE_SET_BY_ID[lab.pageSet];
+  const sw = SWITCH_STYLES.find(x => x.id === lab.switchStyle);
+  return (
+    <>
+      <Labelled label="Base neutre">
+        <Seg label="Base neutre" value={lab.base} options={PALETTES.map(p => ({ id: p.id, name: p.name, title: `${p.long} — ${p.note}`, content: <BaseLabel p={p} /> }))} onChange={v => lab.set({ base: v })} />
+        <Vote id={`shell.base.${lab.base}`} label={`Base neutre « ${base?.long} »`} section="shell" compact />
+      </Labelled>
+      <Labelled label="Couleurs par page">
+        <Seg label="Jeu de couleurs par page" value={lab.pageSet} options={PAGE_SETS.map(x => ({ id: x.id, name: x.name, title: `${x.name} — ${x.note}`, content: <SetLabel set={x} base={lab.base} theme={lab.resolvedTheme} /> }))} onChange={v => lab.set({ pageSet: v })} />
+        <Vote id={`shell.pageset.${lab.pageSet}`} label={`Couleurs par page, jeu ${set?.name}`} section="shell" compact />
+      </Labelled>
+      <Labelled label="Interrupteur">
+        <Seg label="Interrupteur" value={lab.switchStyle} options={SWITCH_STYLES.map(x => ({ ...x, title: x.note }))} onChange={v => lab.set({ switchStyle: v })} />
+        <Vote id={`shell.switch.${lab.switchStyle}`} label={`Interrupteur « ${sw?.name} » en conditions réelles`} section="shell" compact />
+      </Labelled>
+    </>
+  );
+}
+
 function LabSheetButton() {
   const container = usePortalContainer();
   return (
@@ -173,6 +190,8 @@ function LabSheetButton() {
       <PopoverPrimitive.Portal container={container}>
         <PopoverPrimitive.Content className="lab-pop lab-sheet" sideOffset={6} align="end" collisionPadding={8} aria-label="Réglages du labo">
           <LabFields />
+          <p className="lab-sheet-title">À trancher</p>
+          <OpenChoices />
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
@@ -183,10 +202,12 @@ export function Toolbar() {
   const lab = useLab();
   const narrow = useNarrow();
   const [toast, setToast] = useState(null);
-  const showToast = (msg) => { setToast(msg); clearTimeout(showToast.t); showToast.t = setTimeout(() => setToast(null), 2600); };
+  const toastTimer = useRef(0);
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+  const showToast = (msg) => { setToast(msg); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), 2600); };
 
   const collapsed = !lab.toolbarOpen;
-  const summary = `${DIRECTION_BY_ID[lab.direction]?.name} · ${PALETTE_BY_ID[lab.palette]?.name} · ${THEMES.find(t => t.id === lab.theme)?.name}`;
+  const summary = `${PALETTE_BY_ID[lab.base]?.name} · jeu ${lab.pageSet} · ${THEMES.find(t => t.id === lab.theme)?.name}`;
   const sections = <Seg label="Section" className="lab-sections" value={lab.section} options={SECTIONS.map(s => ({ id: s.id, name: narrow ? s.short : s.name }))} onChange={v => lab.set({ section: v })} />;
 
   return (
@@ -226,7 +247,8 @@ export function Toolbar() {
             </div>
           </div>
           <div className="lab-row lab-row-2"><LabFields /></div>
-          <p className="lab-note">{DIRECTION_BY_ID[lab.direction]?.note} <span>·</span> {PALETTE_BY_ID[lab.palette]?.note} <span>·</span> Serveur : {SCENARIO_BY_ID[lab.scenario]?.hint}.</p>
+          <div className="lab-row lab-row-2 lab-row-open"><span className="lab-open-title">À trancher</span><OpenChoices /></div>
+          <p className="lab-note">{PALETTE_BY_ID[lab.base]?.long} : {PALETTE_BY_ID[lab.base]?.note} <span>·</span> Jeu {PAGE_SET_BY_ID[lab.pageSet]?.name} : {PAGE_SET_BY_ID[lab.pageSet]?.note} <span>·</span> Serveur : {SCENARIO_BY_ID[lab.scenario]?.hint}.</p>
         </header>
       )}
       <AnimatePresence>

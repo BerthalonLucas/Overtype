@@ -1,7 +1,7 @@
 // A simulated OpenAI-compatible server, for the setup and Réglages › Serveur.
 // No network at all: every answer is decided by the current SCENARIO (toolbar « Serveur »).
 //
-//   normalizeEndpoint(input)             → { ok, base, api, display, changed, notes[], error? }
+//   normalizeEndpoint(input)             → { ok, base, api, display, changed, secure, local, insecure, notes[], error? }
 //   probe({ url, key, noKey, signal, onStep })  → { ok, steps[], models[], error? }
 //   listModels({ url, key })            → shortcut: probe() then .models
 //   tryModel({ url, key, model })       → { ok, reply, ms } (« Essayer avec une phrase »)
@@ -54,6 +54,8 @@ export function modelOptions(models = MODELS) {
 }
 
 // ——— Endpoint normalisation ———
+// Shown by the screens when normalizeEndpoint(...).insecure: <Notice kind="warn" {...UNENCRYPTED_WARNING} />
+export const UNENCRYPTED_WARNING = { title: 'Connexion non chiffrée', text: 'La clé et le texte passent en clair sur le réseau.' };
 const LOCAL_HOSTS = /^(localhost|127(?:\.\d{1,3}){3}|\[::1\]|::1)$/i;
 export function normalizeEndpoint(input) {
   const notes = [];
@@ -65,9 +67,8 @@ export function normalizeEndpoint(input) {
     return { ok: false, error: { code: 'invalide', title: 'Adresse illisible', fix: 'Vérifiez l’orthographe : lettres, chiffres, points et « : » pour le port.' } };
   }
   if (!/^https?:$/.test(url.protocol)) return { ok: false, error: { code: 'schema', title: `« ${url.protocol} » n’est pas une adresse web`, fix: 'Utilisez une adresse en https://.' } };
-  if (url.protocol === 'http:' && !LOCAL_HOSTS.test(url.hostname)) {
-    return { ok: false, error: { code: 'http', title: 'http:// est réservé à cet ordinateur', fix: `Utilisez https://${url.host}, ou localhost pour un serveur local.` } };
-  }
+  // http:// is allowed for any host (Lucas, 30/09): the screens show UNENCRYPTED_WARNING when
+  // `insecure` is true (http to anything other than this computer).
   if (url.username || url.password) return { ok: false, error: { code: 'identifiants', title: 'Pas d’identifiants dans l’adresse', fix: 'Mettez la clé dans le champ « Clé API ».' } };
   let path = url.pathname.replace(/\/+$/, '');
   const before = path;
@@ -83,6 +84,7 @@ export function normalizeEndpoint(input) {
     host: url.host,
     secure: url.protocol === 'https:',
     local: LOCAL_HOSTS.test(url.hostname),
+    insecure: url.protocol === 'http:' && !LOCAL_HOSTS.test(url.hostname),
     display: base.replace(/^https:\/\//, ''),
     changed: cleanedInput !== base,
     notes,
@@ -180,9 +182,9 @@ export async function probe({ url, key = '', noKey = false, signal, onStep, scen
   ms = jitter(28, 60); await sleep(ms * 5, signal);
   if (sc === 'refuse') return fail('refuse', 1, ms, { cause: `connect ECONNREFUSED ${endpoint.host}` });
   if (sc === 'certificat') return fail('certificat', 1, ms);
-  const tls = endpoint.secure ? 'HTTPS, certificat valide' : 'HTTP local';
+  const tls = endpoint.secure ? 'HTTPS, certificat valide' : endpoint.local ? 'HTTP, sur cet ordinateur' : 'HTTP, non chiffré';
   done(1, 'ok', ms, tls);
-  diagnostics.add({ probeId, step: 'connexion', ms, level: 'ok', message: endpoint.secure ? 'TLS établi (certificat valide)' : 'connexion ouverte (http local)' });
+  diagnostics.add({ probeId, step: 'connexion', ms, level: 'ok', message: endpoint.secure ? 'TLS établi (certificat valide)' : endpoint.local ? 'connexion ouverte (http, cet ordinateur)' : 'connexion ouverte (http, non chiffrée)' });
 
   // 3. Clé (the first authenticated request)
   run(2);

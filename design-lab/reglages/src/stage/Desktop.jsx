@@ -1,4 +1,5 @@
-// The simulated Windows 11 desktop: a CSS wallpaper tinted by the palette, a taskbar with the
+// The simulated Windows 11 desktop: a « bloom » wallpaper tinted by the neutral base (crisp petals,
+// so a floating glass surface visibly blurs what is behind it), a taskbar with the
 // app's tray icon, and a 1280 × 800 coordinate space where windows float at REAL size. The
 // whole desktop is scaled to fit the viewport (phone included); on a narrow screen it zooms on
 // the focused window instead of shrinking everything (prop `focus`).
@@ -43,6 +44,38 @@ function Clock() {
 // The app's mark: the Îlot's iridescent dot in a rounded square (name from src/brand.js).
 export function AppMark({ size = 16, className = '' }) {
   return <span className={`ft-appmark ${className}`} style={{ '--s': `${size}px` }} aria-hidden="true"><i /></span>;
+}
+
+// Windows 11 « Bloom »-like: petals fanning out of one point, crisp edges and a thin light rim
+// on each, over a soft glow. Static SVG, coloured by the base (--ft-wall-1…4, --ft-accent).
+const PETALS = [-78, -52, -26, 0, 26, 52, 78];
+export function Wallpaper() {
+  return (
+    <div className="ft-wallpaper" aria-hidden="true">
+      <i className="ft-bloom a" /><i className="ft-bloom c" />
+      <svg className="ft-petals" viewBox="0 0 1280 800" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="ft-petal" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" style={{ stopColor: 'var(--ft-wall-2)' }} />
+            <stop offset=".55" style={{ stopColor: 'var(--ft-accent)', stopOpacity: 0.55 }} />
+            <stop offset="1" style={{ stopColor: 'var(--ft-wall-1)', stopOpacity: 0.9 }} />
+          </linearGradient>
+          <linearGradient id="ft-petal-2" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" style={{ stopColor: 'var(--ft-wall-1)' }} />
+            <stop offset="1" style={{ stopColor: 'var(--ft-wall-2)', stopOpacity: 0.7 }} />
+          </linearGradient>
+        </defs>
+        <g transform="translate(700 560)">
+          {PETALS.map((a, i) => (
+            <g key={a} transform={`rotate(${a - 90})`}>
+              <ellipse cx="330" cy="0" rx="340" ry="92" fill={`url(#${i % 2 ? 'ft-petal-2' : 'ft-petal'})`} className="ft-petal" />
+            </g>
+          ))}
+          <circle r="60" className="ft-petal-heart" />
+        </g>
+      </svg>
+    </div>
+  );
 }
 
 export function Taskbar({ onTray, trayActive, trayBadge }) {
@@ -91,37 +124,38 @@ export function Stage({ children, focus, onTray, trayActive, trayBadge, classNam
   if (narrow) scale = Math.min(1, focus.w <= 700 ? Math.min((w - 16) / focus.w, (h - 16) / focus.h) : Math.max(MIN_NARROW_SCALE, (w - 16) / focus.w));
   const ctx = { W, H, taskbarH, scale, narrow, asideEl: narrow ? asideEl : null, workArea: { w: W, h: H - taskbarH } };
 
-  const desktop = style => (
-    <div className="ft-desktop" data-wallpaper={wallpaper ? '' : undefined} style={{ width: W, height: H, ...style }}>
-      <div className="ft-wallpaper" aria-hidden="true"><i className="ft-bloom a" /><i className="ft-bloom b" /><i className="ft-bloom c" /></div>
-      <DesktopContext.Provider value={ctx}>
-        <div className="ft-workarea" style={{ height: H - taskbarH }}>{children}</div>
-      </DesktopContext.Provider>
-      {!narrow && <Taskbar onTray={onTray} trayActive={trayActive} trayBadge={trayBadge} />}
-    </div>
-  );
-
+  // ONE element tree in both modes (wide / narrow): crossing the breakpoint only changes styles,
+  // so React never remounts the children (a paused demo, a Réglages page, a check in flight survive).
+  let deskStyle, panStyle;
   if (!narrow) {
-    return (
-      <div ref={outer} className={`ft-stage ${className}`}>
-        {desktop({ transform: `translate(-50%, -50%) scale(${scale})` })}
-      </div>
-    );
+    deskStyle = { transform: `translate(-50%, -50%) scale(${scale})` };
+    panStyle = { width: '100%', height: '100%' };
+  } else {
+    // The focused region of the desktop (where AppWindow centres a window of focus.w × focus.h).
+    const fx = (W - focus.w) / 2;
+    const fy = Math.max(12, (H - taskbarH - focus.h) / 2);
+    const pw = Math.round(focus.w * scale + 16);
+    const ph = Math.round(focus.h * scale + 16);
+    deskStyle = { left: 8 - fx * scale + Math.max(0, (w - pw) / 2), top: 8 - fy * scale, transform: `scale(${scale})`, transformOrigin: '0 0' };
+    panStyle = { width: Math.max(pw, w), height: ph };
   }
-  // The focused region of the desktop (where AppWindow centres a window of focus.w × focus.h).
-  const fx = (W - focus.w) / 2;
-  const fy = Math.max(12, (H - taskbarH - focus.h) / 2);
-  const pw = Math.round(focus.w * scale + 16);
-  const ph = Math.round(focus.h * scale + 16);
   return (
-    <div ref={outer} className={`ft-stage ${className}`} data-narrow="">
+    <div ref={outer} className={`ft-stage ${className}`} data-narrow={narrow ? '' : undefined}>
       <div className="ft-stage-scroll">
-        <div className="ft-stage-pan" style={{ width: Math.max(pw, w), height: ph }}>
-          {desktop({ left: 8 - fx * scale + Math.max(0, (w - pw) / 2), top: 8 - fy * scale, transform: `scale(${scale})`, transformOrigin: '0 0' })}
+        <div className="ft-stage-pan" style={panStyle}>
+          <div className="ft-desktop" data-wallpaper={wallpaper ? '' : undefined} style={{ width: W, height: H, ...deskStyle }}>
+            <Wallpaper />
+            <DesktopContext.Provider value={ctx}>
+              <div className="ft-workarea" style={{ height: H - taskbarH }}>{children}</div>
+            </DesktopContext.Provider>
+            <div className="ft-taskbar-slot" hidden={narrow || undefined}>
+              <Taskbar onTray={onTray} trayActive={trayActive} trayBadge={trayBadge} />
+            </div>
+          </div>
         </div>
-        <div ref={setAsideEl} className="ft-stage-aside" style={{ width: w }} />
+        <div ref={setAsideEl} className="ft-stage-aside" style={{ width: narrow ? w : undefined }} />
       </div>
-      {onTray && (
+      {onTray && narrow && (
         <button type="button" className="ft-stage-tray" data-active={trayActive ? '' : undefined} onClick={onTray} aria-label={`${appName} — ouvrir les réglages`}>
           <AppMark size={18} />
           {trayBadge && <span className="ft-tray-badge" aria-hidden="true" />}

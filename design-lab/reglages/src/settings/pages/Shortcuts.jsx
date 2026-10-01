@@ -5,7 +5,7 @@ import { ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { Group, Row, Switch, Select, Segmented, Button, KeyCombo, IconButton, ICON } from '../../ui/index.jsx';
 import { useTx } from '../../lib/motion.js';
 import { ShortcutRecorder } from '../ShortcutRecorder.jsx';
-import { useSettings, ACTION_ICONS, ACTION_TILES } from '../state.js';
+import { useSettings, ACTION_ICONS } from '../state.js';
 
 const OUTPUT = { replace: 'Remplace la sélection', display: 'Affiche dans la bulle' };
 
@@ -16,7 +16,7 @@ function Binding({ b, actions, others, onChange, onDelete, fresh }) {
   return (
     <Collapsible.Root open={open} onOpenChange={setOpen} className="ft-row st-binding" data-open={open ? '' : undefined}>
       <div className="ft-row-main">
-        <span className="ft-row-icon" data-tile="" style={{ '--tile': `var(--ft-tile-${ACTION_TILES[b.actionId] || 7})`, '--on-tile': `var(--ft-on-tile-${ACTION_TILES[b.actionId] || 7})` }} aria-hidden="true"><Icon {...ICON} /></span>
+        <span className="ft-row-icon" aria-hidden="true"><Icon {...ICON} /></span>
         <Collapsible.Trigger className="st-binding-trigger">
           <span className="ft-row-copy"><strong>{action?.name || 'Action supprimée'}</strong><small>{b.enabled ? OUTPUT[b.output] : 'Désactivé'}</small></span>
           <KeyCombo keys={b.keys.length ? b.keys : ['À définir']} size="sm" />

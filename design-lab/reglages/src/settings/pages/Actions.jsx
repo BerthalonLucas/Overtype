@@ -4,12 +4,11 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ArrowUp, ArrowDown, ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { Group, Switch, Button, IconButton, Keycap, Input, ICON } from '../../ui/index.jsx';
 import { useTx } from '../../lib/motion.js';
-import { useSettings, ACTION_ICONS, ACTION_TILES, shippedInstruction } from '../state.js';
+import { useSettings, ACTION_ICONS, shippedInstruction } from '../state.js';
 
 const LIMIT = 6;
 // Tile labels (the app's shortName): the Îlot tile is 70 px wide.
 const SHORT = { professionnel: 'Pro' };
-const tileStyle = id => ({ '--tile': `var(--ft-tile-${ACTION_TILES[id] || 8})`, '--on-tile': `var(--ft-on-tile-${ACTION_TILES[id] || 8})` });
 
 // The Îlot as it will open beside a selection: the tiles in their order, each with its letter;
 // the free instruction takes the last tile while there is room.
@@ -58,7 +57,7 @@ function GridRow({ a, index, count, inMenu, canAdd, onMove, onToggle, onLetter, 
   return (
     <motion.li layout="position" transition={tx('smooth')} className="st-grid-row" data-off={inMenu ? undefined : ''}>
       <span className="st-grid-index" aria-hidden="true">{inMenu ? index + 1 : ''}</span>
-      <span className="st-grid-tile" style={tileStyle(a.id)} aria-hidden="true"><Icon {...ICON} /></span>
+      <span className="st-grid-tile" aria-hidden="true"><Icon {...ICON} /></span>
       <span className="st-grid-name">{a.name}</span>
       <span className="st-grid-letter">
         <input aria-label={`Lettre de ${a.name}`} value={draft ?? a.key ?? ''} maxLength={2} spellCheck={false} autoComplete="off"
@@ -109,14 +108,14 @@ function InstructionHead({ a }) {
   const Icon = ACTION_ICONS[a.id] || ACTION_ICONS.consigne;
   return (
     <>
-      <span className="ft-row-icon" data-tile="" style={tileStyle(a.id)} aria-hidden="true"><Icon {...ICON} /></span>
+      <span className="ft-row-icon" aria-hidden="true"><Icon {...ICON} /></span>
       <span className="ft-row-copy"><strong>{a.name || 'Action sans nom'}</strong><small>{a.instruction.split('\n')[0].slice(0, 90)}{a.instruction.length > 90 ? '…' : ''}</small></span>
       <span className="st-chip" data-kind={a.builtIn ? (modified ? 'accent' : undefined) : 'custom'}>{a.builtIn ? (modified ? 'Modifiée' : 'Prédéfinie') : 'Personnalisée'}</span>
     </>
   );
 }
 
-// Verre and Aérien: the instruction unfolds in place.
+// The instruction unfolds in place.
 function InstructionEditor({ a, onChange, onDelete, defaultOpen }) {
   return (
     <Collapsible.Root className="ft-row st-instr" defaultOpen={defaultOpen}>
@@ -130,21 +129,8 @@ function InstructionEditor({ a, onChange, onDelete, defaultOpen }) {
     </Collapsible.Root>
   );
 }
-// Mat: the row opens the instruction as a sub-page (breadcrumb « Actions › Corriger »).
-function InstructionLink({ a, onOpen }) {
-  return (
-    <div className="ft-row st-instr">
-      <button type="button" className="ft-row-main st-instr-trigger" onClick={onOpen}>
-        <InstructionHead a={a} />
-        <ChevronRight className="st-link-chev" {...ICON} aria-hidden="true" />
-      </button>
-    </div>
-  );
-}
-
 export function ActionsPage() {
-  const { s, set, nav, sub, openSub, closeSub } = useSettings();
-  const mat = nav === 'breadcrumb';
+  const { s, set } = useSettings();
   const [problems, setProblems] = useState({});
   const [drafts, setDrafts] = useState({});
   const [fresh, setFresh] = useState(null);
@@ -170,18 +156,8 @@ export function ActionsPage() {
     const id = `perso-${Date.now().toString(36)}`;
     setFresh(id);
     set(v => ({ actions: [...v.actions, { id, name: 'Nouvelle action', instruction: 'Transform the text as follows: describe the change you want here.', builtIn: false }] }));
-    if (mat) openSub('actions', id, 'Nouvelle action');
   };
-  const remove = id => { set(v => ({ actions: v.actions.filter(a => a.id !== id), menuIds: v.menuIds.filter(x => x !== id), bindings: v.bindings.filter(b => b.actionId !== id) })); if (mat) closeSub(); };
-
-  const open = mat && sub?.page === 'actions' ? s.actions.find(a => a.id === sub.id) : null;
-  if (open) {
-    return (
-      <Group title="Consigne" description="La consigne seule ; le texte sélectionné est envoyé après elle.">
-        <div className="st-instr-sub"><InstructionBody a={open} onChange={c => patch(open.id, c)} onDelete={() => remove(open.id)} /></div>
-      </Group>
-    );
-  }
+  const remove = id => set(v => ({ actions: v.actions.filter(a => a.id !== id), menuIds: v.menuIds.filter(x => x !== id), bindings: v.bindings.filter(b => b.actionId !== id) }));
 
   return (
     <>
@@ -204,9 +180,7 @@ export function ActionsPage() {
       <Group title="Consignes" description="La consigne seule ; le texte sélectionné est envoyé après elle."
         action={<Button size="sm" variant="ghost" icon={<Plus {...ICON} size={15} />} onClick={addAction}>Ajouter une action</Button>}>
         <div data-field="instructions" className="st-instr-list">
-          {s.actions.map(a => (mat
-            ? <InstructionLink key={a.id} a={a} onOpen={() => openSub('actions', a.id, a.name || 'Action sans nom')} />
-            : <InstructionEditor key={a.id} a={a} defaultOpen={fresh === a.id} onChange={c => patch(a.id, c)} onDelete={() => remove(a.id)} />))}
+          {s.actions.map(a => <InstructionEditor key={a.id} a={a} defaultOpen={fresh === a.id} onChange={c => patch(a.id, c)} onDelete={() => remove(a.id)} />)}
         </div>
       </Group>
     </>

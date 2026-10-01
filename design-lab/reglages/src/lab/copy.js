@@ -1,7 +1,7 @@
 // « Copier mes choix »: a readable summary + JSON, and a clipboard write that works inside the
 // claude.ai artifact frame (write only from a click handler; fallback: execCommand; last
 // resort: the caller shows the text in a dialog to copy by hand).
-import { DIRECTION_BY_ID, PALETTE_BY_ID, THEMES, SPEEDS } from '../tokens/index.js';
+import { PALETTE_BY_ID, PAGE_SET_BY_ID, SWITCH_STYLES, THEMES, SPEEDS } from '../tokens/index.js';
 import { SECTIONS } from './store.jsx';
 import { SCENARIO_BY_ID } from '../mock/server.js';
 
@@ -20,9 +20,9 @@ export function buildChoices(lab) {
   const line = v => `- [${sectionName(v.section)}] ${v.label}${v.note ? ` — « ${v.note.trim()} »` : ''}`;
 
   const text = [
-    `Labo Réglages — mes choix (${stamp})`,
+    `Labo Réglages v2 — mes choix (${stamp})`,
     '',
-    `Réglage en cours : direction ${DIRECTION_BY_ID[lab.direction]?.name}, palette ${PALETTE_BY_ID[lab.palette]?.name}, thème ${theme}, vitesse ${speed}, mouvement réduit ${lab.reduced ? 'oui' : 'non'}, scénario serveur « ${SCENARIO_BY_ID[lab.scenario]?.label ?? lab.scenario} ».`,
+    `Réglage en cours : base ${PALETTE_BY_ID[lab.base]?.long}, couleurs par page ${PAGE_SET_BY_ID[lab.pageSet]?.name}, interrupteur ${SWITCH_STYLES.find(x => x.id === lab.switchStyle)?.name}, thème ${theme}, vitesse ${speed}, mouvement réduit ${lab.reduced ? 'oui' : 'non'}, scénario serveur « ${SCENARIO_BY_ID[lab.scenario]?.label ?? lab.scenario} ».`,
     '',
     `👍 J’aime (${ups.length})`,
     ...(ups.length ? ups.map(line) : ['- (rien encore)']),
@@ -35,7 +35,7 @@ export function buildChoices(lab) {
 
   const json = {
     date: now.toISOString(),
-    current: { direction: lab.direction, palette: lab.palette, theme: lab.theme, speed: lab.speed, reducedMotion: !!lab.reduced, scenario: lab.scenario, section: lab.section },
+    current: { base: lab.base, pageSet: lab.pageSet, switchStyle: lab.switchStyle, theme: lab.theme, speed: lab.speed, reducedMotion: !!lab.reduced, scenario: lab.scenario, section: lab.section },
     likes: ups.map(({ id, label, section, note }) => ({ id, label, section, note: note || undefined })),
     dislikes: downs.map(({ id, label, section, note }) => ({ id, label, section, note: note || undefined })),
     notes: lab.notes,

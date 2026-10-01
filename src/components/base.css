@@ -1,0 +1,161 @@
+/* Structure and materials of the Settings and setup windows (0.6), ported from the design lab
+   (design-lab/reglages/src/tokens/tokens.css). Colours: tokens.css (generated). TWO MATERIALS:
+
+     window    matte, opaque, crisp, no sheen, no blur: the Settings, dialogs, popovers.
+     floating  real glass (class .ft-glass): the setup window, the demo's layers, a toast.
+
+   The tokens sit on :root (every window of the app shares one bundle; only --ft-* names are
+   defined here, so the overlay is untouched). The resolved theme is data-theme on <html>
+   (src/theme.ts), reduced motion data-motion="reduced" (src/motion/preference.ts). A window that
+   uses these controls puts the class .ft-scope on its root: font, ink and control defaults. */
+
+@property --ft-fade-top { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --ft-fade-bottom { syntax: "<length>"; inherits: false; initial-value: 0px; }
+
+:root {
+  --ft-font: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  --ft-font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+  --ft-font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+
+  /* interaction colours, from the text ink */
+  --ft-hover: rgb(var(--ft-ink-rgb) / .055);
+  --ft-pressed: rgb(var(--ft-ink-rgb) / .1);
+  --ft-line: rgb(var(--ft-ink-rgb) / .09);
+  --ft-line-strong: rgb(var(--ft-ink-rgb) / .16);
+  --ft-quiet: rgb(var(--ft-ink-rgb) / .07);
+  --ft-focus: var(--ft-accent);
+  --ft-focus-ring: 0 0 0 2px var(--ft-win-bg-solid, var(--ft-bg)), 0 0 0 4px var(--ft-focus);
+  --ft-field-border: rgb(var(--ft-ink-rgb) / .14);
+  --ft-field-underline: rgb(var(--ft-ink-rgb) / .38);
+  --ft-disabled: .45;
+
+  /* page colour fallback (outside any [data-ft-page]): the base accent */
+  --ft-page: var(--ft-accent); --ft-page-rgb: var(--ft-accent-rgb); --ft-page-text: var(--ft-accent-text);
+  --ft-page-soft: var(--ft-accent-soft); --ft-page-veil: transparent;
+
+  /* geometry */
+  --ft-r-window: 12px; --ft-r-group: 12px; --ft-r-control: 8px; --ft-r-button: 999px; --ft-r-nav: 8px; --ft-r-tile: 7px;
+  --ft-r-float: 18px;
+  --ft-control-h: 32px; --ft-button-h: 32px; --ft-button-h-lg: 40px; --ft-button-h-xl: 48px;
+  --ft-row-py: 12px; --ft-row-px: 16px; --ft-row-min: 36px; --ft-section-gap: 22px; --ft-page-px: 28px; --ft-page-pt: 22px;
+  --ft-sidebar-w: 212px; --ft-nav-h: 34px; --ft-nav-gap: 2px; --ft-nav-icon: 16px;
+
+  /* type */
+  --ft-title-size: 22px; --ft-title-weight: 600; --ft-title-tracking: -.01em;
+  --ft-hero-size: 28px; --ft-hero-weight: 600;
+  --ft-group-title-size: 13px; --ft-group-title-weight: 600; --ft-group-title-color: var(--ft-text-2);
+  --ft-body-size: 13.5px;
+
+  /* ——— material 1: WINDOW — matte, opaque, crisp ——— */
+  --ft-win-bg-solid: var(--ft-bg);
+  --ft-win-bg: var(--ft-bg);
+  --ft-win-blur: none;
+  --ft-win-border: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .2);
+  --ft-win-rim: 0 0 0 transparent;
+  --ft-win-shadow: 0 24px 64px rgb(0 0 0 / .16), 0 6px 18px rgb(0 0 0 / .08);
+  --ft-win-sheen: none;
+  --ft-titlebar-bg: transparent;
+  --ft-sidebar-bg: var(--ft-sidebar);
+  --ft-sidebar-border: inset -.5px 0 0 rgb(var(--ft-ink-rgb) / .12);
+  --ft-content-bg: var(--ft-bg);
+  --ft-group-bg: var(--ft-surface);
+  --ft-group-border: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .12);
+  --ft-group-shadow: 0 1px 2px rgb(0 0 0 / .04);
+  --ft-group-rim: 0 0 0 transparent;
+  --ft-row-divider: rgb(var(--ft-ink-rgb) / .08);
+  --ft-row-divider-inset: 16px;
+  --ft-nav-active-bg: var(--ft-page-soft);
+  --ft-nav-active-text: var(--ft-text);
+  --ft-nav-active-shadow: none;
+  --ft-nav-marker: transparent;
+  --ft-button-shadow: 0 1px 2px rgb(0 0 0 / .1);
+  --ft-secondary-bg: var(--ft-surface);
+  --ft-secondary-border: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .2), 0 1px 2px rgb(0 0 0 / .05);
+
+  /* ——— material 2: FLOATING — real glass over what is behind ——— */
+  --ft-float-tint: rgb(var(--ft-surface-rgb) / .55);
+  --ft-float-blur: blur(28px) saturate(1.9);
+  --ft-float-edge: 0 0 0 .5px rgb(0 0 0 / .14);
+  --ft-float-rim: inset 0 0 0 .5px rgb(255 255 255 / .5), inset 0 1px 0 rgb(255 255 255 / .65);
+  --ft-float-shadow: 0 24px 60px rgb(0 0 0 / .18), 0 6px 18px rgb(0 0 0 / .1);
+  --ft-float-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* keycaps */
+  --ft-key-bg: var(--ft-field);
+  --ft-key-text: var(--ft-text);
+  --ft-key-shadow: inset 0 -1px 0 rgb(var(--ft-ink-rgb) / .16), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .18);
+  --ft-key-active-bg: var(--ft-accent);
+  --ft-key-active-text: var(--ft-on-accent);
+
+  /* popovers (select, model picker, menus): matte, like a window */
+  --ft-popover-bg: var(--ft-surface);
+  --ft-popover-blur: none;
+  --ft-popover-shadow: 0 16px 40px rgb(0 0 0 / .16), 0 3px 8px rgb(0 0 0 / .08), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .16);
+  --ft-popover-radius: 14px;
+
+  /* scrollbars */
+  --ft-scroll-thumb: rgb(var(--ft-ink-rgb) / .28);
+  --ft-scroll-thumb-hover: rgb(var(--ft-ink-rgb) / .44);
+
+  /* switch geometry (outer size includes the border). The thumb sits concentric in both round
+     ends: gap = (h − 2·border − thumb) / 2, travel = w − 2·border − thumb − 2·gap. */
+  --ft-sw-w: 40px; --ft-sw-h: 20px; --ft-sw-border: 1px; --ft-sw-thumb: 14px; --ft-sw-off-scale: .8572;
+  --ft-sw-off-bg: transparent; --ft-sw-off-border: rgb(var(--ft-ink-rgb) / .56); --ft-sw-off-thumb: rgb(var(--ft-ink-rgb) / .7);
+  --ft-sw-on-bg: var(--ft-accent); --ft-sw-on-thumb: var(--ft-on-accent); --ft-sw-thumb-shadow: none;
+
+  /* motion bases */
+  --ft-t-fast: 120ms; --ft-t: 180ms; --ft-t-slow: 320ms;
+  --ft-ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ft-ease-in-out: cubic-bezier(.65, 0, .35, 1);
+
+}
+.ft-scope { font-family: var(--ft-font); font-size: var(--ft-body-size); color: var(--ft-text); -webkit-font-smoothing: antialiased; }
+:root[data-theme="dark"] {
+  --ft-win-border: 0 0 0 .5px rgb(255 255 255 / .14);
+  --ft-win-shadow: 0 24px 64px rgb(0 0 0 / .5), 0 6px 18px rgb(0 0 0 / .3);
+  --ft-sidebar-border: inset -.5px 0 0 rgb(255 255 255 / .08);
+  --ft-group-border: 0 0 0 .5px rgb(255 255 255 / .08);
+  --ft-group-shadow: none;
+  --ft-row-divider: rgb(255 255 255 / .07);
+  --ft-button-shadow: inset 0 1px 0 rgb(255 255 255 / .16);
+  --ft-secondary-bg: rgb(255 255 255 / .07);
+  --ft-secondary-border: 0 0 0 .5px rgb(255 255 255 / .14);
+  --ft-key-bg: rgb(255 255 255 / .1);
+  --ft-key-shadow: inset 0 -1px 0 rgb(0 0 0 / .4), inset 0 1px 0 rgb(255 255 255 / .08);
+  --ft-popover-bg: var(--ft-field);
+  --ft-popover-shadow: 0 16px 40px rgb(0 0 0 / .5), 0 3px 8px rgb(0 0 0 / .3), 0 0 0 .5px rgb(255 255 255 / .12);
+
+  --ft-float-tint: rgb(var(--ft-bg-rgb) / .5);
+  --ft-float-blur: blur(28px) saturate(1.6);
+  --ft-float-edge: 0 0 0 .5px rgb(0 0 0 / .5);
+  --ft-float-rim: inset 0 0 0 .5px rgb(255 255 255 / .14), inset 0 1px 0 rgb(255 255 255 / .12);
+  --ft-float-shadow: 0 24px 60px rgb(0 0 0 / .5), 0 6px 18px rgb(0 0 0 / .3);
+
+  --ft-scroll-thumb: rgb(255 255 255 / .26);
+  --ft-scroll-thumb-hover: rgb(255 255 255 / .42);
+}
+
+/* Real glass, for anything that floats. Put it on the floating element itself (it blurs what is
+   behind that element on the page: the wallpaper, a window, the text of a document). */
+.ft-glass {
+  background: var(--ft-float-grain), var(--ft-float-tint);
+  -webkit-backdrop-filter: var(--ft-float-blur); backdrop-filter: var(--ft-float-blur);
+  box-shadow: var(--ft-float-edge), var(--ft-float-rim), var(--ft-float-shadow);
+}
+
+/* The faint veil at the top of a page, in the page colour (Réglages pages, setup questions). */
+.ft-page-veil { position: absolute; left: 0; right: 0; top: 0; height: 180px; pointer-events: none;
+  background: linear-gradient(180deg, var(--ft-page-veil), transparent); }
+
+/* Reduced motion: src/styles.css already stills every transition and animation under
+   data-motion="reduced". What must keep turning to mean « working » does: the spinners. */
+:root[data-motion="reduced"] :is(.ft-spin, .ft-trace-spin) { animation-duration: 900ms !important; animation-iteration-count: infinite !important; }
+
+/* No native grey scrollbar in these windows: every scroll area uses <ScrollArea>; this
+   is the safety net for the others (thin, rounded, no arrows). */
+.ft-scope ::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+.ft-scope ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.ft-scope ::-webkit-scrollbar-track, .ft-scope ::-webkit-scrollbar-corner { background: transparent; }
+.ft-scope ::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 999px; background: var(--ft-scroll-thumb); background-clip: padding-box; }
+.ft-scope ::-webkit-scrollbar-thumb:hover { border-width: 2px; background-color: var(--ft-scroll-thumb-hover); }
+@supports not selector(::-webkit-scrollbar) { .ft-scope * { scrollbar-width: thin; scrollbar-color: var(--ft-scroll-thumb) transparent; } }

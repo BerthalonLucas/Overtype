@@ -3,6 +3,9 @@ import type { Language } from './types';
 import { setupMessages } from './setup/messages.i18n';
 import { connectionMessages } from './connection/messages.i18n';
 import { settingsPagesMessages } from './settings/pages/messages.i18n';
+import { componentsMessages } from './components/messages.i18n';
+import { demoMessages } from './demo/messages.i18n';
+import { appName } from './brand';
 
 // The interface language (docs/DA-PLAN.md, lot 1): English by default, French complete.
 // No dependency: one typed dictionary, `t(key, params)`, and a hook that follows
@@ -12,6 +15,8 @@ const dictionary = {
   ...setupMessages,
   ...connectionMessages,
   ...settingsPagesMessages,
+  ...componentsMessages,
+  ...demoMessages,
   // Overlay: the glass, its pill and its menu.
   'glass.copy': { en: 'Copy translation', fr: 'Copier la traduction' },
   'glass.more': { en: 'More options', fr: 'Plus d’options' },
@@ -47,7 +52,7 @@ const dictionary = {
   'feedback.replaceUnavailable': { en: 'Replace is unavailable; use Copy.', fr: 'Remplacement indisponible; utilisez Copier.' },
   'feedback.displayUnavailable': { en: 'Display unavailable. Try again.', fr: 'Affichage indisponible. Réessayez.' },
   'feedback.moveUnavailable': { en: 'Moving unavailable. Try again.', fr: 'Déplacement indisponible. Réessayez.' },
-  'feedback.openSettingsFromTray': { en: 'Open the settings from the FlowTranslate icon.', fr: 'Ouvrez les réglages depuis l’icône FlowTranslate.' },
+  'feedback.openSettingsFromTray': { en: 'Open the settings from the {app} icon.', fr: 'Ouvrez les réglages depuis l’icône {app}.' },
   'error.failed': { en: 'The translation did not complete.', fr: 'La traduction n’a pas abouti.' },
   'error.startFailed': { en: 'The action could not start.', fr: 'L’action n’a pas pu démarrer.' },
   'error.deliveryTimeout': { en: 'The replacement did not answer; the result stays in the bubble.', fr: 'Le remplacement n’a pas répondu; le résultat reste dans la bulle.' },
@@ -93,7 +98,7 @@ const dictionary = {
   // A capture Rust refused (capture-notice), where the request's words would mislead: the source
   // window changed during the capture, nothing was tried (src/result/errors.ts, source 'capture').
   'result.notice.target_changed': { en: 'Window changed — try again', fr: 'Fenêtre changée, réessayez' },
-  'init.connection': { en: 'The connection to FlowTranslate is unavailable.', fr: 'La connexion à FlowTranslate est indisponible.' },
+  'init.connection': { en: 'The connection to {app} is unavailable.', fr: 'La connexion à {app} est indisponible.' },
   'init.close': { en: 'Closing failed. Try again.', fr: 'La fermeture a échoué. Réessayez.' },
   'init.restart': { en: 'Restart the app if the problem persists.', fr: 'Relancez l’application si le problème persiste.' },
   'common.retry': { en: 'Try again', fr: 'Réessayer' },
@@ -124,7 +129,7 @@ const dictionary = {
   'demo.openSettings': { en: 'Open settings', fr: 'Voir les réglages' },
   // Settings window.
   'settings.title': { en: 'Settings', fr: 'Réglages' },
-  'settings.windowTitle': { en: 'FlowTranslate Settings', fr: 'Réglages FlowTranslate' },
+  'settings.windowTitle': { en: '{app} Settings', fr: 'Réglages {app}' },
   'settings.animations': { en: 'Animations', fr: 'Animations' },
   'settings.animationsHelp': { en: 'Reduced: short fades only, no spring and no movement.', fr: 'Réduites : fondus courts seulement, sans ressort ni déplacement.' },
   'settings.animationsSystemReduces': { en: 'Windows asks to reduce animations.', fr: 'Windows demande de réduire les animations.' },
@@ -133,7 +138,7 @@ const dictionary = {
   'settings.animationsReduced': { en: 'Reduced', fr: 'Réduites' },
   'settings.close': { en: 'Close', fr: 'Fermer' },
   'settings.loading': { en: 'Loading settings…', fr: 'Chargement des réglages…' },
-  'settings.loadError': { en: 'Settings are unavailable. Try again or restart FlowTranslate.', fr: 'Les réglages sont indisponibles. Réessayez ou redémarrez FlowTranslate.' },
+  'settings.loadError': { en: 'Settings are unavailable. Try again or restart {app}.', fr: 'Les réglages sont indisponibles. Réessayez ou redémarrez {app}.' },
   'settings.notSaved': { en: 'Settings were not saved.', fr: 'Les réglages n’ont pas été enregistrés.' },
   'settings.appearance': { en: 'Appearance', fr: 'Apparence' },
   'settings.language': { en: 'Language', fr: 'Langue' },
@@ -175,7 +180,7 @@ const dictionary = {
   'after.seconds': { en: '{count} s', fr: '{count} s' },
   'after.minutes': { en: '{count} min', fr: '{count} min' },
   'after.strategy': { en: 'How to undo', fr: 'Méthode' },
-  'after.strategyHelp': { en: 'Ctrl+Z in the app, or FlowTranslate pastes the original back.', fr: 'Ctrl+Z dans l’application, ou FlowTranslate recolle l’original.' },
+  'after.strategyHelp': { en: 'Ctrl+Z in the app, or {app} pastes the original back.', fr: 'Ctrl+Z dans l’application, ou {app} recolle l’original.' },
   'after.strategyKeystroke': { en: 'Ctrl+Z', fr: 'Ctrl+Z' },
   'after.strategyRepaste': { en: 'Paste original', fr: 'Recoller l’original' },
   'after.changedWords': { en: 'Highlight changed words', fr: 'Surligner les mots changés' },
@@ -254,7 +259,7 @@ const dictionary = {
   'settings.savedNow': { en: 'Saved just now', fr: 'Enregistré à l’instant' },
   'settings.saving': { en: 'Saving…', fr: 'Enregistrement…' },
   'settings.saved': { en: 'Saved', fr: 'Enregistré' },
-  'settings.quit': { en: 'Quit FlowTranslate', fr: 'Quitter FlowTranslate' },
+  'settings.quit': { en: 'Quit {app}', fr: 'Quitter {app}' },
   'settings.resize': { en: 'Resize settings', fr: 'Redimensionner les réglages' },
   'settings.resizeHint': { en: 'Drag to resize', fr: 'Glisser pour redimensionner' },
   'settings.resizeUnavailable': { en: 'Resizing unavailable. Use the window edges.', fr: 'Redimensionnement indisponible. Utilisez les bords de la fenêtre.' },
@@ -284,9 +289,9 @@ const dictionary = {
   'shortcuts.opensMenu': { en: 'Opens the menu.', fr: 'Ouvre le menu.' },
   'shortcuts.taken': { en: 'Another app already uses this shortcut, or Windows refused it. Choose another one.', fr: 'Une autre application utilise déjà ce raccourci, ou Windows l’a refusé. Choisissez-en un autre.' },
   // Lot 10: what Windows answered for a saved chord (`shortcut_status`), under its row.
-  'shortcuts.stateTaken': { en: 'Another app is already using {shortcut}, so Windows did not give it to FlowTranslate. Record another combination, or close that app.', fr: 'Une autre application utilise déjà {shortcut} : Windows ne l’a pas donné à FlowTranslate. Enregistrez une autre combinaison, ou fermez cette application.' },
+  'shortcuts.stateTaken': { en: 'Another app is already using {shortcut}, so Windows did not give it to {app}. Record another combination, or close that app.', fr: 'Une autre application utilise déjà {shortcut} : Windows ne l’a pas donné à {app}. Enregistrez une autre combinaison, ou fermez cette application.' },
   'shortcuts.stateFailed': { en: 'Windows refused {shortcut}: it does nothing for now. Record another combination.', fr: 'Windows a refusé {shortcut} : il ne fait rien pour l’instant. Enregistrez une autre combinaison.' },
-  'shortcuts.duplicate': { en: 'Another FlowTranslate shortcut already uses this combination.', fr: 'Un autre raccourci de FlowTranslate utilise déjà cette combinaison.' },
+  'shortcuts.duplicate': { en: 'Another {app} shortcut already uses this combination.', fr: 'Un autre raccourci de {app} utilise déjà cette combinaison.' },
   'shortcuts.unknown': { en: 'This combination is not recognized.', fr: 'Cette combinaison n’est pas reconnue.' },
   'shortcuts.altGrConflict': { en: '{shortcut} is also AltGr+{key} on this keyboard: you could no longer type {character}.', fr: '{shortcut} est aussi AltGr+{key} sur ce clavier : vous ne pourriez plus taper {character}.' },
   'shortcuts.altGrConflictKey': { en: '{shortcut} is also AltGr+{key} on this keyboard: that key would no longer type its character.', fr: '{shortcut} est aussi AltGr+{key} sur ce clavier : cette touche ne taperait plus son caractère.' },
@@ -323,9 +328,11 @@ export type Translate = (key: MessageKey, params?: Params) => string;
 export const languages: readonly Language[] = ['en', 'fr'];
 export const locales: Record<Language, string> = { en: 'en-US', fr: 'fr-FR' };
 
+// The app's name is never written in a message: `{app}` reads it from src/brand.ts.
 export function translate(language: Language, key: MessageKey, params?: Params): string {
   const text = dictionary[key][language] ?? dictionary[key].en;
-  return params ? text.replace(/\{(\w+)\}/g, (whole, name: string) => name in params ? String(params[name]) : whole) : text;
+  if (!params && !text.includes('{')) return text;
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) => params && name in params ? String(params[name]) : name === 'app' ? appName : whole);
 }
 
 // The active language of this window: set by useDocumentPreferences from settings.language;

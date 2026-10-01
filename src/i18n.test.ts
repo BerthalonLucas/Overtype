@@ -9,7 +9,7 @@ describe('i18n', () => {
   it('speaks English by default and fills parameters', () => {
     expect(currentLanguage()).toBe('en');
     expect(t('glass.copy')).toBe('Copy translation');
-    expect(t('menu.rerun', { mode: t('mode.fast') })).toBe('Run again in Fast');
+    expect(t('menu.rerun', { server: '127.0.0.1:8001' })).toBe('Run again with 127.0.0.1:8001');
     expect(translate('fr', 'settings.connected', { ms: 38 })).toBe('Connecté · 38 ms');
     expect(translate('en', 'settings.historyCountOther', { count: 2 })).toBe('2 entries');
   });

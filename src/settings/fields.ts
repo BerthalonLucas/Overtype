@@ -1,26 +1,25 @@
-import type { Mode, ProfileField, SettingsField } from '../types';
+import type { ProfileField, SettingsField } from '../types';
 
 // Direct links to one field of the Settings window (lot 13, for the configuration errors of
 // lot 10), after the lab's MockSettings (design-lab/src/Simulator.jsx): scroll to the field,
 // focus it, and make it pulse for 2.8 s (two pulses of 1.4 s); in reduced motion the scroll
 // jumps and the highlight holds still for the same time. Every field that can be targeted
 // carries data-field with one of these stable identifiers.
-export type FieldId = 'menuShortcut' | `${Mode}.${ProfileField}`;
+export type FieldId = 'menuShortcut' | `${string}.${ProfileField}`;
 export const highlightMs = 2800;
-const modes: readonly Mode[] = ['quality', 'fast'];
 const profileFields: readonly ProfileField[] = ['endpoint', 'apiKey', 'model'];
 
-// A bare profile field (what lot 10 sends for an error of the running request) means the
-// default profile's; anything unknown is ignored.
-export function resolveField(field: string | null | undefined, defaultMode: Mode): FieldId | null {
+// A bare server field (what lot 10 sends for an error of the running request) means the
+// default server's; `<serverId>.<field>` names one of the servers; anything unknown is ignored.
+export function resolveField(field: string | null | undefined, servers: readonly { id: string }[], defaultServerId: string): FieldId | null {
   if (!field) return null;
   if (field === 'menuShortcut') return field;
-  if ((profileFields as readonly string[]).includes(field)) return `${defaultMode}.${field as ProfileField}`;
-  const [mode, name, extra] = field.split('.');
-  if (extra === undefined && (modes as readonly string[]).includes(mode) && (profileFields as readonly string[]).includes(name)) return `${mode as Mode}.${name as ProfileField}`;
+  if ((profileFields as readonly string[]).includes(field)) return `${defaultServerId}.${field as ProfileField}`;
+  const [id, name, extra] = field.split('.');
+  if (extra === undefined && servers.some(server => server.id === id) && (profileFields as readonly string[]).includes(name)) return `${id}.${name as ProfileField}`;
   return null;
 }
-export const isProfileField = (id: FieldId): id is `${Mode}.${ProfileField}` => id !== 'menuShortcut';
+export const isProfileField = (id: FieldId): id is `${string}.${ProfileField}` => id !== 'menuShortcut';
 // The field asked for when the window opened (`?window=settings&field=…`).
 export const fieldFromLocation = (search: string): SettingsField | null => new URLSearchParams(search).get('field') as SettingsField | null;
 

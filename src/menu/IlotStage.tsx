@@ -621,7 +621,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
   const stage: ResultStage | null = outcome.stage === 'working' ? { stage: 'working', indicator }
     : outcome.stage === 'done' ? { stage: 'done', afterReplace, clock: clock?.clock, busy, drawn: Boolean(clock?.withUndo) && !afterReplace.undo }
     : outcome.stage === 'undone' ? undoneAway.current ? null : { stage: 'undone' }
-    : outcome.stage === 'error' ? { stage: 'error', error: outcome.code, source: outcome.source, mode: state.mode, model: settings?.profiles[state.mode]?.model }
+    : outcome.stage === 'error' ? { stage: 'error', error: outcome.code, source: outcome.source, serverId: state.serverId ?? undefined, model: settings?.servers.find(server => server.id === (state.serverId ?? settings.defaultServerId))?.model }
     : null;
   const content = stage && resultContent(stage, {
     onExpire: leave, onDismiss: leave, onAction, onUndo: askUndo,

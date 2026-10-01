@@ -1,7 +1,8 @@
 use crate::{
     error::{http_status, AppError, ErrorKind},
-    settings::validate_endpoint,
-    types::{Profile, StreamKind},
+    probe,
+    settings::{normalize_endpoint, Endpoint},
+    types::{Server, StreamKind},
 };
 use std::time::Duration;
 use futures_util::StreamExt;
@@ -82,17 +83,15 @@ fn cancelled() -> AppError {
     AppError::new(ErrorKind::Cancelled, "Traduction annulée.")
 }
 
-/// An invalid address is the address's fault: the error opens its field.
-fn api_url(base: &str, route: &str) -> Result<url::Url, AppError> {
-    let mut url = validate_endpoint(base).map_err(|message| AppError::new(ErrorKind::BadEndpoint, message))?;
-    let path = url.path().trim_end_matches('/');
-    let prefix = if path.ends_with("/v1") {
-        path.to_string()
-    } else {
-        format!("{path}/v1")
-    };
-    url.set_path(&format!("{prefix}/{route}"));
-    Ok(url)
+/// `{base}/v1/{route}` of a server's address (stored without `/v1` since 0.6; one written with
+/// it is read the same). An address that is empty or does not read is the address's fault: the
+/// error opens its field.
+fn api_url(base: &str, route: &str) -> Result<(String, Endpoint), AppError> {
+    let endpoint = normalize_endpoint(base).map_err(|reason| AppError::new(ErrorKind::BadEndpoint, match reason {
+        crate::settings::EndpointReason::Empty => "Aucun serveur n’est réglé. Ouvrez les Réglages.",
+        _ => "L’adresse du serveur est invalide.",
+    }))?;
+    Ok((format!("{}/v1/{route}", endpoint.base), endpoint))
 }
 
 /// Sampling fields beyond the OpenAI contract: understood by vLLM, llama.cpp and most
@@ -107,7 +106,7 @@ const THINKING_SWITCH: &str = "chat_template_kwargs";
 /// The instruction is the system message, the text the user message (0.4.0): a small
 /// instruct model then transforms the text instead of answering it. Sampling is one
 /// conservative setting for any LLM (correction and rewriting want little variance).
-fn request_body(profile: &Profile, instruction: &str, text: &str, extended: bool, thinking_switch: bool) -> Value {
+fn request_body(profile: &Server, instruction: &str, text: &str, extended: bool, thinking_switch: bool) -> Value {
     let mut body = json!({"model":profile.model,
         "messages":[{"role":"system","content":instruction},{"role":"user","content":text}],
         "stream":true,"temperature":0.3,"top_p":0.9,"max_tokens":4096});
@@ -210,7 +209,7 @@ impl Default for Limits {
 }
 
 pub async fn stream<F>(
-    profile: Profile,
+    profile: Server,
     instruction: String,
     text: String,
     cancel: CancellationToken,
@@ -225,7 +224,7 @@ where
 /// Every failure carries its code (lot 10): the status of the answer, the transport, the
 /// stream, the finish reason. The server's body decides a retry or a 404 and goes nowhere.
 pub async fn stream_within<F>(
-    profile: Profile,
+    profile: Server,
     instruction: String,
     text: String,
     cancel: CancellationToken,
@@ -235,18 +234,18 @@ pub async fn stream_within<F>(
 where
     F: FnMut(Chunk) -> Result<(), AppError>,
 {
-    let endpoint = api_url(&profile.endpoint, "chat/completions")?;
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(limits.connect)
-        .timeout(limits.total)
-        .build()
-        .map_err(|_| AppError::internal("Impossible de créer le client HTTP."))?;
+    let (endpoint, address) = api_url(&profile.endpoint, "chat/completions")?;
+    // A server without a model chosen yet (0.6 allows it while setting up): the model's field.
+    if profile.model.trim().is_empty() {
+        return Err(AppError::new(ErrorKind::ModelNotFound, "Aucun modèle n’est choisi pour ce serveur."));
+    }
+    // A server on this computer is reached directly, whatever proxy the environment names.
+    let client = probe::client(&probe::route(&address), limits.connect, limits.total).map_err(AppError::internal)?;
     let mut extended = true;
     let mut thinking_switch = true;
     let response = loop {
-        let mut req = client.post(endpoint.clone()).json(&request_body(&profile, &instruction, &text, extended, thinking_switch));
-        if !profile.api_key.is_empty() {
+        let mut req = client.post(&endpoint).json(&request_body(&profile, &instruction, &text, extended, thinking_switch));
+        if !profile.no_key && !profile.api_key.is_empty() {
             req = req.bearer_auth(&profile.api_key);
         }
         if cancel.is_cancelled() {
@@ -336,7 +335,7 @@ fn transport(endpoint: &str, error: &reqwest::Error) -> AppError {
 /// Why a connection failed (25/09: an endpoint behind a firewall only said « injoignable »). Read
 /// from the errors under reqwest's; they are never shown nor logged as they are.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Cause {
+pub(crate) enum Cause {
     /// Windows refused the server's certificate: its authority, its name or its dates.
     Certificate,
     /// The secure connection failed otherwise: no TLS at the address, or nothing in common.
@@ -356,7 +355,7 @@ enum Cause {
 
 /// The first cause the chain names: an OS code (a socket's WSA code, schannel's SEC_E and
 /// CERT_E codes) or a TLS error, whose code std prints as « (os error N) ».
-fn cause(error: &(dyn std::error::Error + 'static)) -> Cause {
+pub(crate) fn cause(error: &(dyn std::error::Error + 'static)) -> Cause {
     let mut next = Some(error);
     while let Some(current) = next {
         next = current.source();
@@ -382,7 +381,7 @@ fn cause(error: &(dyn std::error::Error + 'static)) -> Cause {
     Cause::Other
 }
 
-fn tls_cause(text: &str) -> Cause {
+pub(crate) fn tls_cause(text: &str) -> Cause {
     let code = text.rsplit_once("(os error ").and_then(|(_, tail)| tail.trim_end_matches(')').trim().parse::<i32>().ok());
     match code.map(os_cause) {
         Some(Cause::Certificate) => Cause::Certificate,
@@ -437,54 +436,12 @@ fn unreachable_message(endpoint: &str, kind: ErrorKind, cause: Cause) -> String 
         Cause::Certificate => format!("Certificat de {target} refusé par Windows : autorité inconnue de ce poste, nom ou dates."),
         Cause::Tls => format!("Connexion sécurisée impossible avec {target} : vérifiez que ce serveur parle bien HTTPS."),
         Cause::Name => format!("Nom {target} introuvable : vérifiez l’adresse ou le DNS de ce poste."),
-        Cause::Refused => format!("Serveur {target} injoignable : rien n’écoute à cette adresse. Démarrez-le ou changez de profil dans les Réglages."),
+        Cause::Refused => format!("Serveur {target} injoignable : rien n’écoute à cette adresse. Démarrez-le ou vérifiez l’adresse dans les Réglages."),
         Cause::Network => format!("Serveur {target} injoignable depuis ce poste : réseau ou pare-feu."),
         Cause::Silent => format!("Serveur {target} injoignable : la connexion ne s’ouvre pas à temps (pare-feu ou proxy ?)."),
         Cause::Reset => format!("Serveur {target} injoignable : la connexion a été coupée (pare-feu ou proxy ?)."),
-        Cause::Other => format!("Serveur {target} injoignable. Démarrez-le ou changez de profil dans les Réglages."),
+        Cause::Other => format!("Serveur {target} injoignable. Démarrez-le ou vérifiez l’adresse dans les Réglages."),
     }
-}
-
-/// « Tester la connexion »: the same codes, so the settings can point at the right field.
-/// A /v1/models that answers something else than a model list is not an OpenAI API there.
-pub async fn check(profile: &Profile) -> Result<(), AppError> {
-    let endpoint = api_url(&profile.endpoint, "models")?;
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .map_err(|_| AppError::internal("Impossible de créer le client HTTP."))?;
-    let mut req = client.get(endpoint);
-    if !profile.api_key.is_empty() {
-        req = req.bearer_auth(&profile.api_key);
-    }
-    let response = req
-        .send()
-        .await
-        .map_err(|e| transport(&profile.endpoint, &e))?;
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        // No model is named on this route: a 404 is the address.
-        return Err(AppError::new(http_status(status, ""), format!("Le serveur a répondu HTTP {status}.")));
-    }
-    let value: Value = response
-        .json()
-        .await
-        .map_err(|_| AppError::new(ErrorKind::BadEndpoint, "Réponse /v1/models invalide."))?;
-    let found = value
-        .get("data")
-        .and_then(Value::as_array)
-        .is_some_and(|v| {
-            v.iter()
-                .any(|m| m.get("id").and_then(Value::as_str) == Some(profile.model.as_str()))
-        });
-    if !found {
-        return Err(AppError::new(ErrorKind::ModelNotFound, format!(
-            "Le modèle {} n’est pas exposé par le serveur.",
-            profile.model
-        )));
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -496,7 +453,7 @@ mod tests {
 
     #[test]
     fn the_instruction_is_the_system_message_and_the_extras_are_dropped_on_a_strict_endpoint() {
-        let profile = Profile { endpoint: "http://127.0.0.1:8001/v1".into(), model: "m".into(), api_key: String::new() };
+        let profile = Server { endpoint: "http://127.0.0.1:8001".into(), model: "m".into(), ..Server::default() };
         let full = request_body(&profile, "Fix it.", "the txt", true, true);
         assert_eq!(full["messages"][0]["role"], "system");
         assert_eq!(full["messages"][0]["content"], "Fix it.");
@@ -550,12 +507,11 @@ mod tests {
     async fn live_vllm_stream_and_cancel() {
         let mode = std::env::var("FLOWTRANSLATE_TEST_PROFILE").unwrap_or_else(|_| "fast".into());
         assert!(matches!(mode.as_str(), "fast" | "quality"));
-        let profile = Profile {
-            endpoint: format!("http://127.0.0.1:{}/v1", if mode == "fast" { 8001 } else { 8002 }),
+        let profile = Server {
+            endpoint: format!("http://127.0.0.1:{}", if mode == "fast" { 8001 } else { 8002 }),
             model: format!("flowtranslate-{mode}"),
-            api_key: String::new(),
+            ..Server::default()
         };
-        check(&profile).await.expect("live model discovery");
         let mut deltas = String::new();
         let result = stream(profile.clone(), instruction(), "Please confirm the budget of 1250 EUR for project Orion.".into(), CancellationToken::new(), |chunk| {
             if let Some(text) = chunk.text { deltas.push_str(&text); }
@@ -587,13 +543,12 @@ mod tests {
         assert!(d.finish().is_err());
     }
     #[test]
-    fn v1_is_not_duplicated() {
-        assert_eq!(
-            api_url("http://127.0.0.1:8001/v1", "models")
-                .unwrap()
-                .as_str(),
-            "http://127.0.0.1:8001/v1/models"
-        );
+    fn v1_is_added_once_whatever_the_address_was_saved_as() {
+        for base in ["http://127.0.0.1:8001", "http://127.0.0.1:8001/", "http://127.0.0.1:8001/v1", "http://127.0.0.1:8001/v1/"] {
+            assert_eq!(api_url(base, "models").unwrap().0, "http://127.0.0.1:8001/v1/models", "{base}");
+        }
+        assert_eq!(api_url("https://llm.exemple.com/openai", "chat/completions").unwrap().0, "https://llm.exemple.com/openai/v1/chat/completions");
+        assert_eq!(api_url("", "models").unwrap_err().kind, ErrorKind::BadEndpoint);
     }
     #[test]
     fn crlf_frame_is_supported() {
@@ -639,8 +594,8 @@ mod tests {
     fn finish(reason: &str) -> String {
         format!("data: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{reason}\"}}]}}\n\n")
     }
-    fn profile(endpoint: String) -> Profile {
-        Profile { endpoint, model: "m".into(), api_key: String::new() }
+    fn profile(endpoint: String) -> Server {
+        Server { id: "s1".into(), endpoint, model: "m".into(), ..Server::default() }
     }
     async fn run_with(endpoint: String, cancel: CancellationToken, limits: Limits) -> Result<String, AppError> {
         stream_within(profile(endpoint), "Fix it.".into(), "texte".into(), cancel, limits, |_| Ok(())).await
@@ -699,9 +654,14 @@ mod tests {
         let silent = fake_server(Vec::new(), true);
         let timeout = run_with(silent, CancellationToken::new(), Limits { connect: Duration::from_secs(2), total: Duration::from_millis(400) }).await.unwrap_err();
         assert_eq!(timeout.kind, ErrorKind::Timeout);
-        // An invalid address, and a remote one without HTTPS.
-        assert_eq!(code("pas une adresse".into()).await, ErrorKind::BadEndpoint);
-        assert_eq!(code("http://example.com/v1".into()).await, ErrorKind::BadEndpoint);
+        // An address that does not read, no address at all (nothing set up), and no model chosen:
+        // each opens its field, and nothing leaves this computer.
+        assert_eq!(code("ftp://example.test/v1".into()).await, ErrorKind::BadEndpoint);
+        assert_eq!(code("https://user:pw@example.test".into()).await, ErrorKind::BadEndpoint);
+        assert_eq!(code(String::new()).await, ErrorKind::BadEndpoint);
+        let unchosen = Server { model: "  ".into(), ..profile("http://127.0.0.1:9".into()) };
+        let error = stream_within(unchosen, "p".into(), "t".into(), CancellationToken::new(), Limits::default(), |_| Ok(())).await.unwrap_err();
+        assert_eq!(error.kind, ErrorKind::ModelNotFound);
         // Cancelled before the request left.
         let cancel = CancellationToken::new();
         cancel.cancel();
@@ -741,11 +701,12 @@ mod tests {
     async fn an_unreachable_server_says_why() {
         // Nothing listens: a port taken then released (Windows takes about 2 s to say so).
         let closed = { let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap(); listener.local_addr().unwrap().port() };
-        let refused = check(&profile(format!("http://127.0.0.1:{closed}/v1"))).await.unwrap_err();
+        let patient = Limits { connect: Duration::from_secs(5), total: Duration::from_secs(8) };
+        let refused = run_with(format!("http://127.0.0.1:{closed}/v1"), CancellationToken::new(), patient).await.unwrap_err();
         assert_eq!(refused.kind, ErrorKind::Unreachable);
         assert!(refused.message.contains("rien n’écoute"), "{}", refused.message);
         // A name that never resolves (.invalid is reserved for that).
-        let unknown = check(&profile("https://flowtranslate-test.invalid/v1".into())).await.unwrap_err();
+        let unknown = run("https://flowtranslate-test.invalid/v1".into()).await.unwrap_err();
         assert_eq!(unknown.kind, ErrorKind::Unreachable);
         assert!(unknown.message.contains("introuvable"), "{}", unknown.message);
         // HTTPS to a server that answers plain HTTP at once: the handshake fails.
@@ -758,7 +719,7 @@ mod tests {
                 let _ = connection.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
             }
         });
-        let tls = check(&profile(format!("https://127.0.0.1:{port}/v1"))).await.unwrap_err();
+        let tls = run(format!("https://127.0.0.1:{port}/v1")).await.unwrap_err();
         assert_eq!(tls.kind, ErrorKind::Unreachable);
         assert!(tls.message.contains("Connexion sécurisée impossible"), "{}", tls.message);
     }
@@ -769,23 +730,12 @@ mod tests {
     #[ignore = "reaches badssl.com and example.com"]
     async fn windows_refuses_bad_certificates_and_accepts_a_public_one() {
         for host in ["self-signed.badssl.com", "untrusted-root.badssl.com", "expired.badssl.com", "wrong.host.badssl.com"] {
-            let error = check(&profile(format!("https://{host}/v1"))).await.unwrap_err();
+            let error = run(format!("https://{host}/v1")).await.unwrap_err();
             assert_eq!(error.kind, ErrorKind::Unreachable, "{host}");
             assert!(error.message.starts_with("Certificat de"), "{host}: {}", error.message);
         }
         // A public certificate: TLS passes, the server then answers 404 on /v1/models.
-        let public = check(&profile("https://example.com/v1".into())).await.unwrap_err();
+        let public = run("https://example.com/v1".into()).await.unwrap_err();
         assert_ne!(public.kind, ErrorKind::Unreachable, "{}", public.message);
-    }
-
-    #[tokio::test]
-    async fn the_connection_test_points_at_the_field_to_fix() {
-        let models = |ids: &str| status(200, &format!("{{\"data\":[{ids}]}}"));
-        assert!(check(&profile(fake_server(models("{\"id\":\"m\"}"), false))).await.is_ok());
-        let missing = check(&profile(fake_server(models("{\"id\":\"other\"}"), false))).await.unwrap_err();
-        assert_eq!(missing.kind, ErrorKind::ModelNotFound);
-        assert_eq!(check(&profile(fake_server(status(401, "{}"), false))).await.unwrap_err().kind, ErrorKind::Unauthorized);
-        assert_eq!(check(&profile(fake_server(status(404, "{\"detail\":\"model\"}"), false))).await.unwrap_err().kind, ErrorKind::BadEndpoint);
-        assert_eq!(check(&profile(fake_server(status(200, "<html>"), false))).await.unwrap_err().kind, ErrorKind::BadEndpoint);
     }
 }

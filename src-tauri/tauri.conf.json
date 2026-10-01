@@ -49,15 +49,15 @@
         "create": false,
         "title": "FlowTranslate Settings",
         "url": "/?window=settings",
-        "width": 620,
-        "height": 720,
+        "width": 860,
+        "height": 600,
         "visible": false,
         "decorations": false,
         "transparent": false,
         "resizable": true,
         "center": true,
-        "minWidth": 460,
-        "minHeight": 420
+        "minWidth": 720,
+        "minHeight": 480
       }
     ],
     "security": {

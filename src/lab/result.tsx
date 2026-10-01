@@ -5,14 +5,14 @@ import { indicatorOf } from '../loaders/pill';
 import { errorFamily, errorCodeOf, type ErrorAction } from '../result/errors';
 import { changedHighlight, changedRanges, type ChangedRanges } from '../result/highlight';
 import { ResultPill, showsResultPill, type ResultStage } from '../result/ResultPill';
-import { errorCodes, type AfterReplace, type ErrorCode, type Mode } from '../types';
+import { errorCodes, type AfterReplace, type ErrorCode } from '../types';
 import type { ResultScenario } from './scenarios';
 import './result.css';
 
 // Lab fixture of the result pill (lots 9 and 10), in the browser only: the components driven by
 // their props, the way the overlay will drive them, on fictitious data. Parameters: scenario,
 // theme, preset, motion (as every frame), and lang (en | fr), indicator, check=0|1, undo=0|1,
-// seconds (2-20), kind (an error code), mode (quality | fast), stage (working | done | undone |
+// seconds (2-20), kind (an error code), server (a server id), stage (working | done | undone |
 // error: the stage it opens on), latency (ms of simulated work), hold=1 (no automatic loop, for
 // the tests). Nothing is translated: the work is a timer.
 
@@ -43,16 +43,17 @@ function PillFixture({ scenario, params }: { scenario: ResultScenario; params: U
   const hold = params.get('hold') === '1';
   const latency = Math.max(0, Number(params.get('latency') ?? 1400) || 0);
   const indicator = indicatorOf(params.get('indicator'));
-  const mode: Mode | undefined = params.get('mode') === 'fast' ? 'fast' : params.get('mode') === 'quality' ? 'quality' : undefined;
+  // `server=<id>`: the server the failed request used (its field then opens); `mode=fast` of 0.5 reads as the second server.
+  const serverId: string | undefined = params.get('server') ?? (params.get('mode') === 'fast' ? 's2' : params.get('mode') === 'quality' ? 's1' : undefined);
   const [after, setAfter] = useState<AfterReplace>({
     check: params.get('check') !== '0', undo: params.get('undo') !== '0',
     undoSeconds: Math.min(20, Math.max(2, Number(params.get('seconds') ?? 8) || 8)), changedWords: true, changedWordsSeconds: 60,
   });
   const [kind, setKind] = useState<ErrorCode>(params.get('kind') ? errorCodeOf(params.get('kind')) : scenarioKind[scenario] ?? 'unauthorized');
   const failing = scenario !== 'result-done';
-  const outcome = (): ResultStage => failing ? { stage: 'error', error: kind, mode, model: kind === 'model_not_found' ? 'gemma-4-12b' : undefined } : { stage: 'done', afterReplace: after };
+  const outcome = (): ResultStage => failing ? { stage: 'error', error: kind, serverId, model: kind === 'model_not_found' ? 'gemma-4-12b' : undefined } : { stage: 'done', afterReplace: after };
   const first = params.get('stage');
-  const initial: ResultStage = first === 'done' ? { stage: 'done', afterReplace: after } : first === 'undone' ? { stage: 'undone' } : first === 'error' ? { stage: 'error', error: kind, mode } : { stage: 'working', indicator };
+  const initial: ResultStage = first === 'done' ? { stage: 'done', afterReplace: after } : first === 'undone' ? { stage: 'undone' } : first === 'error' ? { stage: 'error', error: kind, serverId } : { stage: 'working', indicator };
   const [stage, setStage] = useState<ResultStage>(initial);
   const [open, setOpen] = useState(true);
   const [events, setEvents] = useState<ResultEvent[]>([]);
@@ -110,7 +111,7 @@ function PillFixture({ scenario, params }: { scenario: ResultScenario; params: U
       <button type="button" onClick={() => start(true)}>Rejouer</button>
       <button type="button" onClick={() => { setOpen(true); setStage({ stage: 'working', indicator }); }}>Travail</button>
       <button type="button" onClick={() => { setOpen(true); setStage(latest.current()); }}>{failing ? 'Erreur' : 'Coche + Annuler'}</button>
-      {failing ? <label>Code<select value={kind} onChange={event => { const next = errorCodeOf(event.target.value); setKind(next); if (stage.stage === 'error') setStage({ stage: 'error', error: next, mode, model: next === 'model_not_found' ? 'gemma-4-12b' : undefined }); }}>
+      {failing ? <label>Code<select value={kind} onChange={event => { const next = errorCodeOf(event.target.value); setKind(next); if (stage.stage === 'error') setStage({ stage: 'error', error: next, serverId, model: next === 'model_not_found' ? 'gemma-4-12b' : undefined }); }}>
         {errorCodes.map(code => <option key={code} value={code}>{code} · {familyLabel[errorFamily(code)]}</option>)}
       </select></label> : <>
         <label><input type="checkbox" checked={after.check} onChange={event => setAfter({ ...after, check: event.target.checked })} />Coche</label>

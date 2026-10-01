@@ -1,11 +1,13 @@
 mod actions;
 mod backdrop;
+mod brand;
 mod browser_keys;
 use actions::{BindingKind, Execution, ExecutionInfo, OutputMode};
 mod capture;
 mod clipboard_guard;
 mod crypto;
 mod demo_menu;
+mod diagnostics;
 mod error;
 mod ground;
 use error::{AppError, ErrorKind, Refusal};
@@ -16,6 +18,7 @@ mod inference;
 mod menu_memory;
 mod pasted;
 mod placement;
+mod probe;
 mod selection_lines;
 mod settings;
 mod system_motion;
@@ -362,6 +365,10 @@ struct AppState {
     /// shortcut id: the settings window shows which binding does not work.
     refused_shortcuts: Mutex<std::collections::HashMap<u32, BindingState>>,
     history: HistoryStore,
+    /// The connection journal (0.6): the Diagnostic page and « Voir le journal ».
+    diagnostics: Arc<diagnostics::Diagnostics>,
+    /// The checks and tries in flight, so a newer one (or the interface) cancels them.
+    probes: Mutex<Vec<RunningProbe>>,
     demo: bool,
     demo_clipboard: bool,
     demo_long: bool,
@@ -370,11 +377,18 @@ struct AppState {
 fn lock_error() -> String {
     "État interne indisponible.".into()
 }
+/// The windows that edit the connection: the only ones that ever see an API key, and the only
+/// ones allowed to check a server or read the journal.
+const KEYED: [&str; 2] = ["settings", "setup"];
+/// The settings as every other window gets them: without any key.
+fn without_keys(mut settings: Settings) -> Settings {
+    for server in &mut settings.servers { server.api_key.clear(); }
+    settings
+}
 #[tauri::command]
 fn get_settings(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<Settings, String> {
-    let mut settings=state.inner.lock().map_err(|_|lock_error())?.settings.clone();
-    if window.label()!="settings" {for profile in settings.profiles.values_mut(){profile.api_key.clear();}}
-    Ok(settings)
+    let settings = state.inner.lock().map_err(|_| lock_error())?.settings.clone();
+    Ok(if KEYED.contains(&window.label()) { settings } else { without_keys(settings) })
 }
 
 /// Why Windows refused a chord: `RegisterHotKey` answered ERROR_HOTKEY_ALREADY_REGISTERED
@@ -446,6 +460,9 @@ fn save_settings(
     settings: Settings,
 ) -> Result<(), String> {
     let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
+    // What is saved is clean: addresses normalised, no key for a server without one.
+    let mut settings = settings;
+    settings::sanitize(&mut settings);
     settings::validate(&settings)?;
     let old = state
         .inner
@@ -508,10 +525,9 @@ fn save_settings(
         if let Ok(mut refused) = state.refused_shortcuts.lock() { *refused = retried; }
     }
     emit_shortcut_statuses(&app);
-    let _ = app.emit_to("settings", "settings-changed", &settings);
-    let mut public = settings;
-    for profile in public.profiles.values_mut() { profile.api_key.clear(); }
-    for label in SURFACES { let _ = app.emit_to(label, "settings-changed", &public); }
+    for label in KEYED { let _ = app.emit_to(label, "settings-changed", &settings); }
+    let public = without_keys(settings);
+    for label in SURFACES.iter().chain(["demo"].iter()) { let _ = app.emit_to(*label, "settings-changed", &public); }
 
     Ok(())
 }
@@ -519,12 +535,12 @@ fn save_settings(
 /// shortcut registered, every window told); the Îlot's memory of the last action per
 /// application starts over too. When Windows refuses the default menu chord, the menu keeps the
 /// one it had (settings::keep_menu_chord) and everything else is restored. Answers what is now
-/// saved, the keys to the settings window only.
+/// saved, the keys to the windows that edit the connection only.
 #[tauri::command]
 fn reset_settings(window: tauri::WebviewWindow, app: AppHandle, state: State<'_, AppState>) -> Result<Settings, String> {
     let current = state.inner.lock().map_err(|_| lock_error())?.settings.clone();
     let fresh = settings::reset(&current);
-    let mut answer = match save_settings(app.clone(), state, fresh.clone()) {
+    let answer = match save_settings(app.clone(), state, fresh.clone()) {
         Ok(()) => fresh,
         Err(error) => {
             let kept = settings::keep_menu_chord(&fresh, &current).ok_or(error)?;
@@ -535,8 +551,7 @@ fn reset_settings(window: tauri::WebviewWindow, app: AppHandle, state: State<'_,
     if let Ok(mut memory) = app.state::<AppState>().menu_memory.lock() {
         if memory.clear() { let _ = memory.save(); }
     }
-    if window.label() != "settings" { for profile in answer.profiles.values_mut() { profile.api_key.clear(); } }
-    Ok(answer)
+    Ok(if KEYED.contains(&window.label()) { answer } else { without_keys(answer) })
 }
 /// Lucas, 24/09: another application holds the menu's chord, so the settings window proposes one
 /// of these: the first that no enabled binding uses, that types no character as AltGr here, and
@@ -710,7 +725,7 @@ fn replay_last(app: &AppHandle) -> Result<(), String> {
         replay: Some(Replay {
             request_id: result.request_id.clone(),
             translated_text: result.translated_text.clone(),
-            mode: result.mode,
+            server_id: result.server_id.clone(),
         }),
         screen: None,
         execution: result.execution.clone().map(|mut info| { info.output_mode = OutputMode::Display; info }),
@@ -736,9 +751,12 @@ enum Opening {
 }
 /// The windows that draw over the source: the overlay (Îlot, pill, glass) and the halo.
 const SURFACES: [&str; 2] = ["overlay", "halo"];
-/// Whether `handle` is one of FlowTranslate's own windows.
+/// The windows the user works in: a shortcut pressed while one of them is in front captures
+/// nothing (nothing of another application is selected).
+const PANELS: [&str; 3] = ["settings", "setup", "demo"];
+/// Whether `handle` is one of the application's own windows.
 fn ours(app: &AppHandle, handle: isize) -> bool {
-    handle != 0 && ["overlay", "halo", "settings"].iter().any(|label| app.get_webview_window(label).is_some_and(|w| host::belongs_to(&w, handle)))
+    handle != 0 && SURFACES.iter().chain(PANELS.iter()).any(|label| app.get_webview_window(label).is_some_and(|w| host::belongs_to(&w, handle)))
 }
 /// Review n°2 and n°6: the open menu had the foreground and something else than our windows
 /// holds it now (the user clicked back into his document, or switched application).
@@ -772,10 +790,12 @@ fn confirmed_loss(suspected: &mut Option<String>, capture_id: &str, lost: bool) 
 /// None when nothing was captured on purpose: a press while one of our windows holds
 /// the foreground (the Îlot has the keyboard) never captures our own window.
 fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32, std::time::Instant)>) -> Result<Option<Capture>, AppError> {
-    if let Some(window) = app.get_webview_window("settings") {
+    for label in PANELS {
+        let Some(window) = app.get_webview_window(label) else { continue };
         // The hidden settings window can hold the foreground for an instant at startup
         // (the demo capture of the probe met it): only the shown one refuses a capture.
-        // Nothing of another application is selected then: nothing to act on.
+        // Nothing of another application is selected then: nothing to act on. The setup and
+        // its demo refuse the same way (0.6): a shortcut never opens anything over them.
         if window.is_visible().unwrap_or(false) && host::belongs_to(&window, host::foreground()) { return Err(AppError::new(ErrorKind::SettingsOpen, "Fermez les réglages avant d’utiliser un raccourci.")); }
     }
     let opening = {
@@ -971,9 +991,9 @@ fn translate(
         if request.action_id != run.info.action_id {
             return Err("L’action ne correspond pas à la capture.".into());
         }
-        if !run.started && request.mode != run.info.mode { return Err("Le profil ne correspond pas à la capture.".into()); }
-        let key = match request.mode { Mode::Fast => "fast", Mode::Quality => "quality" };
-        let profile = run.profiles.get(key).ok_or("Le profil est absent.")?.clone();
+        if !run.started && request.server_id != run.info.server_id { return Err("Le serveur ne correspond pas à la capture.".into()); }
+        // The servers frozen at the capture: a change of settings never alters a running one.
+        let profile = find_server(&run.servers, &request.server_id).map_err(String::from)?.clone();
         actions::validate_template(&run.action.prompt_template)?;
         let instruction = run.action.prompt_template.clone();
         let execution_info = run.info.clone();
@@ -1005,8 +1025,18 @@ fn translate(
     // Test only (FLOWTRANSLATE_SIMULATE_WORD_MS, simulated inference): a slower simulated
     // stream, so the real-window checks can watch the halo while the work lasts.
     let word_ms = std::env::var("FLOWTRANSLATE_SIMULATE_WORD_MS").ok().and_then(|value| value.parse::<u64>().ok()).map_or(65, |ms| ms.clamp(1, 2_000));
+    let diagnostics = state.diagnostics.clone();
     tauri::async_runtime::spawn(async move {
         let id = request.id.clone();
+        let started = std::time::Instant::now();
+        // What the journal and the history say of this request: where it went, never what it carried.
+        let address = settings::normalize_endpoint(&profile.endpoint).ok();
+        let request_url = address.as_ref().map(|address| format!("{}/v1/chat/completions", address.base));
+        let server_host = address.as_ref().map(|address| address.host.clone()).unwrap_or_default();
+        let route = address.as_ref().map(probe::route).and_then(|route| route.label());
+        let sent_key = if profile.no_key { String::new() } else { profile.api_key.clone() };
+        let model_name = profile.model.clone();
+        diagnostics.remember_secret(&sent_key);
         let result = if demo {
             let output = if demo_long {
                 "Voici une réponse synthétique assez longue pour dépasser les huit lignes du verre court et ouvrir la bande de lecture en bas de l’écran du curseur. Elle contient plusieurs phrases, des retours naturels et assez de texte pour vérifier que la bande reste stable lorsque la pilule et le menu se chevauchent visuellement, que le défilement fonctionne à la molette et que le budget de lecture se calcule sur le nombre de mots. Aucun appel d’inférence réel n’est effectué dans ce mode de démonstration : le texte est fixe, sans rapport avec la sélection, et sert uniquement à vérifier la géométrie, le suivi de l’écran de la souris et la sortie en deux temps de la bande une fois le temps de lecture écoulé."
@@ -1079,6 +1109,18 @@ fn translate(
         if !i.current(&id) {
             return;
         }
+        if !demo {
+            let mut line = match &result {
+                Ok(_) => diagnostics::Diag::new(diagnostics::DiagStep::Request, diagnostics::DiagLevel::Ok, "done").status(200),
+                Err(error) => {
+                    let mut line = diagnostics::Diag::new(diagnostics::DiagStep::Request, diagnostics::DiagLevel::Error, error_code(error.kind)).cause(error.message.clone());
+                    line.status = status_in(&error.message);
+                    line
+                }
+            }.ms(started.elapsed().as_millis() as u64).key(&sent_key).proxy(route).detail(model_name);
+            if let Some(url) = &request_url { line = line.request("POST", url); }
+            record(&app, line);
+        }
         // The response arrived: the sweep fades before the result lands.
         halo::leave(&app);
         match result {
@@ -1089,7 +1131,7 @@ fn translate(
                     capture_id: request.capture_id,
                     source_text: request.text.clone(),
                     translated_text: text.clone(),
-                    mode: request.mode,
+                    server_id: request.server_id.clone(),
                     complete: true,
                 });
                 i.active = None;
@@ -1099,7 +1141,7 @@ fn translate(
                         source_text: request.text,
                         translated_text: text.clone(),
                         action_name: execution_info.action_name,
-                        mode: request.mode,
+                        server: server_host,
                         created_at: Utc::now().to_rfc3339(),
                     });
                 }
@@ -1534,26 +1576,215 @@ fn system_motion() -> Option<system_motion::SystemMotion> {
     system_motion::current()
 }
 /// The fields an error may open (lot 13's `data-field` identifiers, `SettingsField`): the
-/// menu shortcut, and a profile's address, key or model, of the default profile when bare.
-fn settings_field(field: &str) -> bool {
-    const PROFILE: [&str; 3] = ["endpoint", "apiKey", "model"];
+/// menu shortcut, and a server's address, key or model: of the default server when bare, of
+/// the server named before the dot otherwise (it must still exist).
+fn settings_field(field: &str, servers: &[Server]) -> bool {
+    const SERVER: [&str; 3] = ["endpoint", "apiKey", "model"];
     field == "menuShortcut"
-        || PROFILE.contains(&field)
-        || field.split_once('.').is_some_and(|(mode, name)| matches!(mode, "quality" | "fast") && PROFILE.contains(&name))
+        || SERVER.contains(&field)
+        || field.split_once('.').is_some_and(|(id, name)| servers.iter().any(|server| server.id == id) && SERVER.contains(&name))
 }
-/// Shows the settings window; with `field` (lot 10) it then asks the page to scroll to that
-/// field, focus it and make it pulse (`settings-focus-field`). An unknown field only opens.
-#[tauri::command]
-fn open_settings(app: AppHandle, field: Option<String>) -> Result<(), String> {
+/// The pages of the Settings window (docs/PLAN-0.6.md §4.1).
+fn settings_page(page: &str) -> bool {
+    matches!(page, "general" | "shortcuts" | "actions" | "after" | "appearance" | "server" | "data" | "diagnostic")
+}
+/// Shows the settings window; with `field` (lot 10) or `page` (0.6) it then asks the page to
+/// open that page, scroll to that field, focus it and make it pulse (`settings-focus-field`).
+/// An unknown field or page only opens the window.
+fn show_settings(app: &AppHandle, field: Option<String>, page: Option<String>) -> Result<(), String> {
     let w = app
         .get_webview_window("settings")
         .ok_or_else(|| "Réglages indisponibles.".to_string())?;
+    let _ = w.unminimize();
     w.show()
         .and_then(|_| w.set_focus())
         .map_err(|_| "Ouverture des réglages impossible.".to_string())?;
-    if let Some(field) = field.filter(|field| settings_field(field)) {
-        let _ = app.emit_to("settings", "settings-focus-field", SettingsFocus { field });
+    let servers = app.state::<AppState>().inner.lock().map(|i| i.settings.servers.clone()).unwrap_or_default();
+    let field = field.filter(|field| settings_field(field, &servers));
+    let page = page.filter(|page| settings_page(page));
+    if field.is_some() || page.is_some() {
+        let _ = app.emit_to("settings", "settings-focus-field", SettingsFocus { field, page });
     }
+    Ok(())
+}
+#[tauri::command]
+fn open_settings(app: AppHandle, field: Option<String>, page: Option<String>) -> Result<(), String> {
+    show_settings(&app, field, page)
+}
+
+/// What a second launch opens: the setup while it is not finished, the Settings afterwards.
+fn open_front_door(app: &AppHandle) {
+    let done = app.state::<AppState>().inner.lock().map(|i| i.settings.setup_done).unwrap_or(true);
+    if done {
+        let _ = show_settings(app, None, None);
+        return;
+    }
+    // A window is never created from an event handler on Windows (it deadlocks): from a thread.
+    let app = app.clone();
+    std::thread::spawn(move || {
+        if show_setup(&app, false).is_err() { let _ = show_settings(&app, None, None); }
+    });
+}
+
+/// The setup window (docs/PLAN-0.6.md §3): 620 × 720, or the work area when the screen is
+/// smaller; the demo: 900 × 740 likewise. Logical pixels.
+const SETUP_SIZE: (f64, f64) = (620., 720.);
+const DEMO_SIZE: (f64, f64) = (900., 740.);
+/// A panel no larger than the work area of its screen (physical `work`, DPI `scale`), a margin
+/// of 16 px kept around it, and never smaller than what its page can scroll in.
+fn panel_size(wanted: (f64, f64), work: Rect, scale: f64) -> (f64, f64) {
+    let scale = if scale.is_finite() && scale > 0. { scale } else { 1. };
+    let fit = |wanted: f64, available: f64, floor: f64| wanted.min((available / scale - 32.).floor()).max(floor);
+    (fit(wanted.0, work.width, 360.), fit(wanted.1, work.height, 320.))
+}
+/// Tells the page which matter the window has, before its first paint: `glass` when Windows
+/// draws the real blur behind it, `opaque` otherwise (the page then paints its own ground).
+fn backdrop_script(glass: bool) -> String {
+    let value = if glass { "glass" } else { "opaque" };
+    format!("(function(){{var set=function(){{if(document.documentElement)document.documentElement.setAttribute('data-backdrop','{value}');}};set();document.addEventListener('DOMContentLoaded',set);}})();")
+}
+/// Creates or shows the setup. Created on demand and destroyed when closed: no extra WebView
+/// lives on after the first run. `replay` (« Revoir l'accueil ») only tells the page.
+/// Never called from the main thread's event handlers (see `open_front_door`).
+fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
+    // The demo plays in front of a hidden setup: asked again, the demo comes forward.
+    if let Some(demo) = app.get_webview_window("demo") {
+        let _ = demo.set_focus();
+        return Ok(());
+    }
+    if let Some(window) = app.get_webview_window("setup") {
+        let _ = window.unminimize();
+        return window.show().and_then(|_| window.set_focus()).map_err(|_| "Ouverture de l’accueil impossible.".to_string());
+    }
+    let (work, scale) = host::monitor(None);
+    let (width, height) = panel_size(SETUP_SIZE, work, scale);
+    // The frosted window: Windows' own Acrylic under a transparent page while it can draw it
+    // (the real glass of docs/VERRE-0.6.md replaces it when it lands); an opaque page otherwise.
+    let glass = backdrop::fallback(backdrop::conditions()).is_none();
+    let url = if replay { "/?window=setup&replay=1" } else { "/?window=setup" };
+    let mut builder = tauri::WebviewWindowBuilder::new(app, "setup", tauri::WebviewUrl::App(url.into()))
+        .title(brand::APP_NAME)
+        .inner_size(width, height)
+        .resizable(false)
+        .maximizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(true)
+        .center()
+        .focused(true)
+        .initialization_script(backdrop_script(glass));
+    if glass {
+        builder = builder.effects(tauri::window::EffectsBuilder::new().effect(tauri::window::Effect::Acrylic).build());
+    }
+    let window = builder.build().map_err(|_| "Ouverture de l’accueil impossible.".to_string())?;
+    browser_keys::disable(&window);
+    let handle = app.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, tauri::WindowEvent::Destroyed) {
+            // Closed (its cross, Alt+F4): its checks stop, and a demo never outlives it.
+            if let Ok(mut running) = handle.state::<AppState>().probes.lock() { cancel_window(&mut running, "setup"); }
+            if let Some(demo) = handle.get_webview_window("demo") { let _ = demo.destroy(); }
+        }
+    });
+    Ok(())
+}
+/// Creates or shows the setup window. `replay`: « Revoir l'accueil », which does not put
+/// `setupDone` back to false.
+#[tauri::command]
+async fn open_setup(app: AppHandle, replay: Option<bool>) -> Result<(), String> {
+    show_setup(&app, replay.unwrap_or(false))
+}
+/// The end of the setup: `setupDone` is saved (every window is told), the setup closes, and
+/// the Settings open when asked.
+#[tauri::command]
+async fn finish_setup(app: AppHandle, window: tauri::WebviewWindow, open_settings: bool) -> Result<(), String> {
+    if window.label() != "setup" { return Err("Fenêtre inattendue.".into()); }
+    let mut settings = app.state::<AppState>().inner.lock().map_err(|_| lock_error())?.settings.clone();
+    if !settings.setup_done {
+        settings.setup_done = true;
+        save_settings(app.clone(), app.state::<AppState>(), settings)?;
+    }
+    if open_settings { let _ = show_settings(&app, None, None); }
+    let _ = window.destroy();
+    Ok(())
+}
+
+/// The demo of the setup (docs/PLAN-0.6.md §3): a transparent window of its own, in which the
+/// page draws a mail window and the real components over it. The setup hides while it plays
+/// and comes back when it ends, whatever ends it: « C'est prêt », Passer, Échap, Alt+F4, or
+/// its watchdog.
+static DEMO_PLAYING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DEMO_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// A demo that never ended by itself is closed after this long: no window stays stuck.
+const DEMO_WATCHDOG: std::time::Duration = std::time::Duration::from_secs(60);
+#[derive(Clone, Debug, serde::Serialize)]
+struct DemoEnded {
+    done: bool,
+}
+/// Once per demo: the setup comes back and learns how the demo ended.
+fn end_demo(app: &AppHandle, done: bool) {
+    use std::sync::atomic::Ordering;
+    if !DEMO_PLAYING.swap(false, Ordering::AcqRel) { return; }
+    DEMO_GENERATION.fetch_add(1, Ordering::AcqRel);
+    if let Some(setup) = app.get_webview_window("setup") {
+        let _ = setup.show().and_then(|_| setup.set_focus());
+        let _ = app.emit_to("setup", "demo-ended", DemoEnded { done });
+    }
+}
+#[tauri::command]
+async fn open_demo(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    if window.label() != "setup" { return Err("Fenêtre inattendue.".into()); }
+    // Asked twice (a double click, Enter held): one demo.
+    if DEMO_PLAYING.swap(true, Ordering::AcqRel) {
+        if let Some(demo) = app.get_webview_window("demo") { let _ = demo.set_focus(); }
+        return Ok(());
+    }
+    let (work, scale) = host::monitor(None);
+    let (width, height) = panel_size(DEMO_SIZE, work, scale);
+    let built = tauri::WebviewWindowBuilder::new(&app, "demo", tauri::WebviewUrl::App("/?window=setup&stage=demo".into()))
+        .title(brand::APP_NAME)
+        .inner_size(width, height)
+        .resizable(false)
+        .maximizable(false)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .skip_taskbar(true)
+        .center()
+        .focused(true)
+        .build();
+    let demo = match built {
+        Ok(demo) => demo,
+        Err(_) => {
+            DEMO_PLAYING.store(false, Ordering::Release);
+            return Err("Ouverture de la démonstration impossible.".into());
+        }
+    };
+    browser_keys::disable(&demo);
+    let closed = app.clone();
+    demo.on_window_event(move |event| {
+        // Closed without a word (Alt+F4, a crash of its page): the setup still comes back.
+        if matches!(event, tauri::WindowEvent::Destroyed) { end_demo(&closed, false); }
+    });
+    let _ = window.hide();
+    let generation = DEMO_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+    let watchdog = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(DEMO_WATCHDOG).await;
+        if DEMO_GENERATION.load(Ordering::Acquire) != generation { return; }
+        end_demo(&watchdog, false);
+        if let Some(demo) = watchdog.get_webview_window("demo") { let _ = demo.destroy(); }
+    });
+    Ok(())
+}
+/// The demo ends (`done`: it played to its end; false: skipped). Asked by the demo itself, or
+/// by the setup.
+#[tauri::command]
+async fn close_demo(app: AppHandle, window: tauri::WebviewWindow, done: bool) -> Result<(), String> {
+    if !matches!(window.label(), "demo" | "setup") { return Err("Fenêtre inattendue.".into()); }
+    end_demo(&app, done);
+    if let Some(demo) = app.get_webview_window("demo") { let _ = demo.destroy(); }
     Ok(())
 }
 #[tauri::command]
@@ -1910,30 +2141,203 @@ fn start_drag(
     });
     Ok(())
 }
+// ——— The connection (0.6, docs/PLAN-0.6.md §2): the check, the model list, the try, the journal ———
+
+/// A journal line: numbered, written, and shown at once by the windows that have the journal.
+fn record(app: &AppHandle, draft: diagnostics::Diag) -> diagnostics::DiagEntry {
+    let entry = app.state::<AppState>().diagnostics.add(draft);
+    for label in KEYED { let _ = app.emit_to(label, "diagnostic", &entry); }
+    entry
+}
+/// An error code as the frontend spells it (`model_not_found`).
+fn error_code(kind: ErrorKind) -> String {
+    serde_json::to_value(kind).ok().and_then(|value| value.as_str().map(str::to_string)).unwrap_or_else(|| "internal".into())
+}
+/// The HTTP status a message of ours names (« Le serveur a répondu HTTP 401. »).
+fn status_in(message: &str) -> Option<u16> {
+    let digits: String = message.split_once("HTTP ")?.1.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok().filter(|status| (100..600).contains(status))
+}
+fn connection_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if KEYED.contains(&window.label()) { Ok(()) } else { Err("Fenêtre inattendue.".into()) }
+}
+/// What a window may send to a check: a run id of its own making (letters, digits, `-`, `_`,
+/// 64 at most), an address and a key of a sane length. Refused before anything is tried.
+fn checked_input(run: &str, endpoint: &str, api_key: &str) -> Result<(), String> {
+    let run_ok = (1..=64).contains(&run.len()) && run.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    if !run_ok { return Err("Identifiant de vérification invalide.".into()); }
+    if endpoint.len() > 2048 { return Err("L’adresse du serveur est trop longue.".into()); }
+    if api_key.len() > 4096 { return Err("La clé est trop longue.".into()); }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProbeKind {
+    Check,
+    Try,
+}
+/// A check or a try in flight: which window started it, under which run id.
+struct RunningProbe {
+    window: String,
+    run: String,
+    kind: ProbeKind,
+    cancel: CancellationToken,
+}
+/// Starts a run: the older one of the same kind in the same window is cancelled (one check at
+/// a time per window: typing in the address field never piles checks up).
+fn begin_probe(running: &mut Vec<RunningProbe>, window: &str, run: &str, kind: ProbeKind) -> CancellationToken {
+    running.retain(|probe| {
+        let replaced = probe.window == window && probe.kind == kind;
+        if replaced { probe.cancel.cancel(); }
+        !replaced
+    });
+    let cancel = CancellationToken::new();
+    running.push(RunningProbe { window: window.to_string(), run: run.to_string(), kind, cancel: cancel.clone() });
+    cancel
+}
+fn end_probe(running: &mut Vec<RunningProbe>, run: &str) {
+    running.retain(|probe| probe.run != run);
+}
+fn cancel_run(running: &mut Vec<RunningProbe>, run: &str) {
+    running.retain(|probe| {
+        if probe.run == run { probe.cancel.cancel(); }
+        probe.run != run
+    });
+}
+fn cancel_window(running: &mut Vec<RunningProbe>, window: &str) {
+    running.retain(|probe| {
+        if probe.window == window { probe.cancel.cancel(); }
+        probe.window != window
+    });
+}
+
+/// The check of what is typed (not of what is saved): four steps, each change sent to the
+/// calling window as `probe-step { run, steps }`, each step written to the journal. A new check
+/// from the same window cancels this one; so does `cancel_probe(run)`.
 #[tauri::command]
-async fn check_connection(
-    state: State<'_, AppState>,
-    mode: Mode,
-) -> Result<ConnectionStatus, String> {
-    let p = state
-        .inner
-        .lock()
-        .map_err(|_| lock_error())?
-        .settings
-        .profile(mode)?
-        .clone();
-    Ok(match inference::check(&p).await {
-        Ok(_) => ConnectionStatus {
-            connected: true,
-            message: "Connexion réussie.".into(),
-            code: None,
-        },
-        Err(error) => ConnectionStatus {
-            connected: false,
-            message: error.message,
-            code: Some(error.kind),
-        },
+async fn probe_connection(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, run: String, endpoint: String, api_key: String, no_key: bool) -> Result<probe::ProbeResult, String> {
+    connection_window(&window)?;
+    checked_input(&run, &endpoint, &api_key)?;
+    let cancel = begin_probe(&mut *state.probes.lock().map_err(|_| lock_error())?, window.label(), &run, ProbeKind::Check);
+    let journal = state.diagnostics.clone();
+    journal.remember_secret(&api_key);
+    let label = window.label().to_string();
+    let (step_app, step_run) = (app.clone(), run.clone());
+    let on_step = move |steps: &[probe::ProbeStep]| {
+        let _ = step_app.emit_to(label.as_str(), "probe-step", probe::ProbeStepEvent { run: step_run.clone(), steps: steps.to_vec() });
+    };
+    let log_app = app.clone();
+    let log = move |diag: diagnostics::Diag| record(&log_app, diag).id;
+    let redact = move |text: &str| journal.redact(text);
+    let hooks = probe::Hooks { on_step: &on_step, log: &log, redact: &redact };
+    let result = probe::probe(probe::ProbeInput { run: run.clone(), endpoint, api_key, no_key }, probe::Limits::default(), None, cancel, &hooks).await;
+    if let Ok(mut running) = state.probes.lock() { end_probe(&mut running, &run); }
+    Ok(result)
+}
+/// Cancels a check or a try by its run id (the field changed, the window closes).
+#[tauri::command]
+fn cancel_probe(window: tauri::WebviewWindow, state: State<'_, AppState>, run: String) -> Result<(), String> {
+    connection_window(&window)?;
+    cancel_run(&mut *state.probes.lock().map_err(|_| lock_error())?, &run);
+    Ok(())
+}
+/// The models of a saved server (with its saved key), without a trace: the picker refreshes
+/// its list when it opens.
+#[tauri::command]
+async fn list_models(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, server_id: String) -> Result<Vec<probe::ModelInfo>, probe::ProbeProblem> {
+    let refused = |technical: &str| probe::ProbeProblem { step: probe::StepId::Models, cause: probe::ProbeCause::Cancelled, status: None, technical: Some(technical.to_string()), log_id: None };
+    connection_window(&window).map_err(|message| refused(&message))?;
+    let server = state.inner.lock().map_err(|_| refused(&lock_error()))?.settings.server(&server_id).map_err(|error| refused(&error.message))?.clone();
+    let key = if server.no_key { String::new() } else { server.api_key.clone() };
+    let journal = state.diagnostics.clone();
+    journal.remember_secret(&key);
+    let on_step = |_: &[probe::ProbeStep]| {};
+    let log_app = app.clone();
+    let log = move |diag: diagnostics::Diag| record(&log_app, diag).id;
+    let redact = move |text: &str| journal.redact(text);
+    let hooks = probe::Hooks { on_step: &on_step, log: &log, redact: &redact };
+    probe::list_models(&server.endpoint, &key, probe::Limits::default(), CancellationToken::new(), &hooks).await
+}
+/// « Essayer avec une phrase »: one fixed, synthetic sentence sent to the model being chosen
+/// (what is typed, not what is saved). The reply goes back to the window and nowhere else.
+#[tauri::command]
+async fn try_model(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, run: String, endpoint: String, api_key: String, no_key: bool, model: String) -> Result<probe::TryResult, String> {
+    connection_window(&window)?;
+    checked_input(&run, &endpoint, &api_key)?;
+    if model.len() > 800 { return Err("Le nom du modèle est trop long.".into()); }
+    let cancel = begin_probe(&mut *state.probes.lock().map_err(|_| lock_error())?, window.label(), &run, ProbeKind::Try);
+    let journal = state.diagnostics.clone();
+    journal.remember_secret(&api_key);
+    let on_step = |_: &[probe::ProbeStep]| {};
+    let log_app = app.clone();
+    let log = move |diag: diagnostics::Diag| record(&log_app, diag).id;
+    let redact = move |text: &str| journal.redact(text);
+    let hooks = probe::Hooks { on_step: &on_step, log: &log, redact: &redact };
+    let result = probe::try_model(probe::TryInput { run: run.clone(), endpoint, api_key, no_key, model }, probe::Limits::default(), cancel, &hooks).await;
+    if let Ok(mut running) = state.probes.lock() { end_probe(&mut running, &run); }
+    Ok(result)
+}
+/// The journal: the 500 last entries, the oldest first. Never a text, never a whole key.
+#[tauri::command]
+fn get_diagnostics(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<Vec<diagnostics::DiagEntry>, String> {
+    connection_window(&window)?;
+    Ok(state.diagnostics.list())
+}
+/// Empties the journal, in memory and on disk.
+#[tauri::command]
+fn clear_diagnostics(window: tauri::WebviewWindow, state: State<'_, AppState>) -> Result<(), String> {
+    connection_window(&window)?;
+    state.diagnostics.clear();
+    Ok(())
+}
+
+/// The check of 0.5 (« Check » of the old Settings page), kept until the new Server page
+/// replaces it: the saved server (the default one when none is named) goes through the probe
+/// of 0.6, and its saved model must be one the server lists.
+#[tauri::command]
+async fn check_connection(app: AppHandle, state: State<'_, AppState>, server_id: Option<String>) -> Result<ConnectionStatus, String> {
+    let server = {
+        let i = state.inner.lock().map_err(|_| lock_error())?;
+        match server_id { Some(id) => i.settings.server(&id).map_err(String::from)?.clone(), None => i.settings.default_server().clone() }
+    };
+    let journal = state.diagnostics.clone();
+    journal.remember_secret(&server.api_key);
+    let on_step = |_: &[probe::ProbeStep]| {};
+    let log_app = app.clone();
+    let log = move |diag: diagnostics::Diag| record(&log_app, diag).id;
+    let redact = move |text: &str| journal.redact(text);
+    let hooks = probe::Hooks { on_step: &on_step, log: &log, redact: &redact };
+    let run = format!("check-{}", Uuid::new_v4().simple());
+    let result = probe::probe(probe::ProbeInput { run, endpoint: server.endpoint.clone(), api_key: server.api_key.clone(), no_key: server.no_key }, probe::Limits::default(), None, CancellationToken::new(), &hooks).await;
+    let failure = match &result.problem {
+        None if result.models.iter().any(|model| model.id == server.model) => None,
+        None => Some((ErrorKind::ModelNotFound, format!("Le modèle {} n’est pas exposé par le serveur.", server.model))),
+        Some(problem) => Some(check_failure(problem)),
+    };
+    Ok(match failure {
+        None => ConnectionStatus { connected: true, message: "Connexion réussie.".into(), code: None },
+        Some((code, message)) => ConnectionStatus { connected: false, message, code: Some(code) },
     })
+}
+/// A probe's cause as the code and the French message of the old check.
+fn check_failure(problem: &probe::ProbeProblem) -> (ErrorKind, String) {
+    use probe::ProbeCause as Cause;
+    let status = || problem.status.map_or_else(|| "Le serveur a refusé la demande.".to_string(), |status| format!("Le serveur a répondu HTTP {status}."));
+    match problem.cause {
+        Cause::AddressEmpty => (ErrorKind::BadEndpoint, "Aucun serveur n’est réglé.".into()),
+        Cause::AddressMalformed | Cause::AddressScheme | Cause::AddressCredentials => (ErrorKind::BadEndpoint, "L’adresse du serveur est invalide.".into()),
+        Cause::AddressDns => (ErrorKind::Unreachable, "Nom du serveur introuvable : vérifiez l’adresse ou le DNS de ce poste.".into()),
+        Cause::ReachRefused => (ErrorKind::Unreachable, "Serveur injoignable : rien n’écoute à cette adresse.".into()),
+        Cause::ReachTimeout => (ErrorKind::Timeout, "Le serveur ne répond pas.".into()),
+        Cause::ReachCertificate => (ErrorKind::Unreachable, "Certificat du serveur refusé par Windows : autorité inconnue de ce poste, nom ou dates.".into()),
+        Cause::ReachTls => (ErrorKind::Unreachable, "Connexion sécurisée impossible : vérifiez que ce serveur parle bien HTTPS.".into()),
+        Cause::ReachNetwork => (ErrorKind::Unreachable, "Serveur injoignable depuis ce poste : réseau ou pare-feu.".into()),
+        Cause::KeyRequired | Cause::KeyRejected => (ErrorKind::Unauthorized, status()),
+        Cause::ModelsNotFound | Cause::ModelsInvalid => (ErrorKind::BadEndpoint, "Réponse /v1/models invalide.".into()),
+        Cause::ModelsEmpty => (ErrorKind::ModelNotFound, "Aucun modèle n’est chargé sur ce serveur.".into()),
+        Cause::ModelsServer => (ErrorKind::ServerError, status()),
+        Cause::TryModel | Cause::TryRejected | Cause::TryServer | Cause::TryTimeout | Cause::TryEmpty | Cause::Cancelled => (ErrorKind::Internal, "Vérification interrompue.".into()),
+    }
 }
 #[tauri::command]
 fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
@@ -2110,8 +2514,8 @@ fn reset_tray_tooltip(app: &AppHandle, simulated: bool) {
     }
 }
 fn capture_error(app: &AppHandle, error: &AppError, notify: bool) {
-    if let Some(tray) = app.tray_by_id("flowtranslate") {
-        let _ = tray.set_tooltip(Some(format!("FlowTranslate — {}", error.message)));
+    if let Some(tray) = app.tray_by_id(tray_text::TRAY_ID) {
+        let _ = tray.set_tooltip(Some(format!("{} — {}", brand::APP_NAME, error.message)));
     }
     if notify {
         show_notice(app, &error.message, Some(error.kind));
@@ -2277,7 +2681,8 @@ fn watch_context(app: AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            let _ = open_settings(app.clone(), None);
+            // Launched again: the setup while it is not finished, the Settings afterwards.
+            open_front_door(app);
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().build())
@@ -2290,8 +2695,17 @@ pub fn run() {
             };
             std::fs::create_dir_all(&root)?;
             let store = SettingsStore::new(&root);
-            let settings = store.load()?;
+            let mut settings = store.load()?;
+            // A fresh install speaks the language of Windows (French, or English otherwise).
+            if !store.exists() { settings.language = host::windows_language(); }
             let language = settings.language;
+            let setup_done = settings.setup_done;
+            // The journal's files: beside the data in a test run, in the local (non roaming)
+            // data folder otherwise.
+            let logs = match std::env::var_os("FLOWTRANSLATE_DATA_DIR").filter(|dir| !dir.is_empty()) {
+                Some(_) => root.join("logs"),
+                None => app.path().app_local_data_dir().unwrap_or_else(|_| root.clone()).join("logs"),
+            };
             let history = HistoryStore::new(&root)?;
             let args = std::env::args().collect::<Vec<_>>();
             let demo = args.iter().any(|a| {
@@ -2311,6 +2725,8 @@ pub fn run() {
                 menu_memory: Mutex::new(MenuMemory::load(&root)),
                 refused_shortcuts: Mutex::new(std::collections::HashMap::new()),
                 history,
+                diagnostics: Arc::new(diagnostics::Diagnostics::new(Some(logs))),
+                probes: Mutex::new(Vec::new()),
                 demo,
                 demo_clipboard,
                 demo_long,
@@ -2337,7 +2753,7 @@ pub fn run() {
                         });
                     }
                     "settings" => {
-                        let _ = open_settings(app.clone(), None);
+                        let _ = open_settings(app.clone(), None, None);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -2367,10 +2783,13 @@ pub fn run() {
             host::start_hit_tester(app.handle().clone(), app.get_webview_window("overlay").map(|w| host::handle(&w)).unwrap_or(0), screen_changed);
             if let Some(w) = app.get_webview_window("settings") {
                 let window = w.clone();
+                let closing = app.handle().clone();
                 w.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = window.hide();
+                        // Closed in the middle of a check: nothing keeps running behind it.
+                        if let Ok(mut running) = closing.state::<AppState>().probes.lock() { cancel_window(&mut running, "settings"); }
                     }
                 });
             }
@@ -2380,7 +2799,8 @@ pub fn run() {
                         if let Ok(mut refused) = app.state::<AppState>().refused_shortcuts.lock() { refused.insert(key.id(), refusal); }
                     }
                     capture_error(app.handle(), &AppError::internal(message), false);
-                    let _ = open_settings(app.handle().clone(), None);
+                    // The first run opens its setup below, which records the shortcut itself.
+                    if setup_done { let _ = open_settings(app.handle().clone(), None, None); }
                 }
             }
             // The page may already listen (it asks `shortcut_status` at load anyway).
@@ -2415,9 +2835,19 @@ pub fn run() {
                     let _ = capture_text(handle.clone(), state);
                 });
             }
-            if args.iter().any(|a| a == "--settings") {
-                let _ = open_settings(app.handle().clone(), None);
+            let settings_asked = args.iter().any(|a| a == "--settings");
+            if settings_asked {
+                let _ = open_settings(app.handle().clone(), None, None);
             }
+            // The first run (0.6): the setup, until it is finished. Never in a demo, when the
+            // Settings were asked for, or in a test run that says so.
+            let skip_setup = std::env::var("FLOWTRANSLATE_SKIP_SETUP").is_ok_and(|value| value == "1");
+            if !setup_done && !demo && !settings_asked && !skip_setup {
+                if let Err(message) = show_setup(app.handle(), false) {
+                    record(app.handle(), diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Error, "setup_window").cause(message));
+                }
+            }
+            record(app.handle(), diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "started").detail(format!("{} {}", brand::APP_NAME, app.package_info().version)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -2450,13 +2880,23 @@ pub fn run() {
             quit_app,
             start_drag,
             check_connection,
+            probe_connection,
+            cancel_probe,
+            list_models,
+            try_model,
+            get_diagnostics,
+            clear_diagnostics,
+            open_setup,
+            finish_setup,
+            open_demo,
+            close_demo,
             get_history,
             delete_history,
             system_theme,
             system_motion
         ])
         .run(tauri::generate_context!())
-        .expect("Impossible de démarrer FlowTranslate");
+        .expect("Impossible de démarrer l’application");
 }
 
 #[cfg(test)]
@@ -2583,7 +3023,7 @@ mod tests {
             let mut i = Inner::new(Settings::default());
             menu_capture(&mut i, "c");
             i.capture.as_mut().unwrap().target = Some(target(7));
-            i.completed = Some(CompletedResult { execution: None, request_id: "r".into(), capture_id: "c".into(), source_text: String::new(), translated_text: String::new(), mode: Mode::Quality, complete: true });
+            i.completed = Some(CompletedResult { execution: None, request_id: "r".into(), capture_id: "c".into(), source_text: String::new(), translated_text: String::new(), server_id: "s1".into(), complete: true });
             i
         };
         let code = |(result, spent): (Result<TargetIdentity, AppError>, bool)| (result.err().map(|e| e.kind), spent);
@@ -2725,12 +3165,59 @@ mod tests {
     fn a_result_without_target_says_why_and_the_settings_open_only_known_fields() {
         assert_eq!(nothing_to_paste(true).kind, ErrorKind::TargetChanged);
         assert_eq!(nothing_to_paste(false).kind, ErrorKind::NotEditable);
-        for field in ["menuShortcut", "endpoint", "apiKey", "model", "quality.endpoint", "fast.apiKey", "fast.model"] {
-            assert!(settings_field(field), "{field}");
+        let servers = vec![Server { id: "s1".into(), ..Server::default() }, Server { id: "serveur-2".into(), ..Server::default() }];
+        for field in ["menuShortcut", "endpoint", "apiKey", "model", "s1.endpoint", "serveur-2.apiKey", "serveur-2.model"] {
+            assert!(settings_field(field, &servers), "{field}");
         }
-        for field in ["", "history", "slow.model", "model.fast", "quality.model.x", "quality.", "../x"] {
-            assert!(!settings_field(field), "{field}");
+        // A server that no longer exists, a profile of 0.5, anything else: the window only opens.
+        for field in ["", "history", "s3.model", "quality.endpoint", "fast.model", "model.s1", "s1.model.x", "s1.", "../x"] {
+            assert!(!settings_field(field, &servers), "{field}");
         }
+        for page in ["general", "shortcuts", "actions", "after", "appearance", "server", "data", "diagnostic"] { assert!(settings_page(page), "{page}"); }
+        for page in ["", "Server", "serveur", "../x"] { assert!(!settings_page(page), "{page}"); }
+        let focus = serde_json::to_value(SettingsFocus { field: Some("s1.model".into()), page: None }).unwrap();
+        assert_eq!(focus, serde_json::json!({ "field": "s1.model" }));
+    }
+    #[test]
+    fn only_the_windows_that_edit_the_connection_see_a_key() {
+        let mut settings = Settings::default();
+        settings.servers[0].api_key = "synthetic-test-key".into();
+        settings.servers.push(Server { id: "s2".into(), api_key: "another-synthetic-key".into(), ..Server::default() });
+        let public = without_keys(settings.clone());
+        assert!(public.servers.iter().all(|server| server.api_key.is_empty()));
+        assert_eq!(Settings { servers: settings.servers.clone(), ..public }, settings, "nothing else changes");
+        assert_eq!(KEYED, ["settings", "setup"]);
+    }
+    #[test]
+    fn a_run_id_and_what_is_typed_are_bounded_before_any_check() {
+        assert!(checked_input("run-1_aB", "https://llm.exemple.com", "key").is_ok());
+        for run in ["", "run 1", "../x", &"r".repeat(65)] { assert!(checked_input(run, "", "").is_err(), "{run:?}"); }
+        assert!(checked_input("r", &"a".repeat(2049), "").is_err());
+        assert!(checked_input("r", "", &"k".repeat(4097)).is_err());
+        assert_eq!(status_in("Le serveur a répondu HTTP 401."), Some(401));
+        assert_eq!(status_in("Serveur 127.0.0.1:8002 injoignable."), None);
+        assert_eq!(error_code(ErrorKind::ModelNotFound), "model_not_found");
+    }
+    #[test]
+    fn a_newer_check_of_the_same_window_cancels_the_older_one() {
+        let mut running: Vec<RunningProbe> = Vec::new();
+        let first = begin_probe(&mut running, "settings", "a", ProbeKind::Check);
+        let attempt = begin_probe(&mut running, "settings", "t", ProbeKind::Try);
+        let other = begin_probe(&mut running, "setup", "b", ProbeKind::Check);
+        assert!(!first.is_cancelled() && !attempt.is_cancelled() && !other.is_cancelled());
+        let second = begin_probe(&mut running, "settings", "c", ProbeKind::Check);
+        assert!(first.is_cancelled(), "the same window started another check");
+        assert!(!second.is_cancelled() && !attempt.is_cancelled() && !other.is_cancelled());
+        assert_eq!(running.len(), 3);
+        // Cancelled by its run id, whichever window asks; finished: forgotten.
+        cancel_run(&mut running, "b");
+        assert!(other.is_cancelled());
+        end_probe(&mut running, "c");
+        assert_eq!(running.iter().map(|probe| probe.run.as_str()).collect::<Vec<_>>(), ["t"]);
+        end_probe(&mut running, "unknown");
+        // A window that closes takes its checks with it.
+        cancel_window(&mut running, "settings");
+        assert!(attempt.is_cancelled() && running.is_empty());
     }
     #[test]
     fn every_binding_reports_whether_windows_registered_its_chord() {

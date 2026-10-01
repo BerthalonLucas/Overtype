@@ -31,7 +31,7 @@ test('the overlay speaks English by default and switches to French at once when 
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
   await page.getByRole('button', { name: 'Plus d’options', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Afficher l’original', exact: true })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Relancer en Rapide', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Relancer avec Fast', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.evaluate(() => (window as any).nativeFixture.settings({ language: 'en' }));
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled();

@@ -41,14 +41,15 @@ describe('error codes', () => {
     for (const value of ['Busy', 'http_500', '', null, undefined, 42, { kind: 'busy' }]) expect(errorCodeOf(value)).toBe('internal');
   });
 
-  it('gives configuration errors the exact field of the Settings, for the request’s profile', () => {
+  it('gives configuration errors the exact field of the Settings, for the request’s server', () => {
     const fields: Array<[ErrorCode, string]> = [['unreachable', 'endpoint'], ['bad_endpoint', 'endpoint'], ['unauthorized', 'apiKey'], ['model_not_found', 'model']];
+    const servers = [{ id: 's1' }, { id: 's2' }];
     for (const [kind, field] of fields) {
       expect(describeError(kind).action).toEqual({ type: 'settings', field });
-      expect(describeError(kind, { mode: 'fast' }).action).toEqual({ type: 'settings', field: `fast.${field}` });
+      expect(describeError(kind, { serverId: 's2' }).action).toEqual({ type: 'settings', field: `s2.${field}` });
       // Both forms are identifiers of lot 13 (src/settings/fields.ts).
-      expect(resolveField(field, 'quality')).toBe(`quality.${field}`);
-      expect(resolveField(`fast.${field}`, 'quality')).toBe(`fast.${field}`);
+      expect(resolveField(field, servers, 's1')).toBe(`s1.${field}`);
+      expect(resolveField(`s2.${field}`, servers, 's1')).toBe(`s2.${field}`);
     }
   });
 

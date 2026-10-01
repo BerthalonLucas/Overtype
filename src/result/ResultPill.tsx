@@ -7,7 +7,7 @@ import { usePageHidden } from '../loaders/WorkingPill';
 import { ilotMetrics } from '../menu/metrics';
 import { MorphSurface, type ShapeChange, type SurfaceOrigin, type SurfaceSize } from '../menu/MorphSurface';
 import { useReducedMotionSetting } from '../motion/MotionPreferences';
-import type { AfterReplace, ErrorCode, Indicator, Mode } from '../types';
+import type { AfterReplace, ErrorCode, Indicator } from '../types';
 import { Icon, iconStroke } from '../ui';
 import { Countdown, resultTiming } from './countdown';
 import { describeError, errorFamily, type ErrorAction, type ErrorSource } from './errors';
@@ -47,7 +47,7 @@ import './result.css';
  *       pill (done with neither check nor Undo, or a silent error such as cancelled).
  *       The Îlot (src/menu/Ilot.tsx) takes it as is for its pill shape (src/menu/IlotStage.tsx).
  *   Stages: { stage: 'working', indicator, delayMs? } | { stage: 'done', afterReplace, clock?, busy?, drawn? }
- *           | { stage: 'undone' } | { stage: 'error', error, mode?, model?, source? }
+ *           | { stage: 'undone' } | { stage: 'error', error, serverId?, model?, source? }
  *           done: see DoneContent (a shared clock, Undo on its way, the check already drawn);
  *           keyed 'done' with Undo, 'done-check' without.
  *           source 'capture': a capture Rust refused (`capture-notice`), no button at all;
@@ -69,7 +69,7 @@ export type ResultStage =
   | { stage: 'working'; indicator: Indicator; delayMs?: number }
   | { stage: 'done'; afterReplace: AfterReplace; clock?: Countdown; busy?: boolean; drawn?: boolean }
   | { stage: 'undone' }
-  | { stage: 'error'; error: ErrorCode; mode?: Mode; model?: string; source?: ErrorSource };
+  | { stage: 'error'; error: ErrorCode; serverId?: string; model?: string; source?: ErrorSource };
 export type ActionAnswer = void | boolean | Promise<void | boolean>;
 export type ResultHandlers = {
   onUndo?: () => void;
@@ -193,9 +193,9 @@ export function UndoneContent({ onExpire }: { onExpire?: () => void }) {
 }
 
 // The compact error pill (Simulator.jsx:286-296, app.css:169-171).
-export function ErrorContent({ error, mode, model, source, onAction, onDismiss }: { error: ErrorCode; mode?: Mode; model?: string; source?: ErrorSource } & Pick<ResultHandlers, 'onAction' | 'onDismiss'>) {
+export function ErrorContent({ error, serverId, model, source, onAction, onDismiss }: { error: ErrorCode; serverId?: string; model?: string; source?: ErrorSource } & Pick<ResultHandlers, 'onAction' | 'onDismiss'>) {
   const t = useT();
-  const description = describeError(error, { mode, model, source });
+  const description = describeError(error, { serverId, model, source });
   const [copied, setCopied] = useState(false);
   const alive = useRef(true);
   const timer = useRef(0);
@@ -247,7 +247,7 @@ export function resultContent(stage: ResultStage, handlers: ResultHandlers = {})
       return { key: 'undone', node: <UndoneContent onExpire={handlers.onExpire} /> };
     case 'error':
       if (errorFamily(stage.error) === 'silent') return null;
-      return { key: `error-${stage.error}`, node: <ErrorContent error={stage.error} mode={stage.mode} model={stage.model} source={stage.source} onAction={handlers.onAction} onDismiss={handlers.onDismiss} /> };
+      return { key: `error-${stage.error}`, node: <ErrorContent error={stage.error} serverId={stage.serverId} model={stage.model} source={stage.source} onAction={handlers.onAction} onDismiss={handlers.onDismiss} /> };
   }
 }
 

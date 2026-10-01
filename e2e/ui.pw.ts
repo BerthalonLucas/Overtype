@@ -186,7 +186,7 @@ test('the reader band is half the viewport wide, 22/33, whole lines within 45 % 
   const menuBox = (await menu.boundingBox())!;
   const pill = (await page.locator('.action-pill').boundingBox())!;
   expect(Math.round(pill.y - (menuBox.y + menuBox.height))).toBe(6);
-  expect(await menu.getByRole('menuitem').count()).toBe(5);
+  expect(await menu.getByRole('menuitem').count()).toBe(4);
   expect(menuBox.height).toBeLessThanOrEqual(menuLayout.reserve);
   await expect(menu.getByRole('menuitem', { name: 'Expand' })).toHaveCount(0);
   // Same painted material as the glass (src/theme.css), light theme here.
@@ -318,7 +318,7 @@ test('settings keep connection details collapsed, offer the reading presets and 
   await page.getByRole('button', { name: 'Delete all', exact: true }).click();
   await expect(page.locator('.history article')).toHaveCount(0);
   await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  await expect(page.getByLabel('API key', { exact: true })).toHaveCount(2);
+  await expect(page.getByLabel('API key', { exact: true })).toHaveCount(1);
   await page.screenshot({ path: 'test-results/settings.png', fullPage: true });
 });
 

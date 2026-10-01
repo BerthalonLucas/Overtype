@@ -1,4 +1,4 @@
-use crate::types::{Language, Mode, Profile, Settings};
+use crate::types::{Language, Server, Settings};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
@@ -49,15 +49,16 @@ pub struct ExecutionInfo {
     pub action_id: String,
     pub action_name: String,
     pub output_mode: OutputMode,
-    pub mode: Mode,
+    /// The server the first request goes to: the default one when the capture was taken.
+    pub server_id: String,
 }
-/// What a capture froze: its action, its output mode and the profiles of the moment.
+/// What a capture froze: its action, its output mode and the servers of the moment.
 /// A change of settings while the glass is open never alters a running capture.
 #[derive(Clone)]
 pub struct Execution {
     pub info: ExecutionInfo,
     pub action: ActionDefinition,
-    pub profiles: std::collections::HashMap<String, Profile>,
+    pub servers: Vec<Server>,
     pub started: bool,
     pub auto_request: Option<String>,
     pub delivered: bool,
@@ -76,8 +77,8 @@ impl Execution {
     }
     fn with_action(settings: &Settings, action: ActionDefinition, output_mode: OutputMode) -> Self {
         Self {
-            info: ExecutionInfo { action_id: action.id.clone(), action_name: action.name.clone(), output_mode, mode: settings.mode },
-            action, profiles: settings.profiles.clone(), started: false, auto_request: None, delivered: false,
+            info: ExecutionInfo { action_id: action.id.clone(), action_name: action.name.clone(), output_mode, server_id: settings.default_server_id.clone() },
+            action, servers: settings.servers.clone(), started: false, auto_request: None, delivered: false,
         }
     }
     /// The choice made in the Îlot (`choose_action`), against the settings frozen at the
@@ -96,7 +97,7 @@ impl Execution {
         Ok(Self::with_action(settings, action, OutputMode::Replace))
     }
     /// Only the first request of a « replace » capture is delivered automatically: a
-    /// relaunch with the other profile shows its result in the glass.
+    /// relaunch with another server shows its result in the glass.
     pub fn begin(&mut self, request_id: &str) {
         if !self.started && self.info.output_mode == OutputMode::Replace { self.auto_request = Some(request_id.into()); }
         self.started = true;
@@ -446,14 +447,14 @@ mod tests {
     fn a_menu_choice_runs_a_saved_action_of_the_capture_settings_and_always_replaces() {
         let mut settings = Settings::default();
         let run = Execution::chosen(&settings, "correct", None).unwrap();
-        assert_eq!((run.info.action_id.as_str(), run.info.output_mode, run.info.mode), ("correct", OutputMode::Replace, settings.mode));
+        assert_eq!((run.info.action_id.as_str(), run.info.output_mode, run.info.server_id.as_str()), ("correct", OutputMode::Replace, settings.default_server_id.as_str()));
         assert!(Execution::chosen(&settings, "missing", None).is_err());
         assert!(Execution::chosen(&settings, INSTRUCTION_ACTION_ID, None).is_err(), "no saved action carries the reserved id");
         settings.actions.retain(|a| a.id != "correct");
         assert!(Execution::chosen(&settings, "correct", None).is_err());
     }
     #[test]
-    fn a_capture_keeps_its_action_prompt_and_profile_snapshot() {
+    fn a_capture_keeps_its_action_prompt_and_server_snapshot() {
         let mut settings = Settings::default();
         let mut binding = settings.shortcut_bindings[0].clone();
         binding.kind = BindingKind::Action;
@@ -462,10 +463,13 @@ mod tests {
         let mut run = Execution::snapshot(&settings, Some(&binding)).unwrap();
         let correct = settings.actions.iter().position(|a| a.id == "correct").unwrap();
         settings.actions[correct].prompt_template = "Changed".into();
-        settings.profiles.get_mut("quality").unwrap().model = "another-model".into();
+        settings.servers[0].model = "another-model".into();
+        settings.servers.push(Server { id: "s2".into(), ..Server::default() });
+        settings.default_server_id = "s2".into();
         assert_eq!(run.info.action_id, "correct");
         assert_ne!(run.action.prompt_template, settings.actions[correct].prompt_template);
-        assert_ne!(run.profiles["quality"].model, settings.profiles["quality"].model);
+        assert_ne!(run.servers[0].model, settings.servers[0].model);
+        assert_eq!((run.servers.len(), run.info.server_id.as_str()), (1, "s1"), "the servers and the default one of the capture's moment");
         run.begin("display-only");
         assert!(!run.claim_delivery("display-only"));
     }

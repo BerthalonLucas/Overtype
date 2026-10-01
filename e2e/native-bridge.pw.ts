@@ -295,12 +295,13 @@ test('IPC fixture: Check saves an address typed just before it, and never checks
   await quality.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(quality.getByRole('status')).toHaveText('Connection failed');
   let calls = await page.evaluate(() => window.nativeFixture.calls);
-  const saved = calls.findIndex(call => call.command === 'save_settings' && (call.args?.settings as { profiles: Record<string, { endpoint: string }> } | undefined)?.profiles.quality.endpoint === 'https://inference.example.test/v1');
+  const saved = calls.findIndex(call => call.command === 'save_settings' && (call.args?.settings as { servers: Array<{ endpoint: string }> } | undefined)?.servers[0].endpoint === 'https://inference.example.test/v1');
   const checked = calls.findIndex(call => call.command === 'check_connection');
   expect(saved).toBeGreaterThan(-1);
   expect(checked).toBeGreaterThan(saved);
-  // A remote address in plain HTTP is refused by the save: no check against the saved address.
-  await quality.getByLabel('Address', { exact: true }).fill('http://inference.example.test/v1');
+  // An address that does not read is refused by the save: no check against the saved address.
+  // (Plain HTTP to another machine is accepted since 0.6, with a warning in the new Server page.)
+  await quality.getByLabel('Address', { exact: true }).fill('ftp://inference.example.test/v1');
   await quality.getByRole('button', { name: 'Check', exact: true }).click();
   await expect(quality.getByRole('status')).toHaveText('Not checked');
   await expect(quality).toContainText('Not checked: this change couldn’t be saved (see below).');
@@ -323,7 +324,7 @@ test('IPC fixture: choices save immediately, checks never save, typing saves aft
   await page.getByRole('radio', { name: 'Slow', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ autoClose: 'slow', textSize: 'large' });
   await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ mode: 'fast', connectionExpanded: true });
+  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ defaultServerId: 's2' });
   const fast = page.locator('.profile').nth(1);
   await expect(fast).toContainText('Fast');
   const saves = await page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').length);
@@ -336,9 +337,9 @@ test('IPC fixture: choices save immediately, checks never save, typing saves aft
   expect(await page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').length)).toBe(saves);
   await page.getByLabel('Model', { exact: true }).nth(1).fill('changed-model');
   await expect(fast.getByRole('status')).toHaveText('Not checked');
-  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ profiles: { fast: { model: 'changed-model' } } });
+  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ servers: [{ id: 's1' }, { id: 's2', model: 'changed-model' }] });
   const calls = await page.evaluate(() => window.nativeFixture.calls);
-  expect(calls.filter(call => call.command === 'check_connection').map(call => call.args?.mode)).toEqual(['fast', 'fast']);
+  expect(calls.filter(call => call.command === 'check_connection').map(call => call.args?.serverId)).toEqual(['s2', 's2']);
   expect(calls.some(call => call.command === 'translate')).toBe(false);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.some(call => call.command === 'plugin:window|close'))).toBe(true);

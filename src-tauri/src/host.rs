@@ -119,6 +119,20 @@ pub fn apply_glass(window: &WebviewWindow) {
     }
 }
 
+/// The language Windows shows its own interface in, as far as the app speaks it: French, or
+/// English for any other (a fresh install starts in it; docs/PLAN-0.6.md §1.1).
+pub fn windows_language() -> crate::types::Language {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetUserDefaultUILanguage() -> u16;
+    }
+    language_of(unsafe { GetUserDefaultUILanguage() })
+}
+/// A Windows LANGID: its ten low bits name the language (0x0C: French, whatever the country).
+pub fn language_of(langid: u16) -> crate::types::Language {
+    if langid & 0x3ff == 0x0c { crate::types::Language::Fr } else { crate::types::Language::En }
+}
+
 pub fn foreground() -> isize {
     unsafe { GetForegroundWindow().0 as isize }
 }
@@ -1151,6 +1165,13 @@ pub fn wait_clipboard_change(before: u32, timeout: Duration) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_fresh_install_speaks_french_on_a_french_windows_and_english_elsewhere() {
+        use crate::types::Language;
+        // fr-FR, fr-CA, fr-BE, fr-CH; then en-US, en-GB, de-DE, es-ES, ja-JP.
+        for langid in [0x040c, 0x0c0c, 0x080c, 0x100c] { assert_eq!(super::language_of(langid), Language::Fr, "{langid:#06x}"); }
+        for langid in [0x0409, 0x0809, 0x0407, 0x0c0a, 0x0411, 0] { assert_eq!(super::language_of(langid), Language::En, "{langid:#06x}"); }
+    }
     use super::*;
 
     #[cfg(windows)]

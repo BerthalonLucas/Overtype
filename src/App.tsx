@@ -21,7 +21,7 @@ import { describeRefusal } from './settings/messages';
 import { fieldFromLocation, isProfileField, resolveField, revealField } from './settings/fields';
 import { useRegistrations } from './settings/registrations';
 import { ResetSettings } from './settings/ResetSettings';
-import type { AutoClose, Capture, HistoryEntry, Indicator, Language, Mode, MotionPreset, Settings, SettingsFocus, ShortcutBinding, TextSize, Theme } from './types';
+import type { AutoClose, Capture, HistoryEntry, Indicator, Language, MotionPreset, Server, Settings, SettingsFocus, ShortcutBinding, TextSize, Theme } from './types';
 
 const defaultCapture: Capture = { id: 'demo-selection', text: 'Could you send the updated proposal before Thursday?', source: 'selection', canReplace: true, anchor: { x: 820, y: 410, width: 350, height: 24 } };
 const longCapture: Capture = { ...defaultCapture, id: 'demo-long', text: 'Hi Alex,\n\nThank you for your feedback. The updated proposal includes the delivery timeline, responsibilities, and payment terms. Could you confirm these details before Thursday?\n\nWe have kept the total budget unchanged and clarified the review process. Please check the dates and amounts before we share the final version with the team.\n\nBest regards,\nMarie' };
@@ -32,7 +32,8 @@ type SaveStatus = 'saved' | 'just-saved' | 'saving' | 'error';
 // Why a save failed: one of our messages, or Rust's refusal (shown translated when known).
 type SaveProblem = { key: MessageKey } | { text: string };
 type Connection = { state: 'ok' | 'unknown' | 'error' | 'checking'; latencyMs?: number; message?: string };
-const modeKey = (mode: Mode): MessageKey => mode === 'quality' ? 'mode.quality' : 'mode.fast';
+// A server as the old page names it: its host, or its rank while it has no address.
+const serverName = (server: Server, index: number) => server.name || server.endpoint.replace(/^https?:\/\//, '') || `${index + 1}`;
 const menuBindingId = (bindings: ShortcutBinding[]) => ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find(id => bindings.every(b => b.id !== id))!;
 export function SettingsWindow() {
   const t = useT();
@@ -44,7 +45,9 @@ export function SettingsWindow() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('saved');
   const [saveError, setSaveError] = useState<SaveProblem | null>(null);
   const [recording, setRecording] = useState(false);
-  const [connections, setConnections] = useState<Record<Mode, Connection>>({ fast: { state: 'unknown' }, quality: { state: 'unknown' } });
+  const [connections, setConnections] = useState<Record<string, Connection>>({});
+  // The fold of the connection section: a state of this window (0.6 no longer saves it).
+  const [connectionOpen, setConnectionOpen] = useState(false);
   // Lot 10: whether Windows registered each binding's chord (another application may hold it).
   const registrations = useRegistrations();
   // A direct link to a field (lot 10): asked by the URL at opening, or by an event later.
@@ -81,7 +84,7 @@ export function SettingsWindow() {
       if (JSON.stringify(incoming) === JSON.stringify(current)) { synced.current = current; return; }
       adopt(incoming);
     }).then(keep);
-    void bridge.on<SettingsFocus>('settings-focus-field', ({ field }) => setFieldRequest({ field })).then(keep);
+    void bridge.on<SettingsFocus>('settings-focus-field', ({ field }) => { if (field) setFieldRequest({ field }); }).then(keep);
     return () => { live = false; offs.forEach(off => off()); };
   }, []);
   const commit = async (next: Settings): Promise<boolean> => {
@@ -122,21 +125,22 @@ export function SettingsWindow() {
   // pulse (lab: MockSettings). An unknown field is ignored.
   useEffect(() => {
     if (!fieldRequest || !settings) return;
-    const id = resolveField(fieldRequest.field, settings.mode);
-    if (id && isProfileField(id) && !settings.connectionExpanded) { persist({ ...settings, connectionExpanded: true }, true); return; }
+    const id = resolveField(fieldRequest.field, settings.servers, settings.defaultServerId);
+    if (id && isProfileField(id) && !connectionOpen) { setConnectionOpen(true); return; }
     setFieldRequest(null);
     if (!id) return;
     clearHighlight.current?.();
     clearHighlight.current = revealField(document, id, reduced);
-  }, [fieldRequest, settings]);
+  }, [fieldRequest, settings, connectionOpen]);
 
   if (!settings) return <main className="settings-window settings-loading"><h1>{t('settings.title')}</h1><p role={loadError ? 'alert' : 'status'}>{t(loadError ? 'settings.loadError' : 'settings.loading')}</p>{loadError && <button className="primary-action" onClick={loadSettings}>{t('common.retry')}</button>} <button className="quiet-action" onClick={() => void bridge.closeSettings()}>{t('common.close')}</button></main>;
 
   const update = <K extends keyof Settings>(key: K, value: Settings[K], immediate = true) => persist({ ...settings, [key]: value }, immediate);
-  const profile = (mode: Mode, key: 'endpoint' | 'model' | 'apiKey', value: string) => {
-    setConnections(previous => ({ ...previous, [mode]: { state: 'unknown' } }));
-    persist({ ...settings, profiles: { ...settings.profiles, [mode]: { ...settings.profiles[mode], [key]: value } } }, false);
+  const profile = (id: string, key: 'endpoint' | 'model' | 'apiKey', value: string) => {
+    setConnections(previous => ({ ...previous, [id]: { state: 'unknown' } }));
+    persist({ ...settings, servers: settings.servers.map(server => server.id === id ? { ...server, [key]: value, ...(key === 'apiKey' ? { noKey: value === '' } : {}) } : server) }, false);
   };
+  const connectionOf = (id: string): Connection => connections[id] ?? { state: 'unknown' };
   // A chord is saved at once and enables its binding; refused, the previous one comes back.
   // id null: the menu has no binding yet (a 0.4 file whose Ctrl+Alt+Space was taken), one is added.
   const recordShortcut = async (id: string | null, shortcut: string): Promise<string | null> => {
@@ -194,7 +198,7 @@ export function SettingsWindow() {
     if (latest.current && !await commit(latest.current)) return;
     await bridge.closeSettings();
   };
-  const check = async (mode: Mode) => {
+  const check = async (mode: string) => {
     setConnections(previous => ({ ...previous, [mode]: { state: 'checking' } }));
     // Rust checks the saved profile: an address typed less than 300 ms ago, or a save not
     // confirmed yet, is saved first; a refused save is said, never checked with the old address.
@@ -220,8 +224,8 @@ export function SettingsWindow() {
     const date = new Date(value);
     return `${date.toLocaleDateString(locales[language], { day: 'numeric', month: 'short' })} ${date.toLocaleTimeString(locales[language], { hour: '2-digit', minute: '2-digit' })}`;
   };
-  const statusLine = (mode: Mode) => {
-    const connection = connections[mode];
+  const statusLine = (mode: string) => {
+    const connection = connectionOf(mode);
     if (connection.state === 'checking') return t('settings.checking');
     if (connection.state === 'ok') return t('settings.connected', { ms: connection.latencyMs ?? 0 });
     if (connection.state === 'error') return t('settings.connectionFailed');
@@ -261,24 +265,24 @@ export function SettingsWindow() {
           <Segmented<AutoClose> label={t('settings.autoClose')} value={settings.autoClose} options={[{ value: 'fast', label: t('settings.closeFast') }, { value: 'normal', label: t('settings.closeNormal') }, { value: 'slow', label: t('settings.closeSlow') }, { value: 'never', label: t('settings.closeNever') }]} onChange={value => update('autoClose', value)} /></div>
       </section>
       <section className="connection">
-        <button className="section-toggle" onClick={() => update('connectionExpanded', !settings.connectionExpanded)} aria-expanded={settings.connectionExpanded} aria-controls="connection-profiles"><h2>{t('settings.connection')}</h2><Icon name="chevron" size={14} /></button>
+        <button className="section-toggle" onClick={() => setConnectionOpen(open => !open)} aria-expanded={connectionOpen} aria-controls="connection-profiles"><h2>{t('settings.connection')}</h2><Icon name="chevron" size={14} /></button>
         <div className="setting-row"><div className="setting-copy"><strong>{t('settings.defaultProfile')}</strong><small>{t('settings.defaultProfileHelp')}</small></div>
-          <Segmented<Mode> label={t('settings.defaultProfile')} value={settings.mode} options={[{ value: 'quality', label: t('mode.quality') }, { value: 'fast', label: t('mode.fast') }]} onChange={value => update('mode', value)} /></div>
+          <Segmented<string> label={t('settings.defaultProfile')} value={settings.defaultServerId} options={settings.servers.map((server, index) => ({ value: server.id, label: serverName(server, index) }))} onChange={value => update('defaultServerId', value)} /></div>
         {/* data-field: the stable identifiers the errors of lot 10 link to (src/settings/fields.ts). */}
-        <div id="connection-profiles" className="profiles">{settings.connectionExpanded && (['quality', 'fast'] as Mode[]).map(mode => <div className="profile" key={mode}>
-          <div className="profile-heading"><strong>{t(modeKey(mode))}</strong><span className="connection-state" data-state={connections[mode].state} role="status"><i aria-hidden="true" />{statusLine(mode)}</span><button className="text-button" onClick={() => void check(mode)} disabled={connections[mode].state === 'checking'}>{t('settings.check')}</button></div>
-          <div className="field-grid"><label data-field={`${mode}.endpoint`}>{t('settings.endpoint')}<input type="url" placeholder={mode === 'quality' ? 'http://127.0.0.1:8002/v1' : 'http://127.0.0.1:8001/v1'} value={settings.profiles[mode].endpoint} onChange={e => profile(mode, 'endpoint', e.target.value)} /></label><label data-field={`${mode}.model`}>{t('settings.model')}<input value={settings.profiles[mode].model} onChange={e => profile(mode, 'model', e.target.value)} /></label></div>
-          <div className="secret" data-field={`${mode}.apiKey`}><label>{t('settings.apiKey')}<input type="password" autoComplete="new-password" placeholder={t('settings.apiKeyPlaceholder')} value={settings.profiles[mode].apiKey} onChange={e => profile(mode, 'apiKey', e.target.value)} /></label><small aria-hidden="true">{t('settings.apiKeyProtected')}</small></div>
-          {(connections[mode].state === 'error' || connections[mode].state === 'unknown') && connections[mode].message && <p className="row-warning">{connections[mode].message}</p>}
-        </div>)}</div>
-        {!bridge.native && settings.connectionExpanded && <small className="preview-note">{t('settings.previewConnection')}</small>}
+        <div id="connection-profiles" className="profiles">{connectionOpen && settings.servers.map((server, index) => { const mode = server.id; return <div className="profile" key={mode}>
+          <div className="profile-heading"><strong>{serverName(server, index)}</strong><span className="connection-state" data-state={connectionOf(mode).state} role="status"><i aria-hidden="true" />{statusLine(mode)}</span><button className="text-button" onClick={() => void check(mode)} disabled={connectionOf(mode).state === 'checking'}>{t('settings.check')}</button></div>
+          <div className="field-grid"><label data-field={`${mode}.endpoint`}>{t('settings.endpoint')}<input type="url" placeholder="https://llm.exemple.com" value={server.endpoint} onChange={e => profile(mode, 'endpoint', e.target.value)} /></label><label data-field={`${mode}.model`}>{t('settings.model')}<input value={server.model} onChange={e => profile(mode, 'model', e.target.value)} /></label></div>
+          <div className="secret" data-field={`${mode}.apiKey`}><label>{t('settings.apiKey')}<input type="password" autoComplete="new-password" placeholder={t('settings.apiKeyPlaceholder')} value={server.apiKey} onChange={e => profile(mode, 'apiKey', e.target.value)} /></label><small aria-hidden="true">{t('settings.apiKeyProtected')}</small></div>
+          {(connectionOf(mode).state === 'error' || connectionOf(mode).state === 'unknown') && connectionOf(mode).message && <p className="row-warning">{connectionOf(mode).message}</p>}
+        </div>; })}</div>
+        {!bridge.native && connectionOpen && <small className="preview-note">{t('settings.previewConnection')}</small>}
       </section>
       <section>
         <h2>{t('settings.device')}</h2>
         <div className="setting-row"><div className="setting-copy"><strong>{t('settings.history')}</strong><small>{t('settings.historyHelp')}</small></div>
           <SettingSwitch label={t('settings.history')} checked={settings.historyEnabled} onCheckedChange={checked => update('historyEnabled', checked)} /></div>
         {settings.historyEnabled && <div className="history">
-          {history.length ? history.map(item => <article key={item.id}><div><p>{item.translatedText}</p><small>{item.actionName} · {t(modeKey(item.mode))} · {historyDate(item.createdAt)}</small></div><button className="icon-button history-remove" onClick={() => void removeHistory(item.id)} aria-label={t('settings.historyRemove')}><Icon name="close" size={14} /></button></article>) : <p className="empty-history">{t('settings.historyEmpty')}</p>}
+          {history.length ? history.map(item => <article key={item.id}><div><p>{item.translatedText}</p><small>{item.actionName}{item.server ? ` · ${item.server}` : ''} · {historyDate(item.createdAt)}</small></div><button className="icon-button history-remove" onClick={() => void removeHistory(item.id)} aria-label={t('settings.historyRemove')}><Icon name="close" size={14} /></button></article>) : <p className="empty-history">{t('settings.historyEmpty')}</p>}
           <div className="history-foot"><small>{t(new Intl.PluralRules(locales[language]).select(history.length) === 'one' ? 'settings.historyCountOne' : 'settings.historyCountOther', { count: history.length })}</small><button className="text-button" onClick={() => void removeHistory(null)} disabled={!history.length}>{t('settings.historyClear')}</button></div>
         </div>}
         <div className="setting-row"><div className="setting-copy"><strong>{t('settings.autostart')}</strong><small>{t('settings.autostartHelp')}</small></div>

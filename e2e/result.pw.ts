@@ -234,12 +234,12 @@ test('the error pill never grows: « Copied » takes the place of « Copy result
 test('each family has its one button: the field, Try again, Copy result, or none', async ({ page }) => {
   await open(page, { scenario: 'result-error-config', stage: 'error', mode: 'fast' });
   await page.getByRole('button', { name: 'Fix key' }).click();
-  expect((await events(page)).at(-1)).toMatchObject({ type: 'action', action: { type: 'settings', field: 'fast.apiKey' } });
+  expect((await events(page)).at(-1)).toMatchObject({ type: 'action', action: { type: 'settings', field: 's2.apiKey' } });
   // Configuration errors: each opens its own field.
   for (const [kind, label, field] of [['unreachable', 'Open endpoint', 'endpoint'], ['bad_endpoint', 'Open endpoint', 'endpoint'], ['model_not_found', 'Choose model', 'model']] as const) {
     await page.getByLabel('Code').selectOption(kind);
     await page.getByRole('button', { name: label }).click();
-    expect((await events(page)).at(-1)).toMatchObject({ type: 'action', action: { type: 'settings', field: `fast.${field}` } });
+    expect((await events(page)).at(-1)).toMatchObject({ type: 'action', action: { type: 'settings', field: `s2.${field}` } });
   }
   await expect(page.getByRole('alert')).toHaveText('Model not found: gemma-4-12b');
 

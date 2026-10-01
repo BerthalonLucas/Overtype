@@ -33,7 +33,7 @@ const dictionary = {
   'menu.hideOriginal': { en: 'Hide original', fr: 'Masquer l’original' },
   'menu.replace': { en: 'Replace', fr: 'Remplacer' },
   'menu.retry': { en: 'Try again', fr: 'Réessayer' },
-  'menu.rerun': { en: 'Run again in {mode}', fr: 'Relancer en {mode}' },
+  'menu.rerun': { en: 'Run again with {server}', fr: 'Relancer avec {server}' },
   'menu.settings': { en: 'Settings', fr: 'Réglages' },
   'menu.close': { en: 'Close', fr: 'Fermer' },
   // The Îlot (lot 7): wording of the design lab (design-lab/src/data.js:11, 17-18) where it has one.
@@ -99,8 +99,6 @@ const dictionary = {
   'common.retry': { en: 'Try again', fr: 'Réessayer' },
   'common.close': { en: 'Close', fr: 'Fermer' },
   'common.settings': { en: 'Settings', fr: 'Réglages' },
-  'mode.quality': { en: 'Quality', fr: 'Qualité' },
-  'mode.fast': { en: 'Fast', fr: 'Rapide' },
   // Browser preview.
   'preview.label': { en: 'Browser preview · simulated response', fr: 'Aperçu navigateur · réponse simulée' },
   'preview.backgrounds': { en: 'Preview background', fr: 'Fond de l’aperçu' },

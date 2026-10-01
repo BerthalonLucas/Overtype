@@ -17,6 +17,7 @@ unsafe extern "system" {
     fn GetClipboardSequenceNumber() -> u32;
     fn GetClipboardOwner() -> Handle;
     fn RegisterClipboardFormatW(name: *const u16) -> u32;
+    fn IsClipboardFormatAvailable(format: u32) -> i32;
 }
 #[link(name = "kernel32")]
 unsafe extern "system" {
@@ -134,6 +135,57 @@ impl Keeper {
     }
 }
 
+/// The formats applications put beside a copy to keep it out of clipboard monitors, of the
+/// clipboard history (Win+V) and of the cloud clipboard: what password managers set on a
+/// password (KeePass, 1Password, Bitwarden; documented by Microsoft as « Cloud Clipboard and
+/// Clipboard History Formats »).
+const EXCLUDE_MONITORING: &str = "ExcludeClipboardContentFromMonitorProcessing";
+const CAN_INCLUDE_IN_HISTORY: &str = "CanIncludeInClipboardHistory";
+const CAN_UPLOAD_TO_CLOUD: &str = "CanUploadToCloudClipboard";
+
+/// What a clipboard says of itself. `history` and `cloud`: the DWORD of the format when it is
+/// present (`Some(None)` when present but unreadable).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Marks {
+    pub exclude_monitoring: bool,
+    pub history: Option<Option<u32>>,
+    pub cloud: Option<Option<u32>>,
+}
+/// The sensitive-clipboard rule (decision B, 01/10): a copy is never taken as a source when its
+/// owner excluded it from monitoring, from the history or from the cloud. A flag that is present
+/// and cannot be read counts as a refusal; a flag set to 1 (allowed) is not one.
+pub fn is_sensitive(marks: Marks) -> bool {
+    let refused = |flag: Option<Option<u32>>| matches!(flag, Some(None) | Some(Some(0)));
+    marks.exclude_monitoring || refused(marks.history) || refused(marks.cloud)
+}
+fn format_id(name: &str) -> u32 {
+    let name = name.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+    unsafe { RegisterClipboardFormatW(name.as_ptr()) }
+}
+fn read_marks() -> Marks {
+    let present = |name: &str| { let format = format_id(name); (format != 0 && unsafe { IsClipboardFormatAvailable(format) } != 0).then_some(format) };
+    let exclude_monitoring = present(EXCLUDE_MONITORING).is_some();
+    let (history, cloud) = (present(CAN_INCLUDE_IN_HISTORY), present(CAN_UPLOAD_TO_CLOUD));
+    if history.is_none() && cloud.is_none() { return Marks { exclude_monitoring, history: None, cloud: None }; }
+    // The values are four bytes each; the content itself is never read here.
+    let open = Open::new(null_mut());
+    let value = |format: Option<u32>| format.map(|format| {
+        open.as_ref().ok()?;
+        let memory = unsafe { GetClipboardData(format) };
+        if memory.is_null() || unsafe { GlobalSize(memory) } < 4 { return None; }
+        let pointer = unsafe { GlobalLock(memory) };
+        if pointer.is_null() { return None; }
+        let value = unsafe { std::ptr::read_unaligned(pointer.cast::<u32>()) };
+        unsafe { GlobalUnlock(memory); }
+        Some(value)
+    });
+    Marks { exclude_monitoring, history: value(history), cloud: value(cloud) }
+}
+/// Whether the clipboard, as it is now, is marked sensitive by its owner.
+pub fn sensitive() -> bool {
+    is_sensitive(read_marks())
+}
+
 fn utf16(text: &str) -> Vec<u8> {
     text.encode_utf16().chain(Some(0)).flat_map(u16::to_le_bytes).collect()
 }
@@ -161,9 +213,8 @@ fn owner_window() -> Result<Handle, String> {
 fn write_formats(formats: &[(u32, Vec<u8>)], expected: u32) -> Result<u32, String> {
     // Allocate before EmptyClipboard so an allocation failure leaves the original intact.
     let mut memory = formats.iter().map(|(f, bytes)| Memory::new(bytes).map(|m| (*f, m))).collect::<Result<Vec<_>, _>>()?;
-    for name in ["ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"] {
-        let name = name.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
-        let format = unsafe { RegisterClipboardFormatW(name.as_ptr()) };
+    for name in [EXCLUDE_MONITORING, CAN_INCLUDE_IN_HISTORY, CAN_UPLOAD_TO_CLOUD] {
+        let format = format_id(name);
         if format == 0 { return Err("Protection du presse-papiers indisponible.".into()); }
         memory.retain(|(f, _)| *f != format);
         memory.push((format, Memory::new(&[0; 4])?));
@@ -188,6 +239,22 @@ mod tests {
     // Writes a synthetic sentinel, restores the snapshot, and checks the guard refuses to
     // overwrite a newer write. Skipped without a window station (CI runner).
     #[test]
+    fn a_copy_marked_by_a_password_manager_is_sensitive() {
+        let plain = Marks::default();
+        assert!(!is_sensitive(plain), "an ordinary copy carries none of the formats");
+        // KeePass and Bitwarden: the monitoring exclusion alone (whatever it contains).
+        assert!(is_sensitive(Marks { exclude_monitoring: true, ..plain }));
+        // 1Password and the Windows samples: history or cloud refused with a zero.
+        assert!(is_sensitive(Marks { history: Some(Some(0)), ..plain }));
+        assert!(is_sensitive(Marks { cloud: Some(Some(0)), ..plain }));
+        assert!(is_sensitive(Marks { history: Some(Some(1)), cloud: Some(Some(0)), ..plain }));
+        // Present and explicitly allowed: an application that says « yes, keep it ».
+        assert!(!is_sensitive(Marks { history: Some(Some(1)), cloud: Some(Some(1)), ..plain }));
+        // Present and unreadable (the clipboard was busy): refused rather than guessed.
+        assert!(is_sensitive(Marks { history: Some(None), ..plain }));
+        assert!(is_sensitive(Marks { cloud: Some(None), ..plain }));
+    }
+    #[test]
     fn our_text_is_put_and_the_previous_clipboard_comes_back_unless_it_changed() {
         if unsafe { GetClipboardSequenceNumber() } == 0 {
             eprintln!("no clipboard sequence in this session: skipped");
@@ -196,6 +263,10 @@ mod tests {
         let keeper = Keeper::take(|| None);
         let sequence = keeper.put_text("flowtranslate sentinel ✓").expect("put");
         assert_ne!(sequence, keeper.sequence());
+        // Our own text travels with the three opt-outs: read back from the real clipboard, it is
+        // sensitive, as a password manager's copy is.
+        assert_eq!(read_marks(), Marks { exclude_monitoring: true, history: Some(Some(0)), cloud: Some(Some(0)) });
+        assert!(sensitive());
         keeper.restore(sequence).expect("restore");
         // A second restore against the old sequence is refused: the clipboard moved on.
         assert!(keeper.restore(sequence).is_err() || matches!(keeper, Keeper::TextOnly { text: None, .. }));

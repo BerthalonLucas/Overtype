@@ -272,10 +272,15 @@ fn read_clipboard() -> Option<String> {
 fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredCapture, AppError> {
     let pressed_at = crate::host::now_ms();
     let changed_at = crate::host::clipboard_changed_at();
+    // The user's own fresh copy may serve as the source (decision B, 01/10), never one a
+    // password manager marked as sensitive: such a clipboard is neither read nor sent anywhere,
+    // the shortcut then finds nothing to act on. Judged now, on the user's clipboard as it is
+    // (our own restoration after the synthetic copy adds the same opt-out formats).
+    let usable_copy = fresh(changed_at, pressed_at, FRESH_COPY_MS) && !crate::clipboard_guard::sensitive();
     let copied = synthetic_copy(source_window);
     let (text, origin) = match &copied {
         Ok(text) => (Some(text.clone()), CaptureOrigin::Copy),
-        Err(_) => (fresh(changed_at, pressed_at, FRESH_COPY_MS).then(read_clipboard).flatten(), CaptureOrigin::Fresh),
+        Err(_) => (usable_copy.then(read_clipboard).flatten(), CaptureOrigin::Fresh),
     };
     let text = copied_text(text).map_err(|mut error| {
         // For the real capture matrix only (FLOWTRANSLATE_CAPTURE_TRACE): which step of

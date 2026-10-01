@@ -269,14 +269,14 @@ test('a 0.4 file whose Ctrl+Alt+Space runs an action directly gets a menu shortc
 test('a direct link scrolls to its field, focuses it and pulses for 2.8 s; reduced motion holds it still', async ({ page }) => {
   await page.setViewportSize({ width: 520, height: 560 });
   // At opening: the URL names the field (the Connection details open for it).
-  await openSettings(page, '&field=fast.endpoint');
-  const endpoint = page.locator('[data-field="fast.endpoint"]');
+  await openSettings(page, '&field=s2.endpoint');
+  const endpoint = page.locator('[data-field="s2.endpoint"]');
   await expect(endpoint).toHaveAttribute('data-target', 'true');
   const shown = Date.now();
   await expect(endpoint.locator('input')).toBeFocused();
   await expect(endpoint).toBeInViewport();
   expect(await endpoint.evaluate(el => getComputedStyle(el).animationName)).toBe('field-pulse');
-  await expect.poll(() => saved(page)).toMatchObject({ connectionExpanded: true });
+  await expect(page.getByRole('button', { name: /^Conne(ct|x)ion$/ })).toHaveAttribute('aria-expanded', 'true');
   await expect(endpoint).not.toHaveAttribute('data-target', /./, { timeout: 5000 });
   expect(Date.now() - shown).toBeGreaterThan(2000);
 
@@ -289,7 +289,7 @@ test('a direct link scrolls to its field, focuses it and pulses for 2.8 s; reduc
   // A bare profile field is the default profile's (quality here), through open_settings.
   await page.evaluate(async () => (await import('/src/bridge.ts')).bridge.openSettings('apiKey'));
   expect(await call(page, f => f.calls.filter(c => c.command === 'open_settings').at(-1)?.args)).toEqual({ field: 'apiKey' });
-  const key = page.locator('[data-field="quality.apiKey"]');
+  const key = page.locator('[data-field="s1.apiKey"]');
   await expect(key).toHaveAttribute('data-target', 'true');
   await expect(key.locator('input[type="password"]')).toBeFocused();
   await expect(menu).not.toHaveAttribute('data-target', /./);
@@ -300,8 +300,8 @@ test('a direct link scrolls to its field, focuses it and pulses for 2.8 s; reduc
   // Reduced motion: the same highlight, without the pulse.
   await call(page, f => f.settings({ motion: 'reduced' }));
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
-  await call(page, f => f.focusField('quality.model'));
-  const model = page.locator('[data-field="quality.model"]');
+  await call(page, f => f.focusField('s1.model'));
+  const model = page.locator('[data-field="s1.model"]');
   await expect(model).toHaveAttribute('data-target', 'true');
   await expect(model.locator('input')).toBeFocused();
   expect(await model.evaluate(el => getComputedStyle(el).animationName)).toBe('none');
@@ -326,10 +326,10 @@ test('settings changed elsewhere replace the open window’s copy, and a later c
   await page.getByRole('button', { name: 'Connexion', exact: true }).click();
   const model = page.getByLabel('Modèle', { exact: true }).first();
   await model.fill('typed-model');
-  await call(page, f => f.settings({ profiles: { quality: { endpoint: '', model: 'outside-model', apiKey: '' }, fast: { endpoint: '', model: 'test', apiKey: '' } } }));
+  await call(page, f => f.settings({ servers: [{ id: 's1', name: 'Quality', endpoint: '', apiKey: '', noKey: false, model: 'outside-model' }, { id: 's2', name: 'Fast', endpoint: '', apiKey: '', noKey: false, model: 'test' }] }));
   await expect(model).toHaveValue('typed-model');
   await page.clock.runFor(400);
-  await expect.poll(() => saved(page)).toMatchObject({ profiles: { quality: { model: 'typed-model' } } });
+  await expect.poll(() => saved(page)).toMatchObject({ servers: [{ id: 's1', model: 'typed-model' }, { id: 's2' }] });
 });
 
 test('Restore brings back the shipped instruction of current and 0.4 built-in actions, never their name', async ({ page }) => {
@@ -359,13 +359,13 @@ test('Restore default settings asks first, then brings a fresh install back and 
   await page.setViewportSize({ width: 460, height: 420 });
   await openSettings(page);
   // Far from a fresh install: an own action first on the menu and by default, another chord,
-  // dark, large text, French, the fast profile, a model of one's own, history and start on.
+  // dark, large text, French, the second server by default, models of one's own, history and start on.
   const own = { id: 'action-1', name: 'Résumer', promptTemplate: 'Résume le texte.' };
-  const profiles = { fast: { endpoint: 'http://127.0.0.1:8001/v1', model: 'my-fast', apiKey: '' }, quality: { endpoint: 'http://127.0.0.1:8002/v1', model: 'my-quality', apiKey: '' } };
+  const servers = [{ id: 's1', name: '', endpoint: 'http://127.0.0.1:8002', apiKey: '', noKey: true, model: 'my-quality' }, { id: 's2', name: '', endpoint: 'http://127.0.0.1:8001', apiKey: '', noKey: true, model: 'my-fast' }];
   await page.evaluate(next => (window as unknown as { nativeFixture: Fixture }).nativeFixture.settings(next), {
     actions: [...defaultActions, own], menuActionIds: ['action-1', 'correct'], defaultActionId: 'action-1',
     shortcutBindings: [{ id: 'menu', kind: 'menu', shortcut: 'Ctrl+Alt+Shift+Space', actionId: 'correct', outputMode: 'replace', enabled: true }],
-    theme: 'dark', textSize: 'large', language: 'fr', mode: 'fast', profiles, historyEnabled: true, autostart: true,
+    theme: 'dark', textSize: 'large', language: 'fr', defaultServerId: 's2', servers, setupDone: true, historyEnabled: true, autostart: true,
   } satisfies Partial<Settings>);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const row = page.locator('[data-field="reset"]');
@@ -399,7 +399,7 @@ test('Restore default settings asks first, then brings a fresh install back and 
     actions: defaultActions, menuActionIds: defaultActions.map(action => action.id), defaultActionId: 'correct',
     shortcutBindings: [{ id: 'menu', kind: 'menu', shortcut: 'Ctrl+Alt+Space', actionId: 'correct', outputMode: 'replace', enabled: true }],
     theme: 'system', textSize: 'normal', uiVersion: 'ilot',
-    language: 'fr', mode: 'fast', profiles, historyEnabled: true, autostart: true,
+    language: 'fr', defaultServerId: 's2', servers, setupDone: true, historyEnabled: true, autostart: true,
   });
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('.grid-name').first()).toHaveText('Fix grammar');

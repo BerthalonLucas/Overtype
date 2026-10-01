@@ -1,7 +1,4 @@
-use crate::{
-    crypto,
-    types::{HistoryEntry, Mode},
-};
+use crate::{crypto, types::HistoryEntry};
 use chrono::{Duration, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -61,7 +58,7 @@ impl HistoryStore {
         let cipher = crypto::protect(&payload)?;
         let conn = self.connection()?;
         conn.execute("INSERT OR REPLACE INTO history(id,created_at,target_language,mode,payload_dpapi,action) VALUES(?1,?2,'',?3,?4,?5)",
-            params![entry.id, entry.created_at, mode_str(entry.mode), cipher, entry.action_name])
+            params![entry.id, entry.created_at, entry.server, cipher, entry.action_name])
             .map_err(|_| "Impossible d’ajouter l’entrée à l’historique.".to_string())?;
         Self::prune(&conn)
     }
@@ -106,7 +103,7 @@ impl HistoryStore {
                 source_text: payload.source_text,
                 translated_text: payload.translated_text,
                 action_name: if action.is_empty() { "Traduire".into() } else { action },
-                mode: parse_mode(&mode)?,
+                server: server_of(&mode),
                 created_at,
             });
         }
@@ -129,17 +126,12 @@ impl HistoryStore {
     }
 }
 
-fn mode_str(v: Mode) -> &'static str {
-    match v {
-        Mode::Fast => "fast",
-        Mode::Quality => "quality",
-    }
-}
-fn parse_mode(v: &str) -> Result<Mode, String> {
-    match v {
-        "fast" => Ok(Mode::Fast),
-        "quality" => Ok(Mode::Quality),
-        _ => Err("Mode d’historique invalide.".into()),
+/// The `mode` column keeps its name (no schema migration): since 0.6 it holds the host of the
+/// server that answered. A row of 0.5 holds `fast` or `quality`, which names no server.
+fn server_of(stored: &str) -> String {
+    match stored {
+        "fast" | "quality" => String::new(),
+        host => host.to_string(),
     }
 }
 
@@ -158,7 +150,7 @@ mod tests {
             source_text: "secret".into(),
             translated_text: "secret".into(),
             action_name: "Traduire en anglais".into(),
-            mode: Mode::Fast,
+            server: "fast".into(),
             created_at: (Utc::now() - Duration::days(8)).to_rfc3339(),
         };
         store.add(&old).unwrap();
@@ -169,7 +161,7 @@ mod tests {
                     source_text: "a".into(),
                     translated_text: "b".into(),
                     action_name: "Corriger".into(),
-                    mode: Mode::Quality,
+                    server: if n % 2 == 0 { "quality".into() } else { "llm.exemple.com:8443".into() },
                     created_at: (Utc::now() + Duration::milliseconds(n)).to_rfc3339(),
                 })
                 .unwrap();
@@ -177,6 +169,9 @@ mod tests {
         let entries = store.list().unwrap();
         assert_eq!(entries.len(), 100);
         assert!(entries.iter().all(|e| e.action_name == "Corriger"));
+        // A row of 0.5 (`quality`) names no server; a row of 0.6 keeps its host.
+        assert!(entries.iter().all(|e| e.server.is_empty() || e.server == "llm.exemple.com:8443"));
+        assert!(entries.iter().any(|e| e.server.is_empty()) && entries.iter().any(|e| !e.server.is_empty()));
         assert!(!entries.iter().any(|e| e.id == "old"));
         store.delete(None).unwrap();
         assert!(store.list().unwrap().is_empty());

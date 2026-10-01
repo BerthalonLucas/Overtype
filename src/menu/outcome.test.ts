@@ -3,7 +3,7 @@ import { initialTranslationState, type TranslationState } from '../reducer';
 import type { AfterReplace, Capture, ErrorCode, ExecutionInfo } from '../types';
 import { effectiveAfterReplace, ilotJourney, ilotOutcome, ownPasteRefusal, pasteCode, type OwnPaste, type UndoProgress } from './outcome';
 
-const execution: ExecutionInfo = { actionId: 'correct', actionName: 'Fix grammar', outputMode: 'replace', mode: 'fast' };
+const execution: ExecutionInfo = { actionId: 'correct', actionName: 'Fix grammar', outputMode: 'replace', serverId: 's2' };
 const capture: Capture = { id: 'c', text: 'x', source: 'selection', canReplace: true, anchor: null, menu: { lastActionId: null }, execution };
 const state = (patch: Partial<TranslationState> = {}): TranslationState => ({ ...initialTranslationState, capture, requestId: 'r1', phase: 'streaming', delivery: 'pending', ...patch });
 const outcome = (patch: Partial<TranslationState> = {}, paste: OwnPaste | null = null, chosen = false, undo: UndoProgress | null = null) => ilotOutcome(state(patch), { chosen, paste, undo });

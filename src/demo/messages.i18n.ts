@@ -69,8 +69,8 @@ export const demoMessages = {
   'demo2.mail.recipient': { en: 'Claire Martin', fr: 'Claire Martin' },
   'demo2.mail.subjectText': { en: 'Minutes of Tuesday', fr: 'Compte rendu de mardi' },
   'demo2.mail.hello': { en: 'Hello Claire,', fr: 'Bonjour Claire,' },
-  'demo2.mail.before': { en: 'I am sending you the minutes of Tuesday’s meeting, as agree. I hope you will find them usefull and that the figures is clear.', fr: 'Je vous envoie le compte rendu de la réunion de mardi, comme convenue. J’espère qu’il vous sera utile et que les chiffre sont clair.' },
-  'demo2.mail.after': { en: 'I am sending you the minutes of Tuesday’s meeting, as agreed. I hope you will find them useful and that the figures are clear.', fr: 'Je vous envoie le compte rendu de la réunion de mardi, comme convenu. J’espère qu’il vous sera utile et que les chiffres sont clairs.' },
+  'demo2.mail.before': { en: 'I am sending you the minutes of Tuesday’s meeting, as agree. I hope you will find them usefull and that the figures is clear. Tell me if anything is missing: I will send them to the rest of the team tomorrow morning, with the appendices.', fr: 'Je vous envoie le compte rendu de la réunion de mardi, comme convenue. J’espère qu’il vous sera utile et que les chiffre sont clair. Dites-moi s’il manque quelque chose : je l’envoie au reste de l’équipe demain matin, avec les annexes.' },
+  'demo2.mail.after': { en: 'I am sending you the minutes of Tuesday’s meeting, as agreed. I hope you will find them useful and that the figures are clear. Tell me if anything is missing: I will send them to the rest of the team tomorrow morning, with the appendices.', fr: 'Je vous envoie le compte rendu de la réunion de mardi, comme convenu. J’espère qu’il vous sera utile et que les chiffres sont clairs. Dites-moi s’il manque quelque chose : je l’envoie au reste de l’équipe demain matin, avec les annexes.' },
   'demo2.mail.bye': { en: 'Have a nice day,', fr: 'Bonne journée,' },
   'demo2.mail.name': { en: 'Camille', fr: 'Camille' },
 } satisfies Record<string, Record<Language, string>>;

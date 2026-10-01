@@ -1,0 +1,187 @@
+/* The demo's stage (src/demo/Demo.tsx), ported from design-lab/reglages/src/demo/demo.css. Stage
+   pixels (900 × 740). The app's objects (the Îlot, the result pill, the indicator, the halo) wear
+   their own CSS (src/menu/ilot.css, src/result/result.css, src/loaders/loaders.css,
+   src/halo/halo.css): this file only styles what stands around them, the mail draft, the keycaps,
+   the pointer, the caption, the frieze of phases, the strip and the controls. */
+body.flowtranslate-setup:has(.dm-root) { background: transparent; }
+.dm-root {
+  position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden; font-family: var(--ft-font); color: var(--ft-text);
+  /* Windows' text selection, and the glow of the big pointer */
+  --dm-select: rgb(0 120 215 / .26);
+  --dm-glow: 64 132 255;
+  /* The plain application: neutral, not ours */
+  --dm-mail-bg: #fbfbfb; --dm-mail-bar: #f3f3f3; --dm-mail-line: rgb(0 0 0 / .08); --dm-mail-text: #1b1b1b; --dm-mail-text-2: #5f5f5f; --dm-mail-ink: 0 0 0;
+  /* The ground of the stage: the lab's wallpaper for « Porcelaine & lavande » */
+  --dm-wall-1: #D9D2FB; --dm-wall-2: #B7A8FF; --dm-wall-3: #F7F5FC; --dm-wall-4: #E9E4FA;
+}
+:root[data-theme="dark"] .dm-root {
+  --dm-select: rgb(76 158 255 / .4);
+  --dm-glow: 110 168 255;
+  --dm-mail-bg: #202020; --dm-mail-bar: #2b2b2b; --dm-mail-line: rgb(255 255 255 / .08); --dm-mail-text: #f0f0f0; --dm-mail-text-2: #a8a8a8; --dm-mail-ink: 255 255 255;
+  --dm-wall-1: #3A2C8A; --dm-wall-2: #1D1450; --dm-wall-3: #08070D; --dm-wall-4: #2A2150;
+}
+.dm-fit { position: relative; flex: none; overflow: hidden; border-radius: var(--ft-r-float); transform-origin: 50% 50%; box-shadow: inset 0 0 0 .5px rgb(var(--ft-ink-rgb) / .14); }
+.dm-scene { position: absolute; inset: 0; }
+.dm-root svg { display: block; flex: none; }
+.dm-root button { font: inherit; color: inherit; }
+/* Pause (and the strip unfolded): every loop of the scene stands still, the app's included. */
+.dm-root[data-paused] .dm-scene *, .dm-root[data-paused] .dm-scene *::before, .dm-root[data-paused] .dm-scene *::after { animation-play-state: paused !important; }
+/* Reduced motion: each still picture fades in (opacity only). */
+.dm-root[data-reduced] .dm-scene { animation: dm-fade 320ms cubic-bezier(.23, 1, .32, 1) both; }
+@keyframes dm-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ——— The ground ——— */
+.dm-wallpaper { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(160deg, var(--dm-wall-3) 0%, var(--dm-wall-4) 100%); }
+.dm-bloom { position: absolute; display: block; border-radius: 50%; filter: blur(70px); opacity: .9; }
+.dm-bloom.a { width: 900px; height: 620px; left: 60px; top: 200px; background: radial-gradient(closest-side, var(--dm-wall-2), transparent); }
+.dm-bloom.c { width: 520px; height: 420px; left: 520px; top: -80px; background: radial-gradient(closest-side, rgb(var(--ft-accent-rgb) / .3), transparent); }
+:root[data-theme="dark"] .dm-bloom { opacity: .8; }
+.dm-petals { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dm-petal { stroke: rgb(255 255 255 / .55); stroke-width: 1.5; opacity: .92; }
+:root[data-theme="dark"] .dm-petal { stroke: rgb(255 255 255 / .16); opacity: .85; }
+.dm-petal-heart { fill: var(--dm-wall-3); opacity: .5; }
+:root[data-theme="dark"] .dm-petal-heart { fill: var(--dm-wall-1); opacity: .6; }
+
+/* ——— Phase 0: « Tout est prêt » ——— */
+.dm-intro { position: absolute; left: 354px; top: 176px; z-index: 21; width: 380px; display: grid; justify-items: center; gap: 12px; padding: 34px 32px 30px; text-align: center; border-radius: var(--ft-r-float); transform: translate(-50%, 0); will-change: transform, opacity; }
+.dm-intro h2 { margin: 12px 0 0; font-family: var(--ft-font-display); font-size: 28px; font-weight: 600; letter-spacing: -.01em; }
+.dm-intro p { margin: 0; max-width: 300px; color: var(--ft-text-2); font-size: 14px; line-height: 1.45; }
+
+/* ——— The mail draft (a plain Windows 11 application) ——— */
+.dm-mail {
+  position: absolute; z-index: 2; display: flex; flex-direction: column; border-radius: 8px; transform-origin: 50% 60%;
+  background: var(--dm-mail-bg); color: var(--dm-mail-text);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / .12), 0 18px 48px rgb(0 0 0 / .22), 0 2px 8px rgb(0 0 0 / .1);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  animation: dm-mail-in 520ms cubic-bezier(.23, 1, .32, 1) both;
+}
+@keyframes dm-mail-in { from { opacity: 0; transform: translateY(10px) scale(.96); } }
+:root[data-theme="dark"] .dm-mail { box-shadow: 0 0 0 1px rgb(255 255 255 / .1), 0 18px 48px rgb(0 0 0 / .5); }
+.dm-mail-bar { flex: none; display: flex; align-items: center; height: 36px; padding-left: 14px; border-radius: 8px 8px 0 0; background: var(--dm-mail-bar); font-size: 12px; color: var(--dm-mail-text-2); gap: 12px; }
+.dm-mail-app { display: inline-flex; align-items: center; gap: 8px; color: var(--dm-mail-text); }
+.dm-mail-title { flex: 1; }
+.dm-mail-caps { display: flex; height: 100%; color: var(--dm-mail-text); }
+.dm-mail-caps > span { display: grid; place-items: center; width: 46px; height: 100%; }
+.dm-mail-tools { flex: none; display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 12px; border-bottom: 1px solid var(--dm-mail-line); }
+.dm-mail-send { display: inline-flex; align-items: center; gap: 7px; height: 30px; margin-right: 8px; padding: 0 12px; border-radius: 4px; font-size: 13px; background: rgb(var(--dm-mail-ink) / .07); }
+.dm-mail-tool { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 4px; color: var(--dm-mail-text-2); }
+.dm-mail-divider { width: 1px; height: 18px; margin: 0 6px; background: var(--dm-mail-line); }
+.dm-mail-field { flex: none; display: flex; align-items: center; gap: 12px; height: 40px; margin: 0 20px; border-bottom: 1px solid var(--dm-mail-line); font-size: 13px; }
+.dm-mail-field > span:first-child { width: 48px; color: var(--dm-mail-text-2); }
+.dm-mail-field strong { font-weight: 600; }
+.dm-chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; background: rgb(var(--dm-mail-ink) / .07); }
+/* The body is the text control (UI Automation's text box: the halo's box and aurora). */
+.dm-mail-body { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0; padding: 18px 20px; font-size: 15px; line-height: 1.6; }
+.dm-mail-body p { margin: 0; }
+.dm-mail-body > p:first-child { margin-bottom: 12px; }
+/* Room under the text for the result pill (8 px under its last line, 28 high): it never sits on
+   the closing line. */
+.dm-para { position: relative; margin: 0 0 44px; }
+.dm-new { position: absolute; left: 0; top: 0; right: 0; }
+/* Windows' selection (one band per line, behind the glyphs) and the caret. */
+.dm-mail-over { position: absolute; z-index: 0; width: 900px; height: 740px; pointer-events: none; }
+.dm-sel { position: absolute; display: block; background: var(--dm-select); }
+.dm-caret { position: absolute; z-index: 3; display: block; width: 1px; background: var(--dm-mail-text); }
+.dm-caret[data-blink] { animation: dm-blink 1060ms steps(1, end) infinite; }
+@keyframes dm-blink { 50% { opacity: 0; } }
+/* The changed words: the app's own ink on the page's own glyphs (.halo-lit, src/halo/halo.css).
+   The new text is drawn a second time exactly over itself, only the changed words visible; in
+   from 380 ms over 420 ms and out in 900 ms, as the halo's marks (halo.css). */
+.dm-lit { z-index: 2; pointer-events: none; }
+.dm-lit .dm-lit-plain { color: transparent; }
+.dm-lit[data-state="on"] { animation: dm-lit-in 420ms ease-out 380ms both; }
+.dm-lit[data-state="out"] { opacity: 0; transition: opacity 900ms ease-out; }
+@keyframes dm-lit-in { from { opacity: 0; } }
+.dm-root[data-reduced] .dm-lit { animation: none; transition: none; }
+
+/* ——— The shortcut: big keycaps under the window, lit one after the other ——— */
+.dm-hud { position: absolute; z-index: 6; display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: 26px; will-change: transform, opacity; }
+.dm-hud-item { display: inline-flex; align-items: center; gap: 14px; }
+.dm-plus { font-size: 20px; color: var(--ft-text-2); }
+.dm-key { position: relative; display: grid; min-width: 72px; height: 64px; border-radius: 14px; will-change: transform; }
+.dm-key[data-wide] { min-width: 172px; }
+.dm-key > span { grid-area: 1 / 1; display: grid; place-items: center; border-radius: inherit; padding: 0 20px; font-size: 20px; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+.dm-key-face { color: var(--ft-key-text); background: var(--ft-key-bg); box-shadow: var(--ft-key-shadow), 0 2px 0 rgb(var(--ft-ink-rgb) / .12); }
+.dm-key-lit { color: var(--ft-on-accent); background: var(--ft-accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / .25), 0 6px 18px rgb(var(--ft-accent-rgb) / .45); }
+.dm-key-flash { box-shadow: 0 0 0 3px rgb(var(--ft-accent-rgb) / .6); pointer-events: none; }
+
+/* ——— The app's objects: the halo and the Îlot's corner, in the stage's pixels ——— */
+/* The app's halo is a window of its own (position: fixed): here its containing block is the stage. */
+.dm-halo { position: absolute; inset: 0; z-index: 8; pointer-events: none; contain: layout; }
+.dm-halo .halo { position: absolute; }
+/* A layer of its own above the halo's: inside it, the halo's layer would be the backdrop root
+   and the Îlot's glass would not see the mail behind it. */
+.dm-ilot { position: absolute; inset: 0; z-index: 9; pointer-events: none; }
+.dm-ilot .ilot-corner { will-change: transform; }
+/* What floats is REAL glass (Lucas, 30/09): the text behind the Îlot and the result pill is
+   blurred, never readable through it. The tint and the blur are the app's own (src/theme.css,
+   data-backdrop="glass", set on <html> by the demo while it shows). */
+/* The pointer of the demo is not the mouse: :hover never applies under it. These two rules are
+   the app's own (src/menu/ilot.css `.ilot-btn:hover`, src/result/result.css `.result-btn:hover`),
+   checked against them by src/demo/demo.test.ts. */
+.dm-ilot .ilot-btn[data-demo-hover] { background: rgb(var(--ink-rgb) / .08); color: rgb(var(--ink-rgb)); }
+.dm-ilot .result-btn[data-demo-hover] { background: rgb(var(--ink-rgb) / .13); }
+
+/* ——— The big pointer: the arrow, and a glow that follows its contour ——— */
+.dm-cursor { position: absolute; left: 0; top: 0; z-index: 20; width: 0; height: 0; pointer-events: none; will-change: transform, opacity; }
+.dm-cursor svg { position: absolute; overflow: visible; }
+/* The arrow's tip (1, 1) of its 13 × 17 shape is at (10, 10) in the 42 × 50 box: the click point. */
+.dm-arrow { left: -10px; top: -10px; transform-origin: 10px 10px; filter: drop-shadow(0 1.5px 2px rgb(0 0 0 / .28)); }
+/* The I-beam's centre (3.5, 7.5) is at (13, 21) in its 26 × 42 box. */
+.dm-ibeam { left: -13px; top: -21px; filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / .25)); }
+.dm-glow-flood { flood-color: rgb(var(--dm-glow)); flood-opacity: .95; }
+
+/* ——— The strip's ring ——— */
+.dm-ring-layer { position: absolute; inset: 0; z-index: 18; pointer-events: none; }
+.dm-ring { position: absolute; box-shadow: 0 0 0 2px var(--ft-accent), 0 0 0 7px rgb(var(--ft-accent-rgb) / .2); }
+
+/* ——— End card ——— */
+.dm-end { position: absolute; left: 164px; top: 184px; z-index: 22; width: 380px; display: grid; justify-items: center; gap: 10px; padding: 28px 28px 24px; text-align: center; border-radius: var(--ft-r-float); color: var(--ft-text); }
+.dm-end h2 { margin: 6px 0 0; font-family: var(--ft-font-display); font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
+.dm-end p { margin: 0; color: var(--ft-text-2); font-size: 14px; line-height: 1.45; max-width: 300px; }
+.dm-end-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+/* ——— The caption of the phase: « n / 7 · what happens » ——— */
+.dm-caption-wrap { position: absolute; left: 24px; width: 660px; top: 44px; height: 34px; z-index: 32; display: flex; justify-content: center; pointer-events: none; }
+.dm-caption { display: inline-flex; align-items: center; gap: 10px; height: 34px; padding: 0 16px 0 5px; border-radius: 17px; font-size: 13.5px; white-space: nowrap; color: var(--ft-text); }
+.dm-caption-n { display: inline-flex; align-items: baseline; justify-content: center; gap: 3px; height: 24px; min-width: 46px; padding: 0 9px; border-radius: 12px; line-height: 24px; font-variant-numeric: tabular-nums; background: var(--ft-accent); color: var(--ft-on-accent); }
+.dm-caption-n b { font-size: 13px; font-weight: 700; }
+.dm-caption-n i { font-style: normal; font-size: 11px; opacity: .78; }
+
+/* ——— The strip on the right: 56 visible, unfolds to 316 (the panel slides, transform only) ——— */
+.dm-rail-clip { position: absolute; z-index: 35; overflow: hidden; border-radius: var(--ft-r-float); pointer-events: none; }
+.dm-rail { position: absolute; inset: 0; pointer-events: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: var(--ft-r-float); color: var(--ft-text); will-change: transform; }
+.dm-rail-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.dm-rail-head, .dm-rail-item { appearance: none; display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 0; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default; }
+.dm-rail-head { align-items: center; padding-bottom: 6px; margin-bottom: 4px; box-shadow: 0 1px 0 rgb(var(--ft-ink-rgb) / .08); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.dm-rail-item { min-height: 40px; transition: background-color 120ms ease; }
+.dm-rail[data-open] .dm-rail-item:hover, .dm-rail-item[data-active] { background: rgb(var(--ft-ink-rgb) / .07); }
+.dm-rail-head:focus-visible, .dm-rail-item:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: -2px; }
+.dm-rail-icon { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: var(--ft-text-2); }
+.dm-rail-icon[data-ft-page] { color: var(--ft-page, var(--ft-accent-text)); }
+.dm-rail-head-text, .dm-rail-text { display: grid; gap: 1px; min-width: 0; padding: 6px 8px 6px 0; opacity: 0; transition: opacity 160ms ease; }
+.dm-rail-head-text { padding: 0 8px 0 0; }
+.dm-rail[data-open] .dm-rail-head-text, .dm-rail[data-open] .dm-rail-text { opacity: 1; transition-delay: 60ms; }
+.dm-rail-head-text strong { font-size: 13px; font-weight: 600; }
+.dm-rail-head-text small { font-size: 11.5px; color: var(--ft-text-3); }
+.dm-rail-text strong { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.dm-rail-text span { font-size: 12px; line-height: 1.35; color: var(--ft-text-2); }
+.dm-rail-text small { font-size: 11px; color: var(--ft-page-text, var(--ft-accent-text)); display: none; }
+.dm-rail-item[data-active] .dm-rail-text small { display: block; }
+
+/* ——— Controls, with the frieze of the seven phases ——— */
+.dm-controls { position: absolute; left: 50%; top: 662px; z-index: 40; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 52px; padding: 0 8px; border-radius: 26px; color: var(--ft-text); white-space: nowrap; }
+.dm-ctl { appearance: none; flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: default; transition: background-color 120ms ease; }
+.dm-ctl:hover { background: rgb(var(--ft-ink-rgb) / .08); }
+.dm-ctl:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 1px; }
+.dm-skip { display: inline-flex; align-items: center; gap: 6px; width: auto; padding: 0 14px; border-radius: 17px; font-size: 12.5px; }
+.dm-reduced-note { padding: 0 8px 0 2px; font-size: 11.5px; color: var(--ft-text-3); }
+.dm-phases { display: grid; grid-auto-flow: column; grid-auto-columns: 64px; gap: 4px; margin: 0 4px; padding: 0; list-style: none; }
+.dm-phase { display: grid; gap: 5px; align-content: center; min-width: 0; }
+.dm-phase-bar { display: block; height: 5px; overflow: hidden; border-radius: 3px; background: rgb(var(--ft-ink-rgb) / .13); }
+.dm-phase-bar i { display: block; height: 100%; border-radius: 3px; background: var(--ft-accent); transform-origin: 0 50%; will-change: transform; }
+.dm-phase-name { display: flex; align-items: baseline; gap: 4px; min-width: 0; overflow: hidden; font-size: 10.5px; line-height: 1.2; color: var(--ft-text-3); transition: color 200ms ease; }
+.dm-phase-name b { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dm-phase[data-state="done"] .dm-phase-name { color: var(--ft-text-2); }
+.dm-phase[data-state="current"] .dm-phase-name { color: var(--ft-accent-text); font-weight: 600; }
+.dm-phase[data-state="current"] .dm-phase-bar { box-shadow: 0 0 0 1.5px rgb(var(--ft-accent-rgb) / .35); }

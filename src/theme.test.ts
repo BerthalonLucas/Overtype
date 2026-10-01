@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import css from './theme.css?raw';
-import labData from '../design-lab/src/data.js?raw';
 
 // The tokens as the browser resolves them: the light block on :root, the dark block over it.
 type Tokens = Record<string, string>;
@@ -80,20 +79,25 @@ describe('theme tokens', () => {
     });
   }
 
-  // The lab decides (design-lab/src/data.js): the material is its materialVars() of the
-  // « opaque-light » preset, and of « dark-glass » at the phase A opacity (.86) in dark.
-  it('paints the lab material: opaque-light, and dark-glass at the phase A opacity', () => {
-    const preset = (name: string) => new Function(`return (${labData.match(new RegExp(`'${name}': (\\{[^}]*\\})`))![1]})`)() as Record<string, unknown>;
-    const source = labData.slice(labData.indexOf('export function materialVars(m) {') + 'export function materialVars(m) {'.length, labData.indexOf('\n}\n', labData.indexOf('export function materialVars')));
-    const materialVars = new Function('m', source) as (m: Record<string, unknown>) => Record<string, string>;
-    const numbers = (value: string) => value.replace(/-?\d*\.?\d+/g, n => String(+(+n).toFixed(4))).replace(/\s+/g, ' ').trim();
-    const cases = [[themes.light, materialVars(preset('opaque-light'))], [themes.dark, materialVars({ ...preset('dark-glass'), bgAlpha: 0.86 })]] as const;
-    for (const [tokens, lab] of cases) {
-      expect(numbers(resolve(tokens, 'var(--surface-bg)'))).toBe(numbers(lab['--s-bg']));
-      expect(numbers(resolve(tokens, 'var(--surface-rim)'))).toBe(numbers(lab['--s-rim']));
-      expect(numbers(resolve(tokens, 'var(--surface-shadow)'))).toBe(numbers(lab['--s-shadow']));
-      expect(numbers(resolve(tokens, 'var(--surface-sheen)'))).toBe(numbers(lab['--s-sheen']));
+  // 0.6: the painted material is the fallback of the real glass. It follows the lab's floating
+  // material (design-lab/reglages/src/tokens/tokens.css:80-86 and 135-138; vitest empties the
+  // CSS it does not process, so its values are written here): its grain, its luminous rim over
+  // a .5 px edge, and the real glass's own tint and blur; dense enough that nothing behind it
+  // shows through sharp without a blur (the lab's .55 and .5 need one).
+  it('paints the fallback of the lab\'s floating glass: dense, grained, with its luminous rim', () => {
+    const lab = {
+      light: { rim: 'inset 0 0 0 .5px rgb(255 255 255 / .5), inset 0 1px 0 rgb(255 255 255 / .65)', edge: '0 0 0 .5px rgb(0 0 0 / .14)', tint: 'rgb(255 255 255 / .55)', blur: 'blur(28px) saturate(1.9)' },
+      dark: { rim: 'inset 0 0 0 .5px rgb(255 255 255 / .14), inset 0 1px 0 rgb(255 255 255 / .12)', edge: '0 0 0 .5px rgb(0 0 0 / .5)', tint: 'rgb(19 18 25 / .5)', blur: 'blur(28px) saturate(1.6)' },
+    };
+    for (const theme of ['light', 'dark'] as const) {
+      const tokens = themes[theme];
+      expect(resolve(tokens, 'var(--surface-rim)')).toBe(`${lab[theme].rim}, ${lab[theme].edge}`);
+      expect(resolve(tokens, 'var(--surface-bg)')).toBe(`${tokens['--surface-grain']}, ${tokens['--surface-fill']}`);
+      expect(tokens['--surface-grain']).toContain('feTurbulence');
+      expect(color(tokens['--surface-fill']).a).toBeGreaterThanOrEqual(0.9);
+      expect([tokens['--glass-tint'], tokens['--glass-blur']]).toEqual([lab[theme].tint, lab[theme].blur]);
     }
+    expect(css).toMatch(/:root\[data-backdrop="glass"\][^{]*\.ilot-shape[^{]*\{[^}]*var\(--glass-tint\)[^}]*backdrop-filter: var\(--glass-blur\)/);
     expect([light['--ink-rgb'], darkChoice['--ink-rgb']]).toEqual(['29 29 31', '245 246 248']);
   });
 });

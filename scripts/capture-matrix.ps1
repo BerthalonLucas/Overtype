@@ -33,6 +33,8 @@ try {
     $env:FLOWTRANSLATE_DATA_DIR = $DataDirectory
     # The notice then names the capture step that gave up (no text is ever included).
     $env:FLOWTRANSLATE_CAPTURE_TRACE = '1'
+    # 0.6: a fresh data folder would open the first-run setup over the applications under test.
+    $env:FLOWTRANSLATE_SKIP_SETUP = '1'
     $testProcess = Start-Process -FilePath $resolvedExe -ArgumentList '--simulate-inference' -WindowStyle Hidden -PassThru
     # The probe inspects the HWNDs of this process only (scripts/inspect-native-windows.ps1).
     $env:FLOWTRANSLATE_TEST_PID = "$($testProcess.Id)"
@@ -52,4 +54,5 @@ try {
     $env:FLOWTRANSLATE_DATA_DIR = $previousDataDir
     Remove-Item Env:FLOWTRANSLATE_TEST_PID -ErrorAction SilentlyContinue
     Remove-Item Env:FLOWTRANSLATE_CAPTURE_TRACE -ErrorAction SilentlyContinue
+    Remove-Item Env:FLOWTRANSLATE_SKIP_SETUP -ErrorAction SilentlyContinue
 }

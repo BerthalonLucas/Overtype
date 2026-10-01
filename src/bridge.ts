@@ -2,6 +2,7 @@ import { defaultActionId, defaultActions, defaultBindings, defaultMenuActionIds,
 import { resetFrom } from './settings/reset';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen } from '@tauri-apps/api/event';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { connectionCommand, isConnectionCommand, mockModels, normalizeEndpoint, setConnScenario, type ConnScenario } from './bridge.mock';
 import type { Capture, ConnectionStatus, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, ModelInfo, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
 
@@ -138,8 +139,12 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   return undefined as T;
 }
 
+// A window hears what Rust sends to it (`emit_to(<its label>)`) and what Rust sends to everyone
+// (`emit`), nothing else. Tauri's plain `listen` hears every window's events: the overlay would
+// receive the settings with their API keys meant for the Settings window, and the Settings
+// window the keyless copy meant for the overlay (which it could then save back, losing the keys).
 async function event<T>(name: EventName, handler: Handler<T>): Promise<Unlisten> {
-  if (native) return tauriListen<T>(name, e => handler(e.payload));
+  if (native) return tauriListen<T>(name, e => handler(e.payload), { target: { kind: 'WebviewWindow', label: getCurrentWebviewWindow().label } });
   const set = demoListeners.get(name) ?? new Set();
   set.add(handler as (payload: never) => void); demoListeners.set(name, set);
   return () => set.delete(handler as (payload: never) => void);

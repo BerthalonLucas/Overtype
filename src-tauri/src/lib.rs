@@ -417,7 +417,8 @@ fn current_shortcut_statuses(state: &AppState) -> Result<Vec<ShortcutStatus>, St
 }
 fn emit_shortcut_statuses(app: &AppHandle) {
     if let Ok(statuses) = current_shortcut_statuses(&app.state::<AppState>()) {
-        let _ = app.emit_to("settings", "shortcut-status", statuses);
+        // The Settings, and the setup while it records the shortcut (each window hears its own events only).
+        for label in KEYED { let _ = app.emit_to(label, "shortcut-status", &statuses); }
     }
 }
 /// The state of every binding: the settings window asks at load and follows the
@@ -1643,6 +1644,21 @@ fn backdrop_script(glass: bool) -> String {
     let value = if glass { "glass" } else { "opaque" };
     format!("(function(){{var set=function(){{if(document.documentElement)document.documentElement.setAttribute('data-backdrop','{value}');}};set();document.addEventListener('DOMContentLoaded',set);}})();")
 }
+/// Test runs only (the WebView2 probe sets FLOWTRANSLATE_CDP_URL, as for `override_cursor`):
+/// the pages can be inspected over the DevTools protocol on that port. WebView2 no longer reads
+/// the arguments of the environment once an application gives its own, so the port is given
+/// here, beside the arguments Tauri gives by default; every window of the process gets the same
+/// (WebView2 refuses a second environment with other arguments).
+fn inspection_arguments(cdp_url: Option<&str>) -> Option<String> {
+    let port = url::Url::parse(cdp_url?).ok()?.port()?;
+    Some(format!("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port={port}"))
+}
+fn inspectable<'a, M: Manager<tauri::Wry>>(builder: tauri::WebviewWindowBuilder<'a, tauri::Wry, M>) -> tauri::WebviewWindowBuilder<'a, tauri::Wry, M> {
+    match inspection_arguments(std::env::var("FLOWTRANSLATE_CDP_URL").ok().as_deref()) {
+        Some(arguments) => builder.additional_browser_args(&arguments),
+        None => builder,
+    }
+}
 /// Creates or shows the setup. Created on demand and destroyed when closed: no extra WebView
 /// lives on after the first run. `replay` (« Revoir l'accueil ») only tells the page.
 /// Never called from the main thread's event handlers (see `open_front_door`).
@@ -1662,7 +1678,7 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
     // (the real glass of docs/VERRE-0.6.md replaces it when it lands); an opaque page otherwise.
     let glass = backdrop::fallback(backdrop::conditions()).is_none();
     let url = if replay { "/?window=setup&replay=1" } else { "/?window=setup" };
-    let mut builder = tauri::WebviewWindowBuilder::new(app, "setup", tauri::WebviewUrl::App(url.into()))
+    let mut builder = inspectable(tauri::WebviewWindowBuilder::new(app, "setup", tauri::WebviewUrl::App(url.into())))
         .title(brand::APP_NAME)
         .inner_size(width, height)
         .resizable(false)
@@ -1742,7 +1758,7 @@ async fn open_demo(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), S
     }
     let (work, scale) = host::monitor(None);
     let (width, height) = panel_size(DEMO_SIZE, work, scale);
-    let built = tauri::WebviewWindowBuilder::new(&app, "demo", tauri::WebviewUrl::App("/?window=setup&stage=demo".into()))
+    let built = inspectable(tauri::WebviewWindowBuilder::new(&app, "demo", tauri::WebviewUrl::App("/?window=setup&stage=demo".into())))
         .title(brand::APP_NAME)
         .inner_size(width, height)
         .resizable(false)
@@ -2735,7 +2751,7 @@ pub fn run() {
             // Commands may arrive as soon as the WebView loads. State must exist first.
             // No browser accelerators in our pages (F5 reloads the overlay under the capture).
             for config in app.config().app.windows.clone() {
-                let window = tauri::WebviewWindowBuilder::from_config(app, &config)?.build()?;
+                let window = inspectable(tauri::WebviewWindowBuilder::from_config(app, &config)?).build()?;
                 browser_keys::disable(&window);
             }
             use tauri::tray::TrayIconBuilder;
@@ -3177,6 +3193,24 @@ mod tests {
         for page in ["", "Server", "serveur", "../x"] { assert!(!settings_page(page), "{page}"); }
         let focus = serde_json::to_value(SettingsFocus { field: Some("s1.model".into()), page: None }).unwrap();
         assert_eq!(focus, serde_json::json!({ "field": "s1.model" }));
+    }
+    #[test]
+    fn the_pages_are_inspectable_in_a_probe_run_only_and_a_panel_fits_its_screen() {
+        assert_eq!(inspection_arguments(None), None);
+        assert_eq!(inspection_arguments(Some("pas une adresse")), None);
+        assert_eq!(inspection_arguments(Some("http://127.0.0.1")), None, "no port named: nothing opened");
+        assert_eq!(inspection_arguments(Some("http://127.0.0.1:9227")).as_deref(), Some("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9227"));
+        // The setup at its size on a full HD screen; reduced to the work area of a small one
+        // (logical pixels, a margin kept), at 150 % too; never smaller than its page scrolls in.
+        let work = |width: f64, height: f64| Rect { x: 0., y: 0., width, height };
+        assert_eq!(panel_size(SETUP_SIZE, work(1920., 1040.), 1.), (620., 720.));
+        assert_eq!(panel_size(SETUP_SIZE, work(1366., 728.), 1.), (620., 696.));
+        assert_eq!(panel_size(SETUP_SIZE, work(1920., 1040.), 1.5), (620., 661.));
+        assert_eq!(panel_size(DEMO_SIZE, work(1280., 680.), 1.), (900., 648.));
+        assert_eq!(panel_size(DEMO_SIZE, work(800., 600.), 1.), (768., 568.));
+        assert_eq!(panel_size(SETUP_SIZE, work(300., 200.), 1.), (360., 320.));
+        assert_eq!(panel_size(SETUP_SIZE, work(1920., 1040.), f64::NAN), (620., 720.));
+        assert!(backdrop_script(true).contains("'data-backdrop','glass'") && backdrop_script(false).contains("'data-backdrop','opaque'"));
     }
     #[test]
     fn only_the_windows_that_edit_the_connection_see_a_key() {

@@ -78,6 +78,9 @@ export type IlotProps = {
 };
 
 export type { IlotAction, IlotMode } from './keys';
+// The Îlot is driven by its props only (no native bridge): `IlotView` is the name the demo
+// imports it under (docs/PLAN-0.6.md §4.2).
+export { Ilot as IlotView };
 
 // The instruction as sent: no NUL, no surrounding blanks, at most 1000 characters (plan lot 7).
 export function cleanInstruction(text: string): string {

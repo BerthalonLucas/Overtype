@@ -1,7 +1,8 @@
 /* The halo window (lot 6, « mise en valeur », Lucas 25/09): a transparent page the size of what
    it draws plus its glow, never hit. Every value comes from design-lab/mise-en-valeur.html
    with Lucas's choice: menu = text box + lines + exact text (tint), work = reflection on the
-   letters + aurora + lines, arrival = wave of light, changed words = iridescent glow. */
+   letters + aurora + lines, arrival = wave of light. The changed words are 0.6's (Lucas, 30/09,
+   design-lab/reglages/src/demo/demo.css:66-87): the text itself lit, never a box. */
 body.flowtranslate-halo { min-height: 0; overflow: hidden; background: transparent; }
 .halo { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 150ms ease-out; }
 .halo[data-state="shown"] { opacity: 1; }
@@ -11,15 +12,27 @@ body.flowtranslate-halo { min-height: 0; overflow: hidden; background: transpare
 /* The colours, from the ground read under the text (`data-tone`), else from the app's theme.
    The reflection is a veil of the ground's own colour (`--ground`) when Rust read it. Light:
    deeper iris hues (the pastels vanished on white, Lucas 25/09); dark: the pastels. */
-.halo, .halo[data-tone="light"] {
+.halo, .halo[data-tone="light"], .halo-lit {
   --hl: 141 159 255; --ai1: 141 159 255; --ai2: 188 130 243; --ai3: 255 103 120; --ai4: 255 186 113;
   --veil: var(--ground, 255 255 255); --a-tint: .24; --a-band: .08; --a-still: .24;
-  --ir1: 95 111 255; --ir2: 163 91 234; --ir3: 240 80 106; --ir4: 242 154 59; --a-iris: .30; --a-iris-glow: .32;
+  /* « Encre irisée »: the lab's deep inks and the glow that follows the glyphs. « Éclat »: one deep
+     ink, a tinted glow, a thin line. `--a-light`: the feathered light of a word without a mask. */
+  --encre1: 74 85 214; --encre2: 122 63 201; --encre3: 168 51 106;
+  --encre-glow: drop-shadow(0 0 2px rgb(120 100 255 / .35)) drop-shadow(0 0 8px rgb(150 110 255 / .35));
+  --encre-a-light: .3;
+  --eclat1: 13 20 64; --eclat-light: 95 111 255; --line1: 95 111 255; --line2: 163 91 234; --a-line: .75;
+  --eclat-glow: drop-shadow(0 0 1.5px rgb(95 111 255 / .55)) drop-shadow(0 0 7px rgb(95 111 255 / .45));
+  --eclat-a-light: .2;
 }
-:root[data-theme="dark"] .halo:not([data-tone]), .halo[data-tone="dark"] {
+:root[data-theme="dark"] :is(.halo:not([data-tone]), .halo-lit:not([data-tone])), .halo[data-tone="dark"], .halo-lit[data-tone="dark"] {
   --hl: 150 166 255; --ai1: 160 175 255; --ai2: 201 155 255; --ai3: 255 129 147; --ai4: 255 201 140;
   --veil: var(--ground, 30 31 34); --a-tint: .28; --a-band: .07; --a-still: .27;
-  --ir1: 160 175 255; --ir2: 201 155 255; --ir3: 255 129 147; --ir4: 255 201 140; --a-iris: .26; --a-iris-glow: .22;
+  --encre1: 174 188 255; --encre2: 213 182 255; --encre3: 245 163 181;
+  --encre-glow: drop-shadow(0 0 2.5px rgb(190 175 255 / .55)) drop-shadow(0 0 11px rgb(175 145 255 / .55));
+  --encre-a-light: .34;
+  --eclat1: 255 255 255; --eclat-light: 160 175 255; --line1: 160 175 255; --line2: 201 155 255; --a-line: .8;
+  --eclat-glow: drop-shadow(0 0 2px rgb(170 185 255 / .7)) drop-shadow(0 0 9px rgb(150 170 255 / .55));
+  --eclat-a-light: .24;
 }
 
 /* The menu: the three levels, still. */
@@ -65,15 +78,42 @@ body.flowtranslate-halo { min-height: 0; overflow: hidden; background: transpare
 .halo-marks[data-arrival="fade"] .halo-mark { animation: halo-mark-in 260ms ease-out both; }
 @keyframes halo-mark-in { from { opacity: 0; } }
 
-/* The changed words: an iridescent glow over the strip of the marks, held, then 900 ms out. */
-.halo-mark {
-  border-radius: 4px;
-  background-image: linear-gradient(90deg, rgb(var(--ir1) / var(--a-iris)), rgb(var(--ir2) / var(--a-iris)), rgb(var(--ir3) / var(--a-iris)), rgb(var(--ir4) / var(--a-iris)));
+/* The changed words (src/halo/ink.ts). The halo is a window over another application's text: it
+   cannot recolour those glyphs, it paints over them. `.is-ink`: Rust read the glyphs, the ink is
+   painted through their mask (--mask), one iris strip across the words (--total, --off), and the
+   glow follows the letters (drop-shadow of the masked ink). `.is-light`: no mask; a feathered
+   light around the word, blurred so that no edge, corner or outline can be told. `--ink1..3`
+   are written inline once the ground is known (made readable on it), else the lab's inks.
+   « Éclat »: one ink, and a thin line under the word that fades at both ends.
+   Held, then 900 ms out. */
+.halo-marks { --i1: var(--ink1, var(--encre1)); --i2: var(--ink2, var(--encre2)); --i3: var(--ink3, var(--encre3)); --glow: var(--encre-glow); --a-light: var(--encre-a-light); --l1: var(--encre1); --l2: var(--encre2); --l3: var(--encre3); }
+.halo-marks[data-style="eclat"] { --i1: var(--ink1, var(--eclat1)); --i2: var(--ink2, var(--eclat1)); --i3: var(--ink3, var(--eclat1)); --glow: var(--eclat-glow); --a-light: var(--eclat-a-light); --l1: var(--eclat-light); --l2: var(--eclat-light); --l3: var(--eclat-light); }
+.halo-mark i { position: absolute; }
+.halo-mark.is-ink { filter: var(--glow); }
+.halo-ink {
+  inset: 0;
+  background-image: linear-gradient(90deg, rgb(var(--i1)), rgb(var(--i2)) 55%, rgb(var(--i3)));
   background-size: var(--total) 100%;
   background-position: calc(-1 * var(--off)) 0;
   background-repeat: no-repeat;
-  box-shadow: 0 0 12px rgb(var(--ir2) / var(--a-iris-glow));
+  -webkit-mask: var(--mask) center / 100% 100% no-repeat;
+  mask: var(--mask) center / 100% 100% no-repeat;
 }
+.halo-light {
+  inset: 2px -3px;
+  border-radius: 999px;
+  background-image: linear-gradient(90deg, rgb(var(--l1) / var(--a-light)), rgb(var(--l2) / var(--a-light)) 55%, rgb(var(--l3) / var(--a-light)));
+  background-size: var(--total) 100%;
+  background-position: calc(-1 * var(--off)) 0;
+  filter: blur(6px);
+}
+.halo-line { left: 0; right: 0; bottom: 1px; height: 1.5px; border-radius: 1px; background: linear-gradient(90deg, rgb(var(--line1) / 0), rgb(var(--line1) / var(--a-line)) 25%, rgb(var(--line2) / var(--a-line)) 75%, rgb(var(--line2) / 0)); }
+
+/* The same inks on text of our own (the demo's mail, the preview in Settings): the page owns
+   these glyphs, so they take the ink themselves. data-style="eclat" for the other style,
+   data-tone for the ground when it is not the app's theme. */
+.halo-lit { color: rgb(var(--encre2)); background-image: linear-gradient(90deg, rgb(var(--encre1)), rgb(var(--encre2)) 55%, rgb(var(--encre3))); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; filter: var(--encre-glow); }
+.halo-lit[data-style="eclat"] { color: rgb(var(--eclat1)); background-image: linear-gradient(90deg, rgb(var(--line1) / 0), rgb(var(--line1) / var(--a-line)) 25%, rgb(var(--line2) / var(--a-line)) 75%, rgb(var(--line2) / 0)); background-size: 100% 1.5px; background-position: 0 calc(100% - 1px); background-repeat: no-repeat; -webkit-background-clip: border-box; background-clip: border-box; -webkit-text-fill-color: currentColor; filter: var(--eclat-glow); }
 .halo[data-phase="marks"] { transition: opacity 900ms ease-out; }
 .halo[data-phase="marks"][data-state="leaving"] { transition-timing-function: ease-out; }
 

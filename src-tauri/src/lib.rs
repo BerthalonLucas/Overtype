@@ -2103,9 +2103,20 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
         .shadow(true)
         .center()
         .focused(true)
+        .visible(false)
         .initialization_script(backdrop_script(glass));
     let window = builder.build().map_err(|_| "Ouverture de l’accueil impossible.".to_string())?;
     browser_keys::disable(&window);
+    // Off the screen until its page shows its first surface (`glass_frame`), a second and a
+    // half at most: no white rectangle, no empty frame (src/backdrop.rs `veil`).
+    // Created hidden, veiled, then shown: a veiled window is on no screen, yet its page runs.
+    let hwnd = host::handle(&window);
+    backdrop::veil(hwnd);
+    let _ = window.show().and_then(|_| window.set_focus());
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        backdrop::unveil(hwnd);
+    });
     let handle = app.clone();
     window.on_window_event(move |event| {
         if matches!(event, tauri::WindowEvent::Destroyed) {
@@ -2927,6 +2938,8 @@ fn glass_frame(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, Ap
     let hwnd = host::handle(&window);
     if hwnd == 0 { return false; }
     let (real, failure) = backdrop::frame(label, hwnd, seq, &shapes, scale, setting);
+    // The setup window waited for this, veiled: its page has a surface to show.
+    if label == "setup" && !shapes.is_empty() { backdrop::unveil(hwnd); }
     if let Some(cause) = failure {
         record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "glass.unavailable").cause(cause));
     }

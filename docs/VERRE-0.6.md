@@ -328,3 +328,32 @@ matière Acrylic ici (chroma 25 à 35), donc le flou de Windows *s'affiche* dans
   code).
 - Rien n'a été exécuté : c'est une recherche. La sonde de l'étape 1 tranche les points 🧪 en une
   demi-journée.
+
+## Ce qui a été construit (2 octobre 2026)
+
+Code : `src-tauri/src/backdrop.rs`, `src/glassBackdrop.ts`, commande `glass_frame`. Contrat : [BRIDGE.md](BRIDGE.md), « The real glass ».
+
+**Les trois points de la sonde (étape 1), tranchés dans la VM :**
+
+| Question | Réponse mesurée |
+|---|---|
+| Le pinceau reste-t-il vivant sur une fenêtre jamais activée ? | Oui, sans l'astuce `WM_NCACTIVATE`. |
+| `WS_EX_LAYERED \| WS_EX_TRANSPARENT` laisse-t-il passer les clics ? | Oui (clic reçu par la fenêtre du dessous). |
+| L'arbre de visuels peut-il vivre sur la fenêtre de l'overlay, sous la vue web ? | **Oui.** C'est ce qui est livré : plus de seconde fenêtre, donc ni ordre Z, ni cloak, ni verre orphelin possible. |
+
+**Deux écarts par rapport au plan ci-dessus, et pourquoi :**
+
+1. **Pas de fenêtre de fond.** Le verre est dessiné sur la fenêtre de l'overlay (et du setup) elle-même. Il bouge et disparaît avec elle.
+2. **Pas de courbe rejouée côté natif.** La page mesure ses surfaces à chaque image et envoie la liste ; Rust la recopie. Raison : une seule voie pour tous les mouvements (entrée, morph, glissement, fondu, sortie, interruption, pilules, bulle), sans rien changer aux ressorts de la page, et aucun état natif à tenir. Le décalage redouté se règle autrement :
+   - mesuré image par image (film `gdigrab` 60 i/s) : envoyé tout de suite, le flou avait **une image d'avance** sur la page et dépassait du liseré ;
+   - la forme est donc envoyée une image plus tard, et seulement la partie commune à deux images successives. Le flou ne dépasse plus jamais de la surface. Quand la forme rétrécit, ou si un message arrive en retard, une bande fine *à l'intérieur* du liseré a la teinte sans le flou pendant une image.
+
+**Vérifié dans la vraie fenêtre de la VM** (écran VMware SVGA 3D, 60 Hz, fond à bandes vives) : pilule (rayon 16), grille (rayon 16), pilule de travail, coche, avis d'erreur, fenêtre de setup ; clair et sombre ; 100 % et 150 % ; entrée, morph, rétrécissement, sortie image par image ; les cinq replis par injection ; « Effets de transparence » coupés puis remis **pendant** que l'Îlot est ouvert (bascule dans la seconde, dans les deux sens) ; raccourci martelé, Échap en plein morph, 25 cycles rapides : aucun verre resté à l'écran.
+
+**À vérifier par Lucas sur sa tour (GPU, écran rapide)** :
+
+- fluidité à 120 / 144 Hz, et que le flou ne dépasse toujours pas du liseré (l'avance d'une image a été mesurée à 60 Hz) ;
+- la bande « teinte sans flou » d'une image quand la forme rétrécit : visible ou non à l'œil ;
+- l'intensité du flou de Windows (non réglable) avec les teintes Porcelaine, clair et sombre, sur un vrai fond de travail ;
+- deux écrans à échelles différentes, HDR ;
+- économiseur d'énergie, bureau à distance et Windows 10 réels (ici : injection seulement).

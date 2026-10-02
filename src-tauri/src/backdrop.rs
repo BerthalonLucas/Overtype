@@ -203,6 +203,14 @@ pub fn hide(app: &AppHandle, label: &'static str) {
     let _ = app.run_on_main_thread(move || imp::clear(label));
 }
 
+/// Keeps a window that was just created off the screen until its page has something to show
+/// (`veil`), then lets it appear at once, without Windows' opening animation (`unveil`): shown
+/// as soon as created, the setup window was a white rectangle for four frames, then an empty
+/// frame with a shadow, before its page faded in (filmed). A cloaked window still counts as
+/// visible, so its page runs and draws meanwhile. Any thread.
+pub fn veil(hwnd: isize) { imp::cloak(hwnd, true); }
+pub fn unveil(hwnd: isize) { imp::cloak(hwnd, false); }
+
 /// The window is destroyed (the setup closes): its visual tree goes with it. Any thread.
 pub fn forget(app: &AppHandle, label: &'static str) {
     let _ = app.run_on_main_thread(move || imp::forget(label));
@@ -215,7 +223,7 @@ mod imp {
     use std::collections::HashMap;
     use windows::core::{s, w, Interface, PCWSTR};
     use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED, DWMWA_USE_HOSTBACKDROPBRUSH};
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_TRANSITIONS_FORCEDISABLED, DWMWA_USE_HOSTBACKDROPBRUSH};
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     use windows::Win32::System::Registry::{RegGetValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RRF_RT_REG_SZ};
     use windows::Win32::System::WinRT::Composition::ICompositorDesktopInterop;
@@ -372,6 +380,16 @@ mod imp {
         });
     }
 
+    pub fn cloak(hwnd: isize, on: bool) {
+        if hwnd == 0 { return; }
+        let window = HWND(hwnd as *mut _);
+        let (yes, value) = (1i32, i32::from(on));
+        unsafe {
+            let _ = DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &yes as *const i32 as *const _, std::mem::size_of::<i32>() as u32);
+            let _ = DwmSetWindowAttribute(window, DWMWA_CLOAK, &value as *const i32 as *const _, std::mem::size_of::<i32>() as u32);
+        }
+    }
+
     /// The window is gone (main thread).
     pub fn forget(label: &str) {
         GLASS.with(|glass| {
@@ -448,6 +466,7 @@ mod imp {
     use super::{Conditions, Pane};
     pub fn apply(_: &str, _: isize, _: u64, _: &[Pane]) -> Result<(), String> { Err("unsupported".into()) }
     pub fn clear(_: &str) {}
+    pub fn cloak(_: isize, _: bool) {}
     pub fn forget(_: &str) {}
     pub fn read() -> Conditions { Conditions { build: 0, transparency: false, energy_saver: false, high_contrast: false, remote: false } }
 }

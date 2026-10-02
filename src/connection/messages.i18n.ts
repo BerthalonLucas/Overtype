@@ -17,7 +17,6 @@ export const connectionMessages = {
   'conn.keyHint': { en: 'Kept by Windows, never written to the log.', fr: 'Gardée par Windows, jamais écrite dans le journal.' },
   'conn.keyNote': { en: 'Protected by Windows: encrypted for your account, never written to the log.', fr: 'Protégée par Windows : chiffrée pour votre compte, jamais écrite dans le journal.' },
   'conn.keyNone': { en: 'No key', fr: 'Aucune clé' },
-  'conn.keyInvalid': { en: 'A key holds no line break.', fr: 'Une clé ne contient pas de retour à la ligne.' },
   'conn.model': { en: 'Model', fr: 'Modèle' },
   'conn.modelChoose': { en: 'Choose a model', fr: 'Choisir un modèle' },
   'conn.modelNeedsKey': { en: 'Enter the API key first', fr: 'Renseignez d’abord la clé API' },

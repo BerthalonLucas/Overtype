@@ -553,7 +553,9 @@ impl Settings {
     pub fn server(&self, id: &str) -> Result<&Server, crate::error::AppError> {
         find_server(&self.servers, id)
     }
-    /// The default server (validation guarantees it exists; the first one otherwise).
+    /// The default server (validation guarantees it exists; the first one otherwise). Read by
+    /// the migration tests only: a request always names its server.
+    #[cfg(test)]
     pub fn default_server(&self) -> &Server {
         self.servers.iter().find(|server| server.id == self.default_server_id).unwrap_or(&self.servers[0])
     }
@@ -606,16 +608,6 @@ pub struct HistoryEntry {
     /// The host of the server that answered (empty for rows older than 0.6).
     pub server: String,
     pub created_at: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectionStatus {
-    pub connected: bool,
-    pub message: String,
-    /// When not connected (lot 10): which field to fix, or Try again.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code: Option<ErrorKind>,
 }
 
 #[derive(Clone, Debug, Serialize)]

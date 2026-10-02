@@ -67,8 +67,6 @@ export type Settings = { actions: ActionDefinition[]; shortcutBindings: Shortcut
 export type StreamEvent = { requestId: string; kind: 'delta' | 'done' | 'error'; text?: string; message?: string; code?: ErrorCode };
 // server: the host of the server that answered (empty for an entry older than 0.6).
 export type HistoryEntry = { id: string; sourceText: string; translatedText: string; actionName: string; server: string; createdAt: string };
-// The check of 0.5 (`check_connection`), kept until the Server page of 0.6 replaces it.
-export type ConnectionStatus = { connected: boolean; message: string; code?: ErrorCode };
 // serverId: one of the servers frozen at the capture; the first request must name the capture's (execution.serverId).
 export type TranslationRequest = { actionId: string; id: string; captureId: string; text: string; serverId: string };
 // What the session shows: the waiting pill, the short glass beside the selection, or the reader band.
@@ -102,7 +100,7 @@ export type ExecutionInfo = { actionId: string; actionName: string; outputMode: 
 // applied: the result was pasted over the selection (confirmed when the field read it back); fallback: it stays in the glass.
 export type ResultDelivery = { requestId: string; status: 'applied' | 'fallback'; confirmed: boolean; message: string; code?: ErrorCode; pastedRects?: Rect[]; undoable?: boolean };
 // Lot 10: what failed, beside the French message of 0.4 (translation error, result-delivery
-// fallback, capture-notice, target-invalidated, check_connection, the refusals of replace_result
+// fallback, capture-notice, target-invalidated, the refusals of replace_result
 // and undo_result). The one list of the codes Rust sends (error.rs, in its order);
 // src/result/errors.ts gives each its family, button and texts, and reads an unknown code as
 // 'internal'. Never any text of the server or of the user. settings_open (a shortcut pressed

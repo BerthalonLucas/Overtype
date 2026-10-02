@@ -29,7 +29,6 @@ let resultText = '';
 let currentCapture = capture('first');
 let heldCopy = false;
 let failSettings = new URLSearchParams(location.search).has('settingsError');
-let connected = false;
 let refuseShortcut = false;
 // Rust's refusal of the next `replace_result`: `{message, code}` (Refusal) since the review of
 // da-ilot, the French message for the 0.4 glass, the code for the Îlot.
@@ -196,7 +195,6 @@ mockIPC((command, args) => {
     return structuredClone(settings);
   }
   if (command === 'suggest_shortcut') return suggestion;
-  if (command === 'check_connection') return { connected, message: connected ? 'Modèle trouvé.' : 'Serveur indisponible.' };
   // 0.6: the connection commands answer from the simulated server of the preview (src/bridge.mock.ts),
   // its scenario chosen by `?conn=` or `nativeFixture.conn(id)`; steps and journal lines arrive as events.
   if (isConnectionCommand(command)) return connectionCommand(command, args, (name, payload: ProbeStepEvent | DiagEntry) => { void emit(name, payload); }, id => settings.servers.find(server => server.id === id));
@@ -267,7 +265,6 @@ mockWindows('overlay');
 Object.assign(window, { nativeFixture: {
   calls,
   recoverSettings: () => { failSettings = false; },
-  connect: () => { connected = true; },
   refuseShortcut: () => { refuseShortcut = true; },
   refuseReplace: (message: string | null = 'La fenêtre source a changé; remplacement refusé.', code: ErrorCode = 'target_changed') => { refuseReplace = message === null ? null : { message, code }; },
   // A failed request; lot 10 sends its code beside the French message (none: a 0.4 error).

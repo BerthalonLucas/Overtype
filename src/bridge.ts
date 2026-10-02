@@ -4,7 +4,7 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { connectionCommand, isConnectionCommand, mockModels, normalizeEndpoint, setConnScenario, type ConnScenario } from './bridge.mock';
-import type { Capture, ConnectionStatus, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, ModelInfo, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
+import type { Capture, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, ModelInfo, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
 
 type Unlisten = () => void;
 // 0.6: 'probe-step' (ProbeStepEvent, to the window that started the check), 'diagnostic' (DiagEntry,
@@ -80,7 +80,6 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
   if (name === 'capture_text') return structuredClone(demoCapture) as T;
   if (name === 'frontend_ready') return null as T;
-  if (name === 'check_connection') { await new Promise(resolve => window.setTimeout(resolve, 38)); return { connected: demoScenario !== 'error', message: demoScenario === 'error' ? 'Démo : serveur indisponible.' : 'Démo : connexion simulée.' } as T; }
   if (name === 'get_history') return structuredClone(demoHistory) as T;
   if (name === 'delete_history') { const id = args?.id as string | null; demoHistory = id === null ? [] : demoHistory.filter(item => item.id !== id); return undefined as T; }
   if (name === 'translate') {
@@ -167,6 +166,13 @@ export const bridge = {
   setSettingsTitle: async (title: string) => {
     if (native) { const { getCurrentWindow } = await import('@tauri-apps/api/window'); await getCurrentWindow().setTitle(title); }
     else document.title = title;
+  },
+  // Whether this window is really on screen. The Settings window is created hidden and can hold
+  // the focus while hidden (Windows gives it the foreground at launch): « focused » is not « shown ».
+  // An answer that cannot be had reads as shown, as before 0.6.
+  windowShown: async (): Promise<boolean> => {
+    if (!native) return true;
+    try { const { getCurrentWindow } = await import('@tauri-apps/api/window'); return await getCurrentWindow().isVisible(); } catch { return true; }
   },
   dragSettings: () => command<void>('drag_settings'),
   quit: () => command<void>('quit_app'),
@@ -255,9 +261,6 @@ export const bridge = {
   resize: (width: number, height: number, geometry: OverlayGeometry) => command<void>('resize_overlay', { width, height, ...geometry }),
   // The reading budget is spent: Rust frees Escape while the glass dims; an approach re-arms it.
   dimming: (dimming: boolean) => command<void>('overlay_dimming', { dimming }),
-  // The check of 0.5 on a SAVED server (the default one when none is named), kept until the
-  // Server page of 0.6 replaces it: prefer probeConnection.
-  checkConnection: (serverId?: string) => command<ConnectionStatus>('check_connection', serverId ? { serverId } : undefined),
   getHistory: () => command<HistoryEntry[]>('get_history'),
   deleteHistory: (id: string | null) => command<void>('delete_history', { id }),
   // The real glass (src/glassBackdrop.ts): the glass surfaces this page shows right now, for

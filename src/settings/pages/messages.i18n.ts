@@ -76,7 +76,6 @@ export const settingsPagesMessages = {
   'page.actions.countInvalid': { en: '1 to 8,000 characters.', fr: 'De 1 à 8 000 caractères.' },
   'page.actions.instructionNote': { en: 'Write the language you want in the instruction. The selected text is sent after it.', fr: 'Écrivez la langue voulue dans la consigne. Le texte sélectionné est envoyé après elle.' },
   'page.actions.limit': { en: '24 actions at most.', fr: 'Vingt-quatre actions au plus.' },
-  'page.actions.nameEmpty': { en: 'Give the action a name.', fr: 'Donnez un nom à l’action.' },
   // After replacing.
   'page.after.preview': { en: 'Preview after replacing', fr: 'Aperçu après remplacement' },
   'page.after.s1': { en: 'I ', fr: 'Je vous ' },

@@ -2735,54 +2735,6 @@ fn clear_diagnostics(window: tauri::WebviewWindow, state: State<'_, AppState>) -
     Ok(())
 }
 
-/// The check of 0.5 (« Check » of the old Settings page), kept until the new Server page
-/// replaces it: the saved server (the default one when none is named) goes through the probe
-/// of 0.6, and its saved model must be one the server lists.
-#[tauri::command]
-async fn check_connection(app: AppHandle, state: State<'_, AppState>, server_id: Option<String>) -> Result<ConnectionStatus, String> {
-    let server = {
-        let i = state.inner.lock().map_err(|_| lock_error())?;
-        match server_id { Some(id) => i.settings.server(&id).map_err(String::from)?.clone(), None => i.settings.default_server().clone() }
-    };
-    let journal = state.diagnostics.clone();
-    journal.remember_secret(&server.api_key);
-    let on_step = |_: &[probe::ProbeStep]| {};
-    let log_app = app.clone();
-    let log = move |diag: diagnostics::Diag| record(&log_app, diag).id;
-    let redact = move |text: &str| journal.redact(text);
-    let hooks = probe::Hooks { on_step: &on_step, log: &log, redact: &redact };
-    let run = format!("check-{}", Uuid::new_v4().simple());
-    let result = probe::probe(probe::ProbeInput { run, endpoint: server.endpoint.clone(), api_key: server.api_key.clone(), no_key: server.no_key }, probe::Limits::default(), None, CancellationToken::new(), &hooks).await;
-    let failure = match &result.problem {
-        None if result.models.iter().any(|model| model.id == server.model) => None,
-        None => Some((ErrorKind::ModelNotFound, format!("Le modèle {} n’est pas exposé par le serveur.", server.model))),
-        Some(problem) => Some(check_failure(problem)),
-    };
-    Ok(match failure {
-        None => ConnectionStatus { connected: true, message: "Connexion réussie.".into(), code: None },
-        Some((code, message)) => ConnectionStatus { connected: false, message, code: Some(code) },
-    })
-}
-/// A probe's cause as the code and the French message of the old check.
-fn check_failure(problem: &probe::ProbeProblem) -> (ErrorKind, String) {
-    use probe::ProbeCause as Cause;
-    let status = || problem.status.map_or_else(|| "Le serveur a refusé la demande.".to_string(), |status| format!("Le serveur a répondu HTTP {status}."));
-    match problem.cause {
-        Cause::AddressEmpty => (ErrorKind::BadEndpoint, "Aucun serveur n’est réglé.".into()),
-        Cause::AddressMalformed | Cause::AddressScheme | Cause::AddressCredentials => (ErrorKind::BadEndpoint, "L’adresse du serveur est invalide.".into()),
-        Cause::AddressDns => (ErrorKind::Unreachable, "Nom du serveur introuvable : vérifiez l’adresse ou le DNS de ce poste.".into()),
-        Cause::ReachRefused => (ErrorKind::Unreachable, "Serveur injoignable : rien n’écoute à cette adresse.".into()),
-        Cause::ReachTimeout => (ErrorKind::Timeout, "Le serveur ne répond pas.".into()),
-        Cause::ReachCertificate => (ErrorKind::Unreachable, "Certificat du serveur refusé par Windows : autorité inconnue de ce poste, nom ou dates.".into()),
-        Cause::ReachTls => (ErrorKind::Unreachable, "Connexion sécurisée impossible : vérifiez que ce serveur parle bien HTTPS.".into()),
-        Cause::ReachNetwork => (ErrorKind::Unreachable, "Serveur injoignable depuis ce poste : réseau ou pare-feu.".into()),
-        Cause::KeyRequired | Cause::KeyRejected => (ErrorKind::Unauthorized, status()),
-        Cause::ModelsNotFound | Cause::ModelsInvalid => (ErrorKind::BadEndpoint, "Réponse /v1/models invalide.".into()),
-        Cause::ModelsEmpty => (ErrorKind::ModelNotFound, "Aucun modèle n’est chargé sur ce serveur.".into()),
-        Cause::ModelsServer => (ErrorKind::ServerError, status()),
-        Cause::TryModel | Cause::TryRejected | Cause::TryServer | Cause::TryTimeout | Cause::TryEmpty | Cause::Cancelled => (ErrorKind::Internal, "Vérification interrompue.".into()),
-    }
-}
 #[tauri::command]
 fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
     state.history.list()
@@ -3329,7 +3281,6 @@ pub fn run() {
             drag_settings,
             quit_app,
             start_drag,
-            check_connection,
             probe_connection,
             cancel_probe,
             list_models,

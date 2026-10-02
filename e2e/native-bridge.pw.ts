@@ -304,8 +304,6 @@ test('IPC fixture: the check runs on the address as typed, and an unreadable add
   await expect.poll(async () => (await commands(page, 'probe_connection')).at(-1)?.args?.endpoint).toBe('https://inference.example.test/v1');
   expect((await commands(page, 'probe_connection')).length - before).toBe(1);
   await expect.poll(async () => ((await commands(page, 'save_settings')).at(-1)?.args?.settings as { servers: Array<{ endpoint: string }> } | undefined)?.servers[0].endpoint).toBe('https://inference.example.test/v1');
-  // The legacy command of 0.5 (check the saved profile) is never used by the Settings.
-  expect(await commands(page, 'check_connection')).toHaveLength(0);
   // An address that does not read: said under the field, no check, no save.
   const probes = (await commands(page, 'probe_connection')).length;
   const saves = (await commands(page, 'save_settings')).length;

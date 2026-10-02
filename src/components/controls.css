@@ -268,6 +268,8 @@
 .ft-field-problem { color: var(--ft-danger); }
 .ft-secret { position: relative; display: flex; align-items: center; }
 .ft-secret .ft-input { padding-right: 40px; }
+/* WebView2 adds its own eye to a focused password field: ours is the only one. */
+.ft-secret .ft-input::-ms-reveal, .ft-secret .ft-input::-ms-clear { display: none; }
 .ft-secret[data-shield] .ft-input { padding-right: 68px; }
 .ft-secret-tools { position: absolute; right: calc((var(--ft-control-h) - 28px) / 2); top: 0; bottom: 0; display: flex; align-items: center; gap: 0; }
 .ft-secret-shield { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--ft-ok); outline: none; }

@@ -23,6 +23,13 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
    grain stay ours); without it the page paints its own opaque ground. */
 .su-desk[data-native] .su-window { position: absolute; inset: 0; width: auto; height: auto; border-radius: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
 :root[data-backdrop="opaque"] .su-desk[data-native] .su-window, :root:not([data-backdrop]) .su-desk[data-native] .su-window { background: var(--ft-win-bg-solid); }
+/* The real frost shows whatever is behind, and this is a window one READS: under the lab's 50 %
+   tint a white page behind a dark theme (or a dark one behind a light theme) turns the ground
+   mid-grey and the small print disappears (seen in the real window, 02/10). Denser here than
+   on a pill, and the small print takes the secondary ink: 4.5:1 holds on white and on black. */
+:root[data-backdrop="glass"] .su-desk[data-native] .su-window { background: var(--ft-float-grain), rgb(var(--ft-surface-rgb) / .78); }
+:root[data-backdrop="glass"][data-theme="dark"] .su-desk[data-native] .su-window { background: var(--ft-float-grain), rgb(var(--ft-bg-rgb) / .78); }
+:root[data-backdrop="glass"] .su-desk[data-native] :is(.su-foot-note, .su-note:not([data-problem])) { color: var(--ft-text-2); }
 .su-window .ft-caption-btn:last-child { border-top-right-radius: var(--ft-r-float); }
 .su-desk[data-native] .ft-caption-btn:last-child { border-top-right-radius: 0; }
 

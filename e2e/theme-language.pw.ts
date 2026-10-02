@@ -106,7 +106,8 @@ test('the theme follows the system scheme live, and a forced theme wins over it'
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(html).toHaveAttribute('data-theme', 'dark');
   await expect(copy).toHaveCSS('color', 'rgb(245, 246, 248)');
-  await expect(page.locator('.translation-bubble')).toHaveCSS('background-color', 'rgba(28, 30, 34, 0.86)');
+  // The painted material of 0.6 (src/theme.css): an opaque Porcelaine tint, nothing shows through sharp.
+  await expect(page.locator('.translation-bubble')).toHaveCSS('background-color', 'rgb(24, 23, 31)');
   // Forced light while Windows is dark, then forced dark while Windows is light.
   await page.evaluate(() => (window as any).nativeFixture.settings({ theme: 'light' }));
   await expect(html).toHaveAttribute('data-theme', 'light');
@@ -144,8 +145,8 @@ for (const colorScheme of ['light', 'dark'] as const) for (const { name, query, 
     await expect(page.getByRole('menu')).toBeVisible();
     const surfaces = await Promise.all(['.translation-bubble', '.action-pill', '.more-menu'].map(paint));
     for (const surface of surfaces) expect(surface).toEqual(pill);
-    expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.08)');
-    if (colorScheme === 'dark') expect(pill.color).toBe('rgba(28, 30, 34, 0.86)');
+    expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.06)');
+    expect(pill.color).toBe(colorScheme === 'dark' ? 'rgb(24, 23, 31)' : 'rgb(250, 249, 253)');
     // Layout size, not the painted box: a surface still entering on its spring scales from .97.
     const icons = await page.locator('.glass-overlay svg.lucide').evaluateAll(nodes => nodes.map(node => ({ stroke: node.getAttribute('stroke-width'), width: parseFloat(getComputedStyle(node).width), height: parseFloat(getComputedStyle(node).height) })));
     expect(icons.length).toBeGreaterThanOrEqual(4);

@@ -24,11 +24,13 @@ export function pageFromLocation(search: string): PageId | null {
   return isPage(page) ? page : null;
 }
 
-// Ctrl+Shift+M toggles the Diagnostic page (« un truc que personne ne ferait »). The physical
-// key (code) is read, so AZERTY and QWERTY agree; Alt is left out (Ctrl+Alt is AltGr on many
-// layouts), and a held key does not flip it back and forth.
-export function isDiagnosticsChord(event: Pick<KeyboardEvent, 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey' | 'code' | 'repeat'>): boolean {
-  return event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && event.code === 'KeyM' && !event.repeat;
+// Ctrl+Shift+M toggles the Diagnostic page (« un truc que personne ne ferait »). The key that
+// WRITES « m » counts, wherever the layout puts it (on AZERTY it is not the physical KeyM), and
+// so does the physical KeyM (a layout without that letter; keys injected by a remote keyboard
+// carry no code at all). Alt is left out (Ctrl+Alt is AltGr on many layouts), and a held key
+// does not flip it back and forth.
+export function isDiagnosticsChord(event: Pick<KeyboardEvent, 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey' | 'code' | 'key' | 'repeat'>): boolean {
+  return event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && (event.key.toLowerCase() === 'm' || event.code === 'KeyM') && !event.repeat;
 }
 
 // Five clicks on the version, each within 700 ms of the previous one, reveal the Diagnostic too.

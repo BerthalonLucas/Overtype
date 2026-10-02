@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { messageKeys } from '../i18n';
 import { allPages, clickRun, isDiagnosticsChord, loadDiagnosticsShown, pageAbout, pageFromLocation, pageOr, pageTitle, saveDiagnosticsShown, secretClicks, secretGapMs, visiblePages } from './nav';
 
-const chord = (over: Partial<Parameters<typeof isDiagnosticsChord>[0]> = {}) => ({ ctrlKey: true, shiftKey: true, altKey: false, metaKey: false, code: 'KeyM', repeat: false, ...over });
+const chord = (over: Partial<Parameters<typeof isDiagnosticsChord>[0]> = {}) => ({ ctrlKey: true, shiftKey: true, altKey: false, metaKey: false, code: 'KeyM', key: 'M', repeat: false, ...over });
 
 describe('the pages of the Settings window', () => {
   afterEach(() => saveDiagnosticsShown(false));
@@ -27,7 +27,11 @@ describe('the pages of the Settings window', () => {
   it('takes Ctrl+Shift+M by its physical key, never with Alt or Windows, never from a held key', () => {
     expect(isDiagnosticsChord(chord())).toBe(true);
     // AZERTY and QWERTY agree: the code is read, whatever character the layout gives.
-    expect(isDiagnosticsChord(chord({ code: 'KeyD' }))).toBe(false);
+    expect(isDiagnosticsChord(chord({ code: 'KeyD', key: 'D' }))).toBe(false);
+    // AZERTY: the key labelled M is the physical Semicolon. A remote keyboard sends no code.
+    expect(isDiagnosticsChord(chord({ code: 'Semicolon', key: 'M' }))).toBe(true);
+    expect(isDiagnosticsChord(chord({ code: '', key: 'm' }))).toBe(true);
+    expect(isDiagnosticsChord(chord({ code: 'KeyM', key: '?' }))).toBe(true);
     expect(isDiagnosticsChord(chord({ ctrlKey: false }))).toBe(false);
     expect(isDiagnosticsChord(chord({ shiftKey: false }))).toBe(false);
     expect(isDiagnosticsChord(chord({ altKey: true }))).toBe(false);

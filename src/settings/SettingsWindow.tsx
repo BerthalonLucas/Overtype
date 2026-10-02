@@ -70,16 +70,23 @@ function SaveState({ status, onRetry }: { status: SaveStatus; onRetry: () => voi
   </span>;
 }
 
-// Whether the window has been in front at least once. It is created hidden when the app starts
-// and stays alive: nothing is checked on the network before the person actually opens it.
+// Whether the window has been shown in front at least once. It is created hidden when the app
+// starts and stays alive: nothing is checked on the network before the person actually opens it.
+// A hidden window can be focused (Windows hands it the foreground at launch), so a focus only
+// counts once the window is really on screen; a click in it always does.
 function useOpened(): boolean {
-  const [opened, setOpened] = useState(() => document.hasFocus());
+  const [opened, setOpened] = useState(false);
   useEffect(() => {
+    let live = true;
+    let retry = 0;
     const open = () => setOpened(true);
-    window.addEventListener('focus', open);
+    const check = () => { void bridge.windowShown().then(shown => { if (live && shown) open(); }); };
+    // Shown and focused arrive in either order: asked at once, and once more a moment later.
+    const focused = () => { check(); window.clearTimeout(retry); retry = window.setTimeout(check, 400); };
+    window.addEventListener('focus', focused);
     window.addEventListener('pointerdown', open);
-    if (document.hasFocus()) open();
-    return () => { window.removeEventListener('focus', open); window.removeEventListener('pointerdown', open); };
+    if (document.hasFocus()) focused();
+    return () => { live = false; window.clearTimeout(retry); window.removeEventListener('focus', focused); window.removeEventListener('pointerdown', open); };
   }, []);
   return opened;
 }
@@ -151,7 +158,8 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
   const probesRef = useRef(probes);
   probesRef.current = probes;
   useEffect(() => {
-    const refresh = () => { for (const probe of Object.values(probesRef.current)) if (probe.ready && probe.status !== 'running' && Date.now() - probe.at > staleCheckMs) probe.start(); };
+    // Only a window really on screen checks: a hidden one can be handed the focus too.
+    const refresh = () => { void bridge.windowShown().then(shown => { if (!shown) return; for (const probe of Object.values(probesRef.current)) if (probe.ready && probe.status !== 'running' && Date.now() - probe.at > staleCheckMs) probe.start(); }); };
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, []);

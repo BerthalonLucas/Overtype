@@ -714,33 +714,50 @@ pub async fn try_model(input: TryInput, limits: Limits, cancel: CancellationToke
         Ok(client) => client,
         Err(message) => return failed(ProbeCause::ReachNetwork, None, Some(message), None, Some(&url)),
     };
-    let body = json!({ "model": model, "messages": [{ "role": "user", "content": TRY_SENTENCE }], "max_tokens": 60, "temperature": 0, "stream": false });
-    let mut request = client.post(&url).json(&body);
-    if !key.is_empty() { request = request.bearer_auth(&key); }
-    let started = Instant::now();
-    let response = tokio::select! {
-        _ = cancel.cancelled() => return failed(ProbeCause::Cancelled, None, None, None, None),
-        response = request.send() => response,
-    };
-    let response = match response {
-        Ok(response) => response,
-        Err(error) => {
-            let error = error.without_url();
-            // Connected, then silence: the model is too slow (or still loading), not the network.
-            let cause = if error.is_timeout() && !error.is_connect() { ProbeCause::TryTimeout } else if error.is_timeout() { ProbeCause::ReachTimeout } else { ProbeCause::of_transport(inference::cause(&error)) };
-            return failed(cause, None, Some(technical(&error)), Some(elapsed_ms(started)), Some(&url));
-        }
-    };
-    let status = response.status().as_u16();
-    if !response.status().is_success() {
-        let cause = match status {
-            401 | 403 => if key.is_empty() { ProbeCause::KeyRequired } else { ProbeCause::KeyRejected },
-            404 => ProbeCause::TryModel,
-            500..=599 => ProbeCause::TryServer,
-            _ => ProbeCause::TryRejected,
+    // A model that thinks by default (Gemma 4, Qwen3) spends the 60 tokens of the trial on its
+    // reasoning and answers nothing: the trial asks for a direct answer, as a generation does
+    // (`inference::request_body`), and asks once more without the switch when a strict
+    // endpoint names it in its refusal.
+    let mut thinking_switch = true;
+    let (response, started, status) = loop {
+        let mut body = json!({ "model": model, "messages": [{ "role": "user", "content": TRY_SENTENCE }], "max_tokens": 60, "temperature": 0, "stream": false });
+        if thinking_switch { body["chat_template_kwargs"] = json!({ "enable_thinking": false }); }
+        let mut request = client.post(&url).json(&body);
+        if !key.is_empty() { request = request.bearer_auth(&key); }
+        let started = Instant::now();
+        let response = tokio::select! {
+            _ = cancel.cancelled() => return failed(ProbeCause::Cancelled, None, None, None, None),
+            response = request.send() => response,
         };
-        return failed(cause, Some(status), None, Some(elapsed_ms(started)), Some(&url));
-    }
+        let response = match response {
+            Ok(response) => response,
+            Err(error) => {
+                let error = error.without_url();
+                // Connected, then silence: the model is too slow (or still loading), not the network.
+                let cause = if error.is_timeout() && !error.is_connect() { ProbeCause::TryTimeout } else if error.is_timeout() { ProbeCause::ReachTimeout } else { ProbeCause::of_transport(inference::cause(&error)) };
+                return failed(cause, None, Some(technical(&error)), Some(elapsed_ms(started)), Some(&url));
+            }
+        };
+        let status = response.status().as_u16();
+        if !response.status().is_success() {
+            let ms = elapsed_ms(started);
+            if thinking_switch && (400..500).contains(&status) && !matches!(status, 401 | 403 | 404) {
+                let refusal = tokio::select! {
+                    _ = cancel.cancelled() => return failed(ProbeCause::Cancelled, None, None, None, None),
+                    refusal = response.text() => refusal.unwrap_or_default(),
+                };
+                if refusal.contains("chat_template_kwargs") { thinking_switch = false; continue; }
+            }
+            let cause = match status {
+                401 | 403 => if key.is_empty() { ProbeCause::KeyRequired } else { ProbeCause::KeyRejected },
+                404 => ProbeCause::TryModel,
+                500..=599 => ProbeCause::TryServer,
+                _ => ProbeCause::TryRejected,
+            };
+            return failed(cause, Some(status), None, Some(ms), Some(&url));
+        }
+        break (response, started, status);
+    };
     let body = tokio::select! {
         _ = cancel.cancelled() => return failed(ProbeCause::Cancelled, None, None, None, None),
         body = response.bytes() => body,

@@ -389,13 +389,22 @@ pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
     }
     let Some(runtime_id) = &target.runtime_id else { return Ok(()) };
     let Some(element) = ui_automation().ok().and_then(|a| a.get_focused_element().ok()) else { return Ok(()) };
-    if element.get_runtime_id().is_ok_and(|id| id != *runtime_id) {
+    if element_changed(target.check, runtime_id, element.get_runtime_id().ok().as_deref()) {
         return changed("La cible a changé; remplacement refusé.", "element");
     }
     if let Some(reason) = text_changed(target, || selection(&element)) {
         return changed("La sélection a changé; remplacement refusé.", reason);
     }
     Ok(())
+}
+
+/// Whether the focused element is another one than the captured. Only a UIA target is held to
+/// its element: a copy target is identified by its window, its control and, at the paste, by
+/// a second copy that must give the captured text again. 0.6: LibreOffice Writer gives its
+/// paragraph a new runtime id each time it gets the focus back, and every replacement there
+/// was refused (« Text changed ») by an identity that never holds.
+fn element_changed(check: TargetCheck, captured: &[i32], now: Option<&[i32]>) -> bool {
+    check == TargetCheck::Uia && now.is_some_and(|id| id != captured)
 }
 
 /// Whether the target's text is no longer what was captured, as far as UI Automation can tell
@@ -568,8 +577,15 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
         untouched = unwritten(before.as_deref(), field_text(target.native_window).as_deref(), &target.selected_text, value);
     }
     let _ = keeper.restore_ours();
-    if untouched {
-        return Err(AppError::new(ErrorKind::ReadOnly, "Ce texte est en lecture seule : rien n’a été remplacé; utilisez Copier.").because("field unchanged after the paste"));
+    let read_only = |reason| Err(AppError::new(ErrorKind::ReadOnly, "Ce texte est en lecture seule : rien n’a été remplacé; utilisez Copier.").because(reason));
+    if untouched { return read_only("field unchanged after the paste"); }
+    // Nothing can read the field (pdf.js in Firefox, 02/10: the paste was « assumed » and the
+    // pill showed the check over a PDF): a copy target is asked once more. A paste that went
+    // through leaves a caret, or the pasted text; the captured text still selected, to the
+    // letter, was not replaced. The clipboard comes back as after any copy of ours.
+    if !confirmed && after.is_none() && target.check == TargetCheck::Copy && crate::host::foreground() == target.native_window {
+        let copied = copy_and_restore().ok().flatten();
+        if still_selected(copied.as_deref(), &target.selected_text, value) { return read_only("selection still there after the paste"); }
     }
     Ok(Delivery { confirmed })
 }
@@ -582,6 +598,12 @@ pub fn unwritten(before: Option<&str>, after: Option<&str>, replaced: &str, valu
         (Some(before), Some(after)) => before == after && canonical(replaced) != canonical(value),
         _ => false,
     }
+}
+
+/// Whether the copy made after a paste gives the captured text again, to the letter, while the
+/// result was another text: the selection is still there, nothing was written over it.
+pub fn still_selected(copied: Option<&str>, captured: &str, value: &str) -> bool {
+    copied.is_some_and(|text| !text.is_empty() && text == captured) && canonical(captured) != canonical(value)
 }
 
 /// What is refused before anything is touched: a result the clipboard would cut at its
@@ -636,6 +658,10 @@ mod tests {
         for copied in [None, Some(""), Some("bloc B"), Some("ligne entière avec mot A"), Some("mot A ")] {
             assert_eq!(same_copy(copied, "mot A").unwrap_err().kind, ErrorKind::TargetChanged, "{copied:?}");
         }
+        // The element's id counts for a UIA target only (LibreOffice renews its ids).
+        assert!(element_changed(TargetCheck::Uia, &[1, 2], Some(&[1, 3])));
+        assert!(!element_changed(TargetCheck::Uia, &[1, 2], Some(&[1, 2])) && !element_changed(TargetCheck::Uia, &[1, 2], None));
+        assert!(!element_changed(TargetCheck::Copy, &[1, 2], Some(&[1, 3])));
         // The journal learns which check refused, never what was copied.
         assert_eq!(same_copy(None, "mot A").unwrap_err().reason, "control copy empty");
         assert_eq!(same_copy(Some("bloc B"), "mot A").unwrap_err().reason, "control copy differs");
@@ -654,6 +680,14 @@ mod tests {
         // The result is the text it replaced (nothing to correct): the same field is a success.
         assert!(!unwritten(Some("Bonjour à tous."), Some("Bonjour à tous."), "Bonjour", "Bonjour"));
         assert!(!unwritten(Some("a\r\nb"), Some("a\r\nb"), "a\r\nb", "a\nb"), "line endings aside");
+        // A field nothing can read, reached by copy (pdf.js): the copy after the paste decides.
+        assert!(still_selected(Some("ligne choisie"), "ligne choisie", "chosen line"), "still selected: not replaced");
+        assert!(!still_selected(None, "ligne choisie", "chosen line"), "a caret copies nothing: pasted");
+        assert!(!still_selected(Some(""), "ligne choisie", "chosen line"));
+        assert!(!still_selected(Some("chosen line"), "ligne choisie", "chosen line"), "the pasted text kept selected");
+        assert!(!still_selected(Some("toute la ligne avec chosen line dedans
+"), "ligne choisie", "chosen line"), "an editor that copies its line");
+        assert!(!still_selected(Some("Bonjour"), "Bonjour", "Bonjour"), "nothing to correct: the same text is a success");
         assert_eq!(serde_json::to_value(ErrorKind::ReadOnly).unwrap(), "read_only");
     }
 

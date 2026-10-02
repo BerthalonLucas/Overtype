@@ -489,7 +489,7 @@ impl Inner {
         let Some(target) = capture.target.take() else { return (Err(gone()), false) };
         capture.public.can_replace = false;
         if !in_front(target.native_window) {
-            return (Err(AppError::new(ErrorKind::TargetChanged, "La fenêtre source a changé; remplacement refusé.")), true);
+            return (Err(AppError::new(ErrorKind::TargetChanged, "La fenêtre source a changé; remplacement refusé.").because("window at replace")), true);
         }
         (Ok(target), true)
     }
@@ -1482,7 +1482,7 @@ fn schedule_auto_delivery(app: &AppHandle) {
         let fg = host::foreground();
         let ours = host::is_surface(fg);
         let outcome = target.as_ref().ok_or_else(|| nothing_to_paste(invalidated))
-            .and_then(|target| if fg != target.native_window && !ours { Err(AppError::new(ErrorKind::TargetChanged, "La fenêtre source a changé; remplacement refusé.")) } else { Ok(target) })
+            .and_then(|target| if fg != target.native_window && !ours { Err(AppError::new(ErrorKind::TargetChanged, "La fenêtre source a changé; remplacement refusé.").because("window at delivery")) } else { Ok(target) })
             .and_then(|target| capture::paste(target, &result.translated_text, true));
         // Under the Îlot (lot 9): the pasted text is found at once, still under the lock (no
         // new capture in between), for the pill's place, the marks and Undo.
@@ -1541,7 +1541,7 @@ fn schedule_auto_delivery(app: &AppHandle) {
 /// that moved or changed (`target_changed`), or the capture never had one that could be
 /// written (`not_editable`: a console, a password field, a copy the user made himself).
 fn nothing_to_paste(invalidated: bool) -> AppError {
-    AppError::new(if invalidated { ErrorKind::TargetChanged } else { ErrorKind::NotEditable }, "Aucune sélection à remplacer; le résultat reste dans la bulle.")
+    AppError::new(if invalidated { ErrorKind::TargetChanged } else { ErrorKind::NotEditable }, "Aucune sélection à remplacer; le résultat reste dans la bulle.").because(if invalidated { "selection moved while working" } else { "nothing to write" })
 }
 
 /// The pasted text before the caret (lot 9), tried three times over about 200 ms: the paste
@@ -3029,12 +3029,8 @@ fn watch_context(app: AppHandle) {
             }
             let moved = anchored && host::window_rect(snapshot.0) != snapshot.1;
             let switched = anchored && switched_away(fg, snapshot.0, ours);
-            let changed = fg == snapshot.0
-                && captured
-                    .target
-                    .as_ref()
-                    .is_some_and(|t| capture::validate_target(t).is_err());
-            if !confirmed_loss(&mut suspected, &captured.public.id, moved || switched || changed) {
+            let changed = if fg == snapshot.0 { captured.target.as_ref().and_then(|t| capture::validate_target(t).err()) } else { None };
+            if !confirmed_loss(&mut suspected, &captured.public.id, moved || switched || changed.is_some()) {
                 continue;
             }
             halo::hide(&app);
@@ -3043,6 +3039,11 @@ fn watch_context(app: AppHandle) {
                 Ok(mut i) => i.invalidate(&id),
                 Err(_) => continue,
             };
+            // The journal (0.6): what the watcher saw, as a fixed word (never a text).
+            if outcome != Invalidated::Stale {
+                let why = if moved { "window moved" } else if switched { "window switched" } else { changed.as_ref().map_or("", |error| error.reason) };
+                record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "target.lost").detail(why));
+            }
             let redock = match outcome {
                 Invalidated::Stale => continue,
                 Invalidated::CloseMenu => {

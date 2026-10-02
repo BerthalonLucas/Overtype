@@ -1223,6 +1223,41 @@ pub fn handle_visible(handle: isize) -> bool {
     handle != 0 && unsafe { IsWindowVisible(HWND(handle as *mut _)).as_bool() }
 }
 
+/// Whether a top-level window is one the user can be looking at: shown, not minimized, not
+/// cloaked (a suspended store application), not a tool window, of another process, with a
+/// surface, and neither the desktop nor the taskbar.
+pub fn real_window(shown: bool, minimized: bool, cloaked: bool, tool: bool, own: bool, class: &str, size: (i32, i32)) -> bool {
+    shown && !minimized && !cloaked && !tool && !own && size.0 > 1 && size.1 > 1
+        && !matches!(class, "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
+}
+/// The first real window under ours in the z-order (0: none, only the desktop is there).
+/// 0.6: right after the start, and whenever one of our hidden windows is left holding the
+/// foreground, the shortcut found « our own window » in front and did nothing at all (the
+/// field test of 0.5.1: « raccourci sans aucun effet »). The window the user sees in front
+/// is this one.
+pub fn window_behind_ours() -> isize {
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    use windows::Win32::UI::WindowsAndMessaging::{GetTopWindow, GetWindow, IsIconic, GW_HWNDNEXT, WS_EX_TOOLWINDOW};
+    let own = std::process::id();
+    let mut hwnd = unsafe { GetTopWindow(None) }.unwrap_or_default();
+    for _ in 0..2_000 {
+        if hwnd.0.is_null() { break; }
+        let handle = hwnd.0 as isize;
+        let mut pid = 0u32;
+        let mut rect = RECT::default();
+        let mut cloaked = 0u32;
+        let real = unsafe {
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let _ = GetWindowRect(hwnd, &mut rect);
+            let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut cloaked as *mut u32).cast(), 4);
+            real_window(IsWindowVisible(hwnd).as_bool(), IsIconic(hwnd).as_bool(), cloaked != 0, GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0 != 0, pid == own, &window_class(handle), (rect.right - rect.left, rect.bottom - rect.top))
+        };
+        if real { return handle; }
+        hwnd = unsafe { GetWindow(hwnd, GW_HWNDNEXT) }.unwrap_or_default();
+    }
+    0
+}
+
 /// The last time the pointer rested near the overlay's surfaces (`now_ms` time, 0: never):
 /// the watchdog never closes a bubble the user is on.
 static POINTER_NEAR_AT: AtomicU64 = AtomicU64::new(0);
@@ -1369,6 +1404,24 @@ mod tests {
         // Space (the free field needs the real WebView), and any chord, are never taken.
         assert_eq!(menu_key(0x20, false, false, none), None);
         for vk in [0x0D, 0x1B, 0x09, 0x28, 0x31, 0x46] { assert_eq!(menu_key(vk, false, true, || Some('f')), None, "{vk:#x} with Ctrl/Alt/Win"); }
+    }
+
+    #[test]
+    fn the_window_behind_ours_is_one_the_user_can_see() {
+        let ok = |shown, minimized, cloaked, tool, own, class: &str, size| real_window(shown, minimized, cloaked, tool, own, class, size);
+        assert!(ok(true, false, false, false, false, "Chrome_WidgetWin_1", (1300, 820)));
+        assert!(!ok(false, false, false, false, false, "Notepad", (800, 600)), "hidden");
+        assert!(!ok(true, true, false, false, false, "Notepad", (800, 600)), "minimized");
+        assert!(!ok(true, false, true, false, false, "ApplicationFrameWindow", (800, 600)), "cloaked");
+        assert!(!ok(true, false, false, true, false, "tooltips_class32", (136, 39)), "a tool window");
+        assert!(!ok(true, false, false, false, true, "Tauri Window", (876, 609)), "one of ours");
+        assert!(!ok(true, false, false, false, false, "Notepad", (0, 0)), "no surface");
+        for class in ["Progman", "WorkerW", "Shell_TrayWnd"] { assert!(!ok(true, false, false, false, false, class, (1622, 920)), "{class}"); }
+        // Whatever the desktop holds, the answer is never one of our own windows.
+        let behind = window_behind_ours();
+        let mut pid = 0u32;
+        if behind != 0 { unsafe { GetWindowThreadProcessId(HWND(behind as *mut _), Some(&mut pid)); } }
+        assert_ne!(pid, std::process::id());
     }
 
     #[test]

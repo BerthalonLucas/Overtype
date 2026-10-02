@@ -1038,7 +1038,26 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
     // Review n°4 and n°7: the menu's scope opens at the press, before the capture (a synthetic
     // copy first waits for the chord's release): a key typed right after the shortcut is held
     // here until the capture has its id, never typed in the source. Never over our windows.
-    let source = host::foreground();
+    let mut source = host::foreground();
+    // 0.6: one of our windows that is not even shown holds the foreground (right after the
+    // start, the Settings window does): the shortcut used to find « our own window » there and
+    // do nothing at all. The window the user sees in front gets the foreground back, and is
+    // the source.
+    if !host::handle_visible(source) && ours(&app, source) {
+        let behind = host::window_behind_ours();
+        // Windows hands the foreground over a moment after it is asked.
+        let asked = std::time::Instant::now();
+        let mut given = host::give_foreground(behind);
+        while !given && behind != 0 && asked.elapsed() < std::time::Duration::from_millis(400) {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            given = host::foreground() == behind;
+        }
+        if given {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            source = behind;
+            record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "foreground.returned"));
+        }
+    }
     let overlay = host::overlay_handle();
     let before = (matches!(opening, Opening::Menu(_)) && !ours(&app, source)).then(|| (host::escape_open(), host::menu_focused()));
     if before.is_some() {

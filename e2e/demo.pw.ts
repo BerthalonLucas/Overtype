@@ -52,7 +52,8 @@ test.describe('the demo', () => {
       pictures.push(bands.length);
       expect(bands.length, `t ${at}`).toBeGreaterThanOrEqual(previous.lines);
       // The pointer only goes down and right of where it pressed: never back to a line's start.
-      expect(cursor.y).toBeGreaterThanOrEqual(previous.y);
+      // Half a pixel of slack: at rest the box is measured on a fractional transform (CI, Linux).
+      expect(cursor.y).toBeGreaterThanOrEqual(previous.y - 0.5);
       if (bands.length) {
         const last = bands[bands.length - 1];
         // The band of the pointer's line stops under the pointer; the lines above it are whole.

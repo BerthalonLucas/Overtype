@@ -809,6 +809,7 @@ pub fn start_hit_tester(app: AppHandle, overlay: isize, on_screen: impl Fn(&AppH
                     let client = cursor_client(hwnd);
                     if handle == overlay {
                         let near = client.is_some_and(|(x, y)| near(&surface.regions, surface.scale, x, y, NEAR_MARGIN));
+                        if near { POINTER_NEAR_AT.store(now_ms(), Ordering::Release); }
                         if was_near != Some(near) {
                             was_near = Some(near);
                             let _ = app.emit_to("overlay", "glass-near", GlassNear { near });
@@ -1148,19 +1149,95 @@ pub fn send_undo_chord() -> Result<(), u32> {
     Ok(())
 }
 
-/// Waits, at most `timeout`, for the clipboard counter to leave `before`.
-pub fn wait_clipboard_change(before: u32, timeout: Duration) -> Option<u32> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let now = clipboard_sequence();
-        if now != before {
-            return Some(now);
-        }
-        if Instant::now() >= deadline {
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(10));
+// ---------------------------------------------------------------------------------
+// Robustness (0.6): what the watchdog, the capture and the paste ask Windows without ever
+// going through the main thread. A window getter of Tauri (`hwnd()`, `is_visible()`…) called
+// off the main thread waits for it: called while the state lock is held, it deadlocks the
+// whole application as soon as the main thread waits for that lock (a placement, a sync
+// command). Our two surfaces never change: their handles are kept here once.
+
+static SURFACE_HANDLES: [AtomicIsize; 2] = [AtomicIsize::new(0), AtomicIsize::new(0)];
+/// Remembers the overlay and the halo (once, at startup, from the main thread).
+pub fn remember_surfaces(overlay: isize, halo: isize) {
+    SURFACE_HANDLES[0].store(overlay, Ordering::Release);
+    SURFACE_HANDLES[1].store(halo, Ordering::Release);
+}
+/// The overlay's handle (0 before the startup remembered it).
+pub fn overlay_handle() -> isize { SURFACE_HANDLES[0].load(Ordering::Acquire) }
+/// Whether `handle` is the overlay or the halo. Never waits for any thread.
+pub fn is_surface(handle: isize) -> bool {
+    handle != 0 && SURFACE_HANDLES.iter().any(|known| known.load(Ordering::Acquire) == handle)
+}
+/// Hides a window by its handle, from any thread (`ShowWindowAsync` posts to the window's
+/// thread and never waits for it, nor for our state).
+pub fn hide_handle(handle: isize) {
+    if handle != 0 { unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(HWND(handle as *mut _), SW_HIDE); } }
+}
+/// Whether a window is shown, by its handle, from any thread.
+pub fn handle_visible(handle: isize) -> bool {
+    handle != 0 && unsafe { IsWindowVisible(HWND(handle as *mut _)).as_bool() }
+}
+
+/// The last time the pointer rested near the overlay's surfaces (`now_ms` time, 0: never):
+/// the watchdog never closes a bubble the user is on.
+static POINTER_NEAR_AT: AtomicU64 = AtomicU64::new(0);
+pub fn pointer_near_at() -> u64 { POINTER_NEAR_AT.load(Ordering::Acquire) }
+
+/// The tick of the session's last input (keyboard or mouse, ours included): two equal values
+/// prove nobody typed or clicked in between.
+pub fn last_input_tick() -> u32 {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    if unsafe { GetLastInputInfo(&mut info) }.as_bool() { info.dwTime } else { 0 }
+}
+
+/// The integrity level of a process (its token's mandatory label RID: 0x2000 medium, 0x3000
+/// high). `Err(())`: its token could not even be opened.
+fn integrity_of(process: windows::Win32::Foundation::HANDLE) -> Result<u32, ()> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Security::{GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenIntegrityLevel, TOKEN_MANDATORY_LABEL, TOKEN_QUERY};
+    use windows::Win32::System::Threading::OpenProcessToken;
+    unsafe {
+        let mut token = windows::Win32::Foundation::HANDLE::default();
+        OpenProcessToken(process, TOKEN_QUERY, &mut token).map_err(|_| ())?;
+        let mut size = 0u32;
+        let _ = GetTokenInformation(token, TokenIntegrityLevel, None, 0, &mut size);
+        let mut buffer = vec![0u8; size.max(1) as usize];
+        let read = GetTokenInformation(token, TokenIntegrityLevel, Some(buffer.as_mut_ptr().cast()), size, &mut size);
+        let _ = CloseHandle(token);
+        read.map_err(|_| ())?;
+        let label = &*(buffer.as_ptr() as *const TOKEN_MANDATORY_LABEL);
+        let count = *GetSidSubAuthorityCount(label.Label.Sid);
+        if count == 0 { return Err(()); }
+        Ok(*GetSidSubAuthority(label.Label.Sid, u32::from(count) - 1))
     }
+}
+/// Whether a window of integrity `theirs` (None: it could not be read) is out of reach of a
+/// process of integrity `ours`: Windows (UIPI) then drops our keys and hides its text.
+pub fn out_of_reach(ours: Option<u32>, theirs: Option<u32>) -> bool {
+    match (ours, theirs) {
+        (Some(ours), Some(theirs)) => theirs > ours,
+        // Its token is closed to us while ours is readable: it runs above us.
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+/// Whether `handle` belongs to a process that runs above ours (an application started as
+/// administrator while we are not): it can neither be read nor written.
+pub fn window_protected(handle: isize) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    if handle == 0 { return false; }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid)); }
+    if pid == 0 { return false; }
+    let ours = integrity_of(unsafe { GetCurrentProcess() }).ok();
+    let theirs = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok().and_then(|process| {
+        let level = integrity_of(process).ok();
+        unsafe { let _ = CloseHandle(process); }
+        level
+    });
+    out_of_reach(ours, theirs)
 }
 
 #[cfg(test)]
@@ -1247,6 +1324,38 @@ mod tests {
         // Space (the free field needs the real WebView), and any chord, are never taken.
         assert_eq!(menu_key(0x20, false, false, none), None);
         for vk in [0x0D, 0x1B, 0x09, 0x28, 0x31, 0x46] { assert_eq!(menu_key(vk, false, true, || Some('f')), None, "{vk:#x} with Ctrl/Alt/Win"); }
+    }
+
+    #[test]
+    fn a_window_above_our_integrity_is_out_of_reach_and_our_own_is_not() {
+        // Medium (0x2000) against high (0x3000): the administrator's window.
+        assert!(out_of_reach(Some(0x2000), Some(0x3000)));
+        assert!(out_of_reach(Some(0x2000), Some(0x4000)), "a system process");
+        assert!(!out_of_reach(Some(0x2000), Some(0x2000)));
+        assert!(!out_of_reach(Some(0x3000), Some(0x2000)), "we run as administrator: everything is in reach");
+        assert!(!out_of_reach(Some(0x2000), Some(0x1000)), "a sandboxed (low) window");
+        // Its token is closed to us: it runs above us. Ours unreadable: nothing is claimed.
+        assert!(out_of_reach(Some(0x2000), None));
+        assert!(!out_of_reach(None, Some(0x3000)));
+        assert!(!out_of_reach(None, None));
+        // No window at all is never protected, and our own process reads its own level.
+        assert!(!window_protected(0));
+        assert!(integrity_of(unsafe { windows::Win32::System::Threading::GetCurrentProcess() }).is_ok());
+    }
+
+    #[test]
+    fn the_surfaces_are_known_by_their_handles_without_any_window_call() {
+        assert!(!is_surface(0));
+        remember_surfaces(41, 42);
+        assert!(is_surface(41) && is_surface(42) && !is_surface(43) && !is_surface(0));
+        assert_eq!(overlay_handle(), 41);
+        remember_surfaces(0, 0);
+        assert!(!is_surface(41));
+        assert!(!handle_visible(0));
+        hide_handle(0);
+        // The session's last input is a tick that never goes backwards.
+        let first = last_input_tick();
+        assert!(last_input_tick().wrapping_sub(first) < 60_000);
     }
 
     #[test]

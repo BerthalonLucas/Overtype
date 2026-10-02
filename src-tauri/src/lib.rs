@@ -123,7 +123,98 @@ struct Inner {
     /// Some while a menu capture is being taken (review n°4 and n°7): the menu keys the hook
     /// took from the source since the press, until the capture has its id.
     held_keys: Option<Vec<host::MenuKey>>,
+    /// The last transition of what is on screen, or its last sign of life (a chunk of the
+    /// answer, a new shape): what the watchdog measures the silence from (0.6).
+    touched: std::time::Instant,
+    /// Until then a new press is part of the same gesture (the shortcut spammed, a key mash):
+    /// it opens nothing more. Set when a bubble opens and when its work starts.
+    guard_until: Option<std::time::Instant>,
 }
+
+// ——— Robustness (0.6, Lucas 01/10): one flight at a time, and no state that stays frozen ———
+
+/// A press within this long of a bubble opening, or of its work starting, belongs to the same
+/// gesture: ignored (the double press of lot 4, under 400 ms, is told apart before).
+const BURST: std::time::Duration = std::time::Duration::from_millis(1_200);
+/// A capture still being taken after this long is given up (UI Automation waiting for an
+/// application that hangs): the shortcut works again, and what it brings back late is dropped.
+const CAPTURE_STALE_MS: u64 = 10_000;
+static CAPTURE_STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static CAPTURE_GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// Whether a capture started at `started` (`host::now_ms`, 0: none) is still in flight at `now`.
+fn capture_in_flight(started: u64, now: u64) -> bool {
+    started != 0 && now.saturating_sub(started) < CAPTURE_STALE_MS
+}
+/// The one capture in flight. Dropped: the next press captures again.
+struct Flight(u64);
+impl Flight {
+    /// None while another capture is being taken: that press is ignored.
+    fn begin() -> Option<Self> { Self::begin_at(host::now_ms()) }
+    fn begin_at(now: u64) -> Option<Self> {
+        use std::sync::atomic::Ordering;
+        let started = CAPTURE_STARTED.load(Ordering::Acquire);
+        if capture_in_flight(started, now) || CAPTURE_STARTED.compare_exchange(started, now, Ordering::AcqRel, Ordering::Acquire).is_err() { return None; }
+        Some(Self(CAPTURE_GENERATION.fetch_add(1, Ordering::AcqRel) + 1))
+    }
+    /// Still the capture in flight: false once it took so long that a newer press replaced it.
+    fn current(&self) -> bool {
+        CAPTURE_GENERATION.load(std::sync::atomic::Ordering::Acquire) == self.0
+    }
+}
+impl Drop for Flight {
+    fn drop(&mut self) {
+        if self.current() { CAPTURE_STARTED.store(0, std::sync::atomic::Ordering::Release); }
+    }
+}
+
+/// What is on screen, as the watchdog sees it: every one of these states ends by itself, and
+/// none may last for ever when it does not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Watched {
+    /// The Îlot waits for a choice.
+    Menu,
+    /// A request is running.
+    Working,
+    /// The answer is complete and its paste has not reported yet.
+    Delivering,
+    /// The Îlot's pill after the work: the check, Undo, an error.
+    Pill,
+    /// The glass of 0.4 showing a result to read (and the tray's « Revoir »).
+    Reading,
+}
+impl Watched {
+    /// How long the state may stay without any sign of life. The frontend's own timers are far
+    /// shorter (the pill leaves in seconds, a request times out at 120 s): these only catch what
+    /// they missed.
+    fn limit(self) -> std::time::Duration {
+        std::time::Duration::from_secs(match self {
+            Watched::Menu => 120,
+            Watched::Working => 150,
+            Watched::Delivering => 20,
+            Watched::Pill => 60,
+            Watched::Reading => 900,
+        })
+    }
+    fn name(self) -> &'static str {
+        match self { Watched::Menu => "menu", Watched::Working => "working", Watched::Delivering => "delivering", Watched::Pill => "pill", Watched::Reading => "reading" }
+    }
+}
+/// What the watchdog does with a state that outlived its limit.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    /// The request is cancelled and the pill says so: an error pill, which can be closed.
+    TimeOut,
+    /// The bubble leaves as if the user had closed it.
+    Dismiss(Watched),
+    /// Hidden at once, whatever the page or the state lock do.
+    Force(&'static str),
+}
+/// A dismissal the page never acknowledged, a lock nobody released, a window left shown over
+/// nothing: how long before the watchdog stops waiting.
+const DISMISS_STUCK: std::time::Duration = std::time::Duration::from_secs(2);
+const LOCK_STUCK: std::time::Duration = std::time::Duration::from_secs(20);
+const ORPHAN_STUCK: std::time::Duration = std::time::Duration::from_secs(8);
+
 /// A replacement under the Îlot (lot 9): where the result went, what it replaced, the pasted
 /// text as UI Automation found it. Only Rust's memory holds these texts: nothing emits or
 /// logs them, the frontend gets rectangles and booleans.
@@ -202,7 +293,66 @@ impl Inner {
             marks: None,
             shift: (0., 0.),
             held_keys: None,
+            touched: std::time::Instant::now(),
+            guard_until: None,
         }
+    }
+    /// A transition or a sign of life: the watchdog counts from here.
+    fn touch(&mut self) {
+        self.touched = std::time::Instant::now();
+    }
+    /// A bubble just opened or its work just started: the presses of the next `BURST` are the
+    /// same gesture.
+    fn open_guard(&mut self) {
+        self.touch();
+        self.guard_until = Some(self.touched + BURST);
+    }
+    /// Whether a press at `at` (not a double press: asked first) lands in the burst of the
+    /// bubble on screen: ignored, it opens nothing and cancels nothing.
+    fn in_burst(&self, at: std::time::Instant) -> bool {
+        self.visible && self.pending_dismiss.is_none() && self.guard_until.is_some_and(|until| at < until)
+    }
+    /// What the watchdog watches now; None when nothing is on screen (or it is leaving).
+    fn watched(&self) -> Option<Watched> {
+        if !self.visible || self.pending_dismiss.is_some() { return None; }
+        let capture = self.capture.as_ref()?;
+        if self.active.is_some() { return Some(Watched::Working); }
+        if self.menu.as_ref().is_some_and(|menu| menu.capture_id == capture.public.id && !menu.chosen) { return Some(Watched::Menu); }
+        if self.completed.is_some() && self.execution.as_ref().is_some_and(|run| run.auto_request.is_some() && !run.delivered) { return Some(Watched::Delivering); }
+        Some(if self.settings.ui_version == UiVersion::Ilot && capture.public.menu.is_some() { Watched::Pill } else { Watched::Reading })
+    }
+    /// The state that outlived its limit at `now`, and for how long it has been silent.
+    /// `near`: how long ago the pointer last rested on the bubble (the user is reading it, or
+    /// about to click): never counted as silence, except for a request that does not answer.
+    fn overdue(&self, now: std::time::Instant, near: Option<std::time::Duration>) -> Option<(Watched, std::time::Duration)> {
+        let watched = self.watched()?;
+        let mut silent = now.saturating_duration_since(self.touched);
+        if !matches!(watched, Watched::Working | Watched::Delivering) {
+            if let Some(near) = near { silent = silent.min(near); }
+        }
+        (silent >= watched.limit()).then_some((watched, silent))
+    }
+    /// The emergency exit: everything on screen is forgotten at once, whatever the page says.
+    /// The overlay page is loaded again afterwards (`frontend_ready` false until it answers).
+    /// Answers what was there.
+    fn close_now(&mut self) -> &'static str {
+        let was = self.watched().map_or(if self.pending_dismiss.is_some() { "closing" } else { "nothing" }, Watched::name);
+        self.cancel(None);
+        self.retire_result();
+        self.applied = None;
+        self.visible = false;
+        self.capture = None;
+        self.menu = None;
+        self.execution = None;
+        self.pending_capture = None;
+        self.pending_dismiss = None;
+        self.last_overlay = None;
+        self.guard_until = None;
+        self.frontend_ready = false;
+        self.dismiss_generation = self.dismiss_generation.wrapping_add(1);
+        self.notice_generation = self.notice_generation.wrapping_add(1);
+        self.touch();
+        was
     }
     /// Sets the result aside for the tray before the glass state forgets it.
     fn retire_result(&mut self) {
@@ -242,6 +392,7 @@ impl Inner {
         if menu.invalidated { return Err("La sélection a changé; le menu est fermé.".into()); }
         let execution = Execution::chosen(&menu.settings, action_id, instruction)?;
         menu.chosen = true;
+        self.open_guard();
         let info = execution.info.clone();
         if let Some(capture) = self.capture.as_mut() { capture.public.execution = Some(info.clone()); }
         self.execution = Some(execution);
@@ -594,7 +745,7 @@ fn store_capture(
     let public = captured.public.clone();
     // A new capture lowers the no-activate state of the previous choice (the display
     // glass stays clickable into focus, as in 0.4); a menu takes its keys at once.
-    let overlay = app.get_webview_window("overlay").map(|window| host::handle(&window)).unwrap_or(0);
+    let overlay = host::overlay_handle();
     host::set_no_activate(overlay, false);
     halo::hide(app);
     backdrop::hide(app);
@@ -631,6 +782,7 @@ fn store_capture(
         i.dismiss_generation = i.dismiss_generation.wrapping_add(1);
         i.last_overlay = None;
         i.measured = false;
+        i.open_guard();
         if !i.frontend_ready {
             i.pending_capture = Some(public.clone());
         }
@@ -666,6 +818,18 @@ const NOTICE_SIZE: (f64, f64) = (420., 64.);
 const NOTICE_MS: u64 = 4_000;
 fn show_notice(app: &AppHandle, message: &str, code: Option<ErrorKind>) {
     let state = app.state::<AppState>();
+    // 0.6: a pill that has nothing left to do (the check, Undo, an error) used to swallow the
+    // notice of the next press (« Protected field » never showed over a « Read-only text »
+    // pill). It leaves, and the notice shows once it has left. A dismissal already under way
+    // is waited for too: its end would otherwise hide the notice with the window.
+    let replaces = state.inner.lock().is_ok_and(|i| i.watched() == Some(Watched::Pill));
+    if replaces { let _ = dismiss(app, &state); }
+    let patience = std::time::Instant::now() + std::time::Duration::from_millis(900);
+    while state.inner.lock().is_ok_and(|i| i.pending_dismiss.is_some()) && std::time::Instant::now() < patience {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    // The page forgets its capture right before it acknowledges the dismissal.
+    if replaces { std::thread::sleep(std::time::Duration::from_millis(80)); }
     let generation = {
         let Ok(mut i) = state.inner.lock() else { return };
         i.notice_generation = i.notice_generation.wrapping_add(1);
@@ -764,6 +928,11 @@ fn ours(app: &AppHandle, handle: isize) -> bool {
 fn leaves_menu(open: bool, focused: bool, fg: isize, ours: bool) -> bool {
     open && focused && fg != 0 && !ours
 }
+/// Escape just went down (its edge, not its repeat): the bubble on screen closes, whichever
+/// window is in front.
+fn escape_closes(down: bool, was_down: bool) -> bool {
+    down && !was_down
+}
 /// Another application took the foreground from `window`. A null foreground is not one: Windows
 /// reports none for an instant while it hands the foreground over, to the Îlot taking the
 /// keyboard for instance.
@@ -799,44 +968,60 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
         // its demo refuse the same way (0.6): a shortcut never opens anything over them.
         if window.is_visible().unwrap_or(false) && host::belongs_to(&window, host::foreground()) { return Err(AppError::new(ErrorKind::SettingsOpen, "Fermez les réglages avant d’utiliser un raccourci.")); }
     }
+    let started = std::time::Instant::now();
     let opening = {
         let mut i = state.inner.lock().map_err(|_| AppError::internal(lock_error()))?;
         let binding = if let Some((id, _)) = shortcut {
             Some(i.settings.shortcut_bindings.iter().find(|b| b.enabled && actions::parse_shortcut(&b.shortcut).is_ok_and(|key| key.id() == id)).ok_or_else(|| AppError::internal("Ce raccourci n’est plus actif."))?.clone())
         } else { None };
-        match binding {
-            Some(binding) if binding.kind == BindingKind::Menu && i.settings.ui_version == UiVersion::Ilot => {
-                let at = shortcut.map_or_else(std::time::Instant::now, |(_, at)| at);
-                match i.repeat_press(&binding.id, at) {
-                    Some(repeat) => Err(repeat),
-                    None => {
+        let at = shortcut.map_or_else(std::time::Instant::now, |(_, at)| at);
+        // The double press of lot 4 first; then one flight at a time (0.6): a press in the
+        // burst of the bubble on screen, or while a capture is still being taken, is ignored.
+        // Nothing is ever queued: the shortcut spammed opens one bubble and runs one request.
+        let menu = binding.as_ref().is_some_and(|binding| binding.kind == BindingKind::Menu) && i.settings.ui_version == UiVersion::Ilot;
+        let repeat = binding.as_ref().filter(|_| menu).and_then(|binding| i.repeat_press(&binding.id, at));
+        if let Some(repeat) = repeat {
+            Err(Press::Repeat(repeat))
+        } else if shortcut.is_some() && i.in_burst(at) {
+            Err(Press::Ignored("burst"))
+        } else {
+            match Flight::begin() {
+                None => Err(Press::Ignored("capturing")),
+                Some(flight) => match binding {
+                    Some(binding) if menu => {
                         i.menu_press = Some(MenuPress { binding_id: binding.id.clone(), at, capture_id: None, repeat: false });
-                        Ok((Opening::Menu(Box::new(i.settings.clone())), Some(at)))
+                        Ok((Opening::Menu(Box::new(i.settings.clone())), Some(at), flight))
                     }
-                }
+                    _ => Ok((Opening::Direct(Execution::snapshot(&i.settings, binding.as_ref())?), None, flight)),
+                },
             }
-            _ => Ok((Opening::Direct(Execution::snapshot(&i.settings, binding.as_ref())?), None)),
         }
     };
-    let (opening, pressed_at) = match opening {
+    let (opening, pressed_at, flight) = match opening {
         Ok(opening) => opening,
-        Err(Repeat::Emit(capture_id)) => {
+        Err(Press::Repeat(Repeat::Emit(capture_id))) => {
             let _ = app.emit_to("overlay", "menu-repeat", MenuRepeatEvent { capture_id });
+            trace_press(&app, Pressed::Repeat);
             return Ok(None);
         }
-        Err(Repeat::Swallow) => return Ok(None),
+        Err(Press::Repeat(Repeat::Swallow)) => return Ok(None),
+        Err(Press::Ignored(why)) => {
+            trace_press(&app, Pressed::Ignored(why));
+            return Ok(None);
+        }
     };
+    let menu_opening = matches!(opening, Opening::Menu(_));
     // Review n°4 and n°7: the menu's scope opens at the press, before the capture (a synthetic
     // copy first waits for the chord's release): a key typed right after the shortcut is held
     // here until the capture has its id, never typed in the source. Never over our windows.
     let source = host::foreground();
-    let overlay = app.get_webview_window("overlay").map(|window| host::handle(&window)).unwrap_or(0);
+    let overlay = host::overlay_handle();
     let before = (matches!(opening, Opening::Menu(_)) && !ours(&app, source)).then(|| (host::escape_open(), host::menu_focused()));
     if before.is_some() {
         if let Ok(mut i) = state.inner.lock() { i.held_keys = Some(Vec::new()); }
         host::set_menu_open(true, source, overlay);
     }
-    let result = capture_opening(&app, state, opening, source);
+    let result = capture_opening(&app, state, opening, source, &flight);
     if let Some((escape_before, focused_before)) = before {
         match result.as_ref().ok().and_then(|capture| capture.as_ref()) {
             Some(capture) => release_held_keys(&app, state, Some(&capture.id)),
@@ -853,7 +1038,59 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
             let _ = app.emit_to("overlay", "menu-repeat", MenuRepeatEvent { capture_id });
         }
     }
+    // The journal (0.6): what each press did, as states only (never a text, never a title).
+    let ms = started.elapsed().as_millis() as u64;
+    trace_press(&app, match &result {
+        Ok(Some(capture)) => Pressed::Captured { menu: menu_opening, origin: capture.origin, can_replace: capture.can_replace, ms },
+        Ok(None) => Pressed::Ignored("own window"),
+        Err(error) => Pressed::Refused { kind: error.kind, reason: error.reason, ms },
+    });
     result
+}
+/// A press that opens nothing: the double press of lot 4, or one more press of a gesture
+/// already under way.
+enum Press {
+    Repeat(Repeat),
+    Ignored(&'static str),
+}
+/// What a press did, for the journal.
+enum Pressed {
+    Captured { menu: bool, origin: CaptureOrigin, can_replace: bool, ms: u64 },
+    Refused { kind: ErrorKind, reason: &'static str, ms: u64 },
+    Repeat,
+    Ignored(&'static str),
+}
+/// The journal line of a press. A spammed shortcut writes one « ignored » line per second at
+/// most: the journal keeps 500 lines.
+fn press_line(pressed: &Pressed) -> diagnostics::Diag {
+    use diagnostics::{Diag, DiagLevel, DiagStep};
+    match pressed {
+        Pressed::Captured { menu, origin, can_replace, ms } => {
+            let origin = serde_json::to_value(origin).ok().and_then(|value| value.as_str().map(str::to_string)).unwrap_or_default();
+            Diag::new(DiagStep::App, DiagLevel::Info, "shortcut.captured").ms(*ms)
+                .detail(format!("{} · {origin} · {}", if *menu { "menu" } else { "direct" }, if *can_replace { "replaceable" } else { "read only" }))
+        }
+        Pressed::Refused { kind, reason, ms } => {
+            let line = Diag::new(DiagStep::App, DiagLevel::Info, "shortcut.refused").ms(*ms).cause(error_code(*kind));
+            if reason.is_empty() { line } else { line.detail(*reason) }
+        }
+        Pressed::Repeat => Diag::new(DiagStep::App, DiagLevel::Info, "shortcut.repeat"),
+        Pressed::Ignored(why) => Diag::new(DiagStep::App, DiagLevel::Info, "shortcut.ignored").detail(*why),
+    }
+}
+fn trace_press(app: &AppHandle, pressed: Pressed) {
+    static LAST_IGNORED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    if matches!(pressed, Pressed::Ignored(_) | Pressed::Repeat) {
+        let now = host::now_ms();
+        let last = LAST_IGNORED.swap(now, std::sync::atomic::Ordering::AcqRel);
+        if last != 0 && now.saturating_sub(last) < 1_000 { LAST_IGNORED.store(last, std::sync::atomic::Ordering::Release); return; }
+    }
+    record(app, press_line(&pressed));
+}
+/// The journal line of a paste or of an Undo that did not go through: which check refused.
+fn trace_refusal(app: &AppHandle, code: &'static str, error: &AppError) {
+    let line = diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, code).cause(error_code(error.kind));
+    record(app, if error.reason.is_empty() { line } else { line.detail(error.reason) });
 }
 /// Emits the keys held during a menu capture as `menu-key` for it, in order, or drops them.
 fn release_held_keys(app: &AppHandle, state: &AppState, capture_id: Option<&str>) {
@@ -919,11 +1156,14 @@ fn menu_opening(state: &AppState) -> bool {
     state.inner.lock().is_ok_and(|i| i.held_keys.is_some())
 }
 /// Takes the capture of a press (or of `capture_text`) and stores it with what it opens.
-fn capture_opening(app: &AppHandle, state: &AppState, opening: Opening, source: isize) -> Result<Option<Capture>, AppError> {
+fn capture_opening(app: &AppHandle, state: &AppState, opening: Opening, source: isize, flight: &Flight) -> Result<Option<Capture>, AppError> {
     let app = app.clone();
     // The demo capture reads no window; any other never takes one of ours as its source.
     if !state.demo && ours(&app, source) { return Ok(None); }
     let mut captured = capture::capture_current(state.demo, source)?;
+    // It took so long that the shortcut was given back and pressed again: this one is dropped
+    // (a menu never opens ten seconds after its press, over whatever is there by then).
+    if !flight.current() { return Err(AppError::new(ErrorKind::Cancelled, "Capture abandonnée : l’application source n’a pas répondu à temps.").because("capture stale")); }
     if state.demo_long {
         captured.public.text = "Bonjour, voici une démonstration longue destinée à vérifier le lecteur compact, son retour à la ligne, le menu placé au-dessus du verre et la stabilité du texte pendant les changements de présentation.".into();
     }
@@ -1002,6 +1242,7 @@ fn translate(
         i.cancel(None);
         i.execution.as_mut().expect("validated execution").begin(&request.id);
         i.completed = None;
+        i.open_guard();
         let cancel = CancellationToken::new();
         i.active = Some(Active {
             id: request.id.clone(),
@@ -1052,8 +1293,9 @@ fn translate(
                     break;
                 }
                 out.push_str(word);
-                if let Ok(i) = inner.lock() {
+                if let Ok(mut i) = inner.lock() {
                     if i.current(&id) {
+                        i.touch();
                         let _ = app.emit_to(
                             "overlay",
                             "translation",
@@ -1081,11 +1323,13 @@ fn translate(
                 request.text.clone(),
                 cancel,
                 |chunk| {
-                    let i = inner.lock().map_err(|_| AppError::internal(lock_error()))?;
+                    let mut i = inner.lock().map_err(|_| AppError::internal(lock_error()))?;
                     // A newer request or a cancel overtook this one: the stream just stops.
                     if !i.current(&id) {
                         return Err(AppError::new(ErrorKind::Cancelled, "Requête remplacée."));
                     }
+                    // A sign of life: the watchdog only ends a request that says nothing.
+                    i.touch();
                     app.emit_to(
                         "overlay",
                         "translation",
@@ -1110,6 +1354,7 @@ fn translate(
         if !i.current(&id) {
             return;
         }
+        i.touch();
         if !demo {
             let mut line = match &result {
                 Ok(_) => diagnostics::Diag::new(diagnostics::DiagStep::Request, diagnostics::DiagLevel::Ok, "done").status(200),
@@ -1232,8 +1477,10 @@ fn schedule_auto_delivery(app: &AppHandle) {
             c.public.can_replace = false;
             c.target.take()
         });
+        // Never a window getter of Tauri here: the state lock is held, and the main thread may
+        // be waiting for it (0.6: that froze the whole application, bubble on screen).
         let fg = host::foreground();
-        let ours = SURFACES.iter().any(|label| app.get_webview_window(label).is_some_and(|w| host::belongs_to(&w, fg)));
+        let ours = host::is_surface(fg);
         let outcome = target.as_ref().ok_or_else(|| nothing_to_paste(invalidated))
             .and_then(|target| if fg != target.native_window && !ours { Err(AppError::new(ErrorKind::TargetChanged, "La fenêtre source a changé; remplacement refusé.")) } else { Ok(target) })
             .and_then(|target| capture::paste(target, &result.translated_text, true));
@@ -1268,7 +1515,12 @@ fn schedule_auto_delivery(app: &AppHandle) {
             i.applied = Some(applied);
         }
         let capture_id = result.capture_id.clone();
+        i.touch();
         drop(i);
+        match &outcome {
+            Ok(delivery) => { record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Ok, "paste.done").detail(format!("{} · {}", if delivery.confirmed { "read back" } else { "assumed" }, if undoable { "undo offered" } else { "no undo" }))); }
+            Err(error) => trace_refusal(&app, "paste.refused", error),
+        }
         let _ = app.emit_to("overlay", "capture-target", CaptureTarget { capture_id, can_replace: false });
         let _ = app.emit_to("overlay", "result-delivery", ResultDelivery {
             pasted_rects,
@@ -1448,7 +1700,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
         halo::hide(&app);
         let Some(located) = applied.located.take() else { return Ok(refused(ErrorKind::TargetChanged, "Le texte a changé depuis le remplacement; annulation refusée.")) };
         let fg = host::foreground();
-        let ours = SURFACES.iter().any(|label| app.get_webview_window(label).is_some_and(|w| host::belongs_to(&w, fg)));
+        let ours = host::is_surface(fg);
         if fg != applied.window && !ours { return Ok(refused(ErrorKind::TargetChanged, "La fenêtre source a changé; annulation refusée.")); }
         let target = pasted::UndoTarget {
             window: applied.window,
@@ -1458,12 +1710,20 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             original: &applied.original,
             pasted: &applied.pasted,
         };
-        let outcome = match pasted::undo(&target, strategy, true) {
-            Ok(confirmed) => UndoOutcome { request_id: request_id.clone(), status: UndoStatus::Undone, confirmed, message: "Remplacement annulé.".into(), code: None },
-            Err(pasted::UndoFailure::Refused(error)) => refused(error.kind, &error.message),
-            Err(pasted::UndoFailure::Failed(error)) => UndoOutcome { request_id: request_id.clone(), status: UndoStatus::Failed, confirmed: false, message: error.message, code: Some(error.kind) },
-        };
+        let undone = pasted::undo(&target, strategy, true);
+        i.touch();
         drop(i);
+        let outcome = match undone {
+            Ok(confirmed) => {
+                record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Ok, "undo.done").detail(if confirmed { "read back" } else { "assumed" }));
+                UndoOutcome { request_id: request_id.clone(), status: UndoStatus::Undone, confirmed, message: "Remplacement annulé.".into(), code: None }
+            }
+            Err(pasted::UndoFailure::Refused(error)) => { trace_refusal(&app, "undo.refused", &error); refused(error.kind, &error.message) }
+            Err(pasted::UndoFailure::Failed(error)) => {
+                trace_refusal(&app, "undo.failed", &error);
+                UndoOutcome { request_id: request_id.clone(), status: UndoStatus::Failed, confirmed: false, message: error.message, code: Some(error.kind) }
+            }
+        };
         Ok(outcome)
     }).await.map_err(|_| "L’annulation a été interrompue.".to_string())?
 }
@@ -1486,13 +1746,20 @@ async fn replace_result(app: AppHandle, state: State<'_, AppState>, request_id: 
         let state = app.state::<AppState>();
         let mut i = state.inner.lock().map_err(|_| AppError::internal(lock_error()))?;
         let fg = host::foreground();
-        let ours = SURFACES.iter().any(|label| app.get_webview_window(label).is_some_and(|w| host::belongs_to(&w, fg)));
+        let ours = host::is_surface(fg);
         let (target, spent) = i.replace_target(&r.request_id, &r.capture_id, |window| fg == window || ours);
         if spent {
             let _ = app.emit_to("overlay", "capture-target", CaptureTarget { capture_id: r.capture_id.clone(), can_replace: false });
         }
         // Held through the paste, as for the automatic one: nothing commits in between.
-        capture::paste(&target?, &r.translated_text, true).map(|_| ())
+        let pasted = target.and_then(|target| capture::paste(&target, &r.translated_text, true));
+        i.touch();
+        drop(i);
+        match &pasted {
+            Ok(delivery) => { record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Ok, "paste.done").detail(if delivery.confirmed { "read back · retried result" } else { "assumed · retried result" })); }
+            Err(error) => trace_refusal(&app, "paste.refused", error),
+        }
+        pasted.map(|_| ())
     }).await.map_err(|_| AppError::new(ErrorKind::PasteBlocked, "Le remplacement a été interrompu; utilisez Copier."))?.map_err(Refusal::from)
 }
 fn schedule_finish_dismiss(app: AppHandle, capture_id: String, generation: u64) -> Result<(), String> {
@@ -1520,7 +1787,7 @@ fn dismiss(app: &AppHandle, state: &AppState) -> Result<(), String> {
     // back before the window hides, its selection untouched and nothing pasted. Hiding
     // the active window alone would let Windows pick the next one in the z-order.
     let source = state.inner.lock().map_err(|_| lock_error())?.source_window;
-    if app.get_webview_window("overlay").is_some_and(|overlay| host::belongs_to(&overlay, host::foreground())) {
+    if host::overlay_handle() != 0 && host::foreground() == host::overlay_handle() {
         host::give_foreground(source);
     }
     let pending = {
@@ -1549,6 +1816,108 @@ fn dismiss(app: &AppHandle, state: &AppState) -> Result<(), String> {
     app.emit_to("overlay", "overlay-dismiss-requested", OverlayDismissRequested { capture_id })
         .map_err(|_| "Fermeture de la traduction indisponible.".to_string())?;
     Ok(())
+}
+
+/// The emergency exit (0.6; Lucas, 01/10: « une bulle coincée en bas de mon écran, figée,
+/// impossible à fermer, j'ai dû fermer l'application »). The bubble is hidden at once by its
+/// window handle: it waits neither for the page (it may be the one that is stuck), nor for the
+/// state lock (a paste may hold it inside an application that hangs), nor for the main thread.
+/// The state is then forgotten as soon as the lock comes, and the overlay page loaded again, so
+/// whatever it was stuck in is gone before the next capture. Asked by the tray (« Fermer la
+/// bulle ») and by the watchdog. Any thread.
+fn force_close(app: &AppHandle, why: &'static str) {
+    let overlay = host::overlay_handle();
+    let silence = move || {
+        host::close_escape_scope();
+        if CAPTURE_STARTED.load(std::sync::atomic::Ordering::Acquire) == 0 { host::set_menu_open(false, 0, 0); }
+        host::disarm_undo_watch();
+        host::hide_handle(overlay);
+    };
+    silence();
+    halo::hide(app);
+    backdrop::hide(app);
+    let handle = app.clone();
+    let _ = std::thread::Builder::new().name("force-close".into()).spawn(move || {
+        let state = handle.state::<AppState>();
+        let was = match state.inner.lock() {
+            Ok(mut i) => i.close_now(),
+            Err(_) => "state unavailable",
+        };
+        // A placement queued before the lock came may have shown the window again.
+        silence();
+        if let Some(window) = handle.get_webview_window("overlay") { let _ = window.eval("window.location.reload()"); }
+        record(&handle, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "bubble.closed").cause(why).detail(was));
+    });
+}
+
+/// What the watchdog decides on one look at the state (`now`; `near`: how long ago the
+/// pointer rested on the bubble; `shown`: the overlay window is on screen). `closing` and
+/// `orphan` remember since when a dismissal waits for the page, and since when the window is
+/// shown over nothing (a notice lasts four seconds; anything longer was left behind).
+fn watchdog_verdict(i: &Inner, now: std::time::Instant, near: Option<std::time::Duration>, shown: bool, closing: &mut Option<std::time::Instant>, orphan: &mut Option<std::time::Instant>) -> Option<Verdict> {
+    let since = |mark: &mut Option<std::time::Instant>, holds: bool| -> std::time::Duration {
+        if !holds { *mark = None; return std::time::Duration::ZERO; }
+        now.saturating_duration_since(*mark.get_or_insert(now))
+    };
+    if since(closing, i.pending_dismiss.is_some()) >= DISMISS_STUCK { *closing = None; return Some(Verdict::Force("dismissal not acknowledged")); }
+    if since(orphan, shown && !i.visible && i.pending_dismiss.is_none()) >= ORPHAN_STUCK { *orphan = None; return Some(Verdict::Force("window left shown")); }
+    let (watched, _) = i.overdue(now, near)?;
+    Some(match watched {
+        Watched::Working => Verdict::TimeOut,
+        Watched::Delivering => Verdict::Force("delivery never reported"),
+        other => Verdict::Dismiss(other),
+    })
+}
+
+/// The watchdog (0.6): twice a second, off every other thread. No state of the bubble may
+/// stay on screen for ever: a request that says nothing for 150 s becomes an error pill, a
+/// menu, a pill or a result nobody touched for their limit leave, a dismissal the page never
+/// acknowledged, a window left shown over nothing and a state lock nobody releases while the
+/// bubble shows end by the emergency exit. Each of them writes one line in the journal.
+fn watch_overlay(app: AppHandle) {
+    let _ = std::thread::Builder::new().name("overlay-watchdog".into()).spawn(move || {
+        let (mut blocked, mut closing, mut orphan) = (None::<std::time::Instant>, None, None);
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let state = app.state::<AppState>();
+            let shown = host::handle_visible(host::overlay_handle());
+            let now = std::time::Instant::now();
+            let near = match host::pointer_near_at() { 0 => None, at => Some(std::time::Duration::from_millis(host::now_ms().saturating_sub(at))) };
+            let mut timed_out = None;
+            let verdict = match state.inner.try_lock() {
+                Ok(mut i) => {
+                    blocked = None;
+                    let verdict = watchdog_verdict(&i, now, near, shown, &mut closing, &mut orphan);
+                    if verdict == Some(Verdict::TimeOut) {
+                        // Cancelled here, under the same lock: the request can no longer commit.
+                        timed_out = i.active.take().map(|active| { active.cancel.cancel(); active.id });
+                        i.touch();
+                    }
+                    verdict
+                }
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    let since = *blocked.get_or_insert(now);
+                    if shown && now.saturating_duration_since(since) >= LOCK_STUCK { blocked = None; Some(Verdict::Force("state lock held")) } else { None }
+                }
+                Err(std::sync::TryLockError::Poisoned(_)) => shown.then_some(Verdict::Force("state poisoned")),
+            };
+            match verdict {
+                None => {}
+                Some(Verdict::TimeOut) => {
+                    halo::hide(&app);
+                    if let Some(request_id) = timed_out {
+                        let _ = app.emit_to("overlay", "translation", StreamEvent { request_id, kind: StreamKind::Error, text: None, message: Some("Le serveur n’a pas répondu à temps.".into()), code: Some(ErrorKind::Timeout) });
+                    }
+                    record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Error, "watchdog.timeout").detail("working"));
+                }
+                Some(Verdict::Dismiss(watched)) => {
+                    let _ = dismiss(&app, &state);
+                    record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "watchdog.dismissed").detail(watched.name()));
+                }
+                Some(Verdict::Force(why)) => force_close(&app, why),
+            }
+        }
+    });
 }
 
 #[tauri::command]
@@ -1991,6 +2360,8 @@ async fn resize_overlay(
             return Err("Dimensions invalides.".into());
         }
         if let Some(regions) = regions { i.regions = regions; i.frame = frame; i.measured = true; }
+        // A new shape: the page is alive.
+        i.touch();
     }
     if let Some(screen) = changed_screen {
         let _ = app.emit_to("overlay", "work-area", screen);
@@ -2548,7 +2919,7 @@ fn watch_marks(app: &AppHandle, state: &AppState, marks: &Marked) {
     };
     if halo::ended(marks.generation) { return forget(); }
     let fg = host::foreground();
-    let ours = SURFACES.iter().any(|l| app.get_webview_window(l).is_some_and(|w| host::belongs_to(&w, fg)));
+    let ours = host::is_surface(fg);
     if host::window_rect(marks.window) != marks.window_rect || switched_away(fg, marks.window, ours) {
         halo::hide(app);
         return forget();
@@ -2590,14 +2961,16 @@ fn watch_context(app: AppHandle) {
                 (i.source_window, i.source_rect, i.capture.clone(), i.size, applied)
             };
             let fg = host::foreground();
-            let ours = SURFACES.iter().any(|l| {
-                app.get_webview_window(l)
-                    .is_some_and(|w| host::belongs_to(&w, fg))
-            });
+            // By the handles kept at startup: a window getter would wait for the main thread,
+            // 28 times a second.
+            let ours = host::is_surface(fg);
             let down = host::escape_down();
             // While the Îlot waits for a choice, Escape is the menu's (« back, then close »),
             // in the WebView or as a `menu-key`; the frontend dismisses when it closes.
-            if !host::menu_open() && (host::take_escape() || (down && !escape_was_down && (fg == snapshot.0 || ours))) {
+            // 0.6: Escape closes the bubble whatever window is in front (it used to need the
+            // source or the bubble itself there: after a click elsewhere nothing closed it). In
+            // front of another application the key is not taken from it, only seen.
+            if !host::menu_open() && (host::take_escape() || escape_closes(down, escape_was_down)) {
                 let _ = dismiss(&app, &state);
             }
             escape_was_down = down;
@@ -2768,6 +3141,8 @@ pub fn run() {
                             }
                         });
                     }
+                    // The emergency exit: whatever the bubble is stuck in, it leaves.
+                    "close" => force_close(app, "tray"),
                     "settings" => {
                         let _ = open_settings(app.clone(), None, None);
                     }
@@ -2796,7 +3171,12 @@ pub fn run() {
                     }
                 });
             }
-            host::start_hit_tester(app.handle().clone(), app.get_webview_window("overlay").map(|w| host::handle(&w)).unwrap_or(0), screen_changed);
+            // Kept once: nothing asks a window for its handle while the state lock is held.
+            host::remember_surfaces(
+                app.get_webview_window("overlay").map(|w| host::handle(&w)).unwrap_or(0),
+                app.get_webview_window("halo").map(|w| host::handle(&w)).unwrap_or(0),
+            );
+            host::start_hit_tester(app.handle().clone(), host::overlay_handle(), screen_changed);
             if let Some(w) = app.get_webview_window("settings") {
                 let window = w.clone();
                 let closing = app.handle().clone();
@@ -2842,6 +3222,7 @@ pub fn run() {
                 if halo::marking() { halo::leave(&acted); } else { host::disarm_marks_watch(); }
             })?;
             watch_context(app.handle().clone());
+            watch_overlay(app.handle().clone());
             system_theme::watch(app.handle().clone());
             system_motion::watch(app.handle().clone());
             if demo {
@@ -2972,6 +3353,130 @@ mod tests {
         // Without a double press, a stored capture repeats nothing.
         i.menu_press = Some(press(ms(2000)));
         assert_eq!(i.settle_press(ms(2000), Some("second")), None);
+    }
+    #[test]
+    fn a_spammed_shortcut_opens_one_bubble_and_runs_one_request() {
+        let t0 = std::time::Instant::now();
+        let ms = |n: u64| t0 + std::time::Duration::from_millis(n);
+        let mut i = Inner::new(Settings::default());
+        assert!(!i.in_burst(t0), "nothing on screen: the first press captures");
+        // The menu opens: twenty presses in two seconds. The double press (under 400 ms) is
+        // told apart before; every other press of the burst opens nothing.
+        menu_capture(&mut i, "menu");
+        i.open_guard();
+        let opened = i.touched;
+        for n in [10, 400, 700, 1_199] { assert!(i.in_burst(opened + std::time::Duration::from_millis(n)), "{n} ms"); }
+        assert!(!i.in_burst(opened + std::time::Duration::from_millis(1_200)), "a deliberate press later is a new capture");
+        // The choice starts the work: the burst starts over, so a mash that chose by accident
+        // (Enter, a double press) never cancels its own request to open another menu.
+        i.choose("menu", "correct", None).unwrap();
+        assert!(i.in_burst(i.touched + std::time::Duration::from_millis(900)));
+        // The bubble is leaving, or nothing is on screen: the press is a new capture.
+        i.pending_dismiss = Some(("menu".into(), 1));
+        assert!(!i.in_burst(i.touched));
+        i.pending_dismiss = None;
+        i.visible = false;
+        assert!(!i.in_burst(i.touched));
+        let _ = ms;
+        // One capture in flight at a time; given up after ten seconds, so a source that hangs
+        // never takes the shortcut away for good.
+        assert!(!capture_in_flight(0, 5_000));
+        assert!(capture_in_flight(1_000, 1_001) && capture_in_flight(1_000, 10_999));
+        assert!(!capture_in_flight(1_000, 11_000));
+        let first = Flight::begin_at(1_000).expect("the first press captures");
+        assert!(Flight::begin_at(1_500).is_none(), "a press while it is being taken is ignored");
+        assert!(first.current());
+        drop(first);
+        let second = Flight::begin_at(2_000).expect("the capture ended: the next press captures");
+        // A capture that outlived its ten seconds: the next press replaces it, and what the
+        // first one brings back late is dropped.
+        assert!(Flight::begin_at(11_999).is_none());
+        let third = Flight::begin_at(12_000).expect("given up: the shortcut works again");
+        assert!(!second.current() && third.current());
+        drop(second);
+        assert!(Flight::begin_at(12_500).is_none(), "dropping the stale one does not free the newer one");
+        drop(third);
+        assert!(Flight::begin_at(12_600).is_some());
+    }
+    #[test]
+    fn every_state_of_the_bubble_has_a_limit_and_an_exit() {
+        let start = std::time::Instant::now();
+        let after = |seconds: u64| start + std::time::Duration::from_secs(seconds);
+        let fresh = || { let mut i = Inner::new(Settings::default()); i.touched = start; i };
+        let (mut closing, mut orphan) = (None, None);
+        let mut verdict = |i: &Inner, seconds: u64, near: Option<u64>, shown: bool| watchdog_verdict(i, after(seconds), near.map(std::time::Duration::from_secs), shown, &mut closing, &mut orphan);
+        // Nothing on screen: nothing to watch.
+        let mut i = fresh();
+        assert_eq!((i.watched(), verdict(&i, 10_000, None, false)), (None, None));
+        // The menu waits: two minutes without a key, a click or the pointer on it, then it leaves.
+        menu_capture(&mut i, "c");
+        assert_eq!(i.watched(), Some(Watched::Menu));
+        assert_eq!(verdict(&i, 119, None, true), None);
+        assert_eq!(verdict(&i, 120, None, true), Some(Verdict::Dismiss(Watched::Menu)));
+        assert_eq!(verdict(&i, 500, Some(3), true), None, "the pointer rests on it: the user is there");
+        // A request that says nothing for 150 s (the frontend's own limit is 120 s): an error
+        // pill, whatever the pointer does. A chunk of the answer is a sign of life.
+        i.choose("c", "correct", None).unwrap();
+        i.touched = start;
+        i.active = Some(Active { id: "r".into(), cancel: CancellationToken::new() });
+        assert_eq!(i.watched(), Some(Watched::Working));
+        assert_eq!(verdict(&i, 149, None, true), None);
+        assert_eq!(verdict(&i, 150, Some(1), true), Some(Verdict::TimeOut));
+        i.touched = after(140);
+        assert_eq!(verdict(&i, 150, None, true), None);
+        // The answer is complete and the paste never reports: twenty seconds, then the exit.
+        i.touched = start;
+        i.active = None;
+        i.execution.as_mut().unwrap().begin("r");
+        i.completed = Some(CompletedResult { execution: None, request_id: "r".into(), capture_id: "c".into(), source_text: String::new(), translated_text: String::new(), server_id: "s1".into(), complete: true });
+        assert_eq!(i.watched(), Some(Watched::Delivering));
+        assert_eq!(verdict(&i, 20, Some(0), true), Some(Verdict::Force("delivery never reported")));
+        // Pasted (or an error pill, the bubble Lucas could not close): a minute, then it leaves.
+        assert!(i.execution.as_mut().unwrap().claim_delivery("r"));
+        assert_eq!(i.watched(), Some(Watched::Pill));
+        assert_eq!(verdict(&i, 59, None, true), None);
+        assert_eq!(verdict(&i, 60, None, true), Some(Verdict::Dismiss(Watched::Pill)));
+        i.completed = None;
+        assert_eq!(i.watched(), Some(Watched::Pill), "an error pill: no result, no request");
+        // The glass of 0.4 (and « Revoir »): a result is read for as long as fifteen minutes.
+        i.capture.as_mut().unwrap().public.menu = None;
+        i.menu = None;
+        assert_eq!(i.watched(), Some(Watched::Reading));
+        assert_eq!((verdict(&i, 899, None, true), verdict(&i, 900, None, true)), (None, Some(Verdict::Dismiss(Watched::Reading))));
+        // A dismissal the page never acknowledges: two seconds, then the window hides anyway.
+        i.pending_dismiss = Some(("c".into(), 1));
+        assert_eq!(i.watched(), None);
+        assert_eq!(verdict(&i, 1_000, None, true), None, "seen closing for the first time");
+        assert_eq!(verdict(&i, 1_001, None, true), None);
+        assert_eq!(verdict(&i, 1_002, None, true), Some(Verdict::Force("dismissal not acknowledged")));
+        // The window shown over nothing (a notice lasts four seconds): hidden after eight.
+        let idle = fresh();
+        assert_eq!(verdict(&idle, 2_000, None, true), None);
+        assert_eq!(verdict(&idle, 2_007, None, true), None);
+        assert_eq!(verdict(&idle, 2_008, None, true), Some(Verdict::Force("window left shown")));
+        assert_eq!(verdict(&idle, 2_009, None, false), None, "hidden: nothing left");
+        // The emergency exit forgets everything and asks for the page again.
+        let mut i = fresh();
+        menu_capture(&mut i, "c");
+        i.frontend_ready = true;
+        i.active = Some(Active { id: "r".into(), cancel: CancellationToken::new() });
+        let cancel = i.active.as_ref().unwrap().cancel.clone();
+        assert_eq!(i.close_now(), "working");
+        assert!(cancel.is_cancelled() && !i.visible && i.capture.is_none() && i.menu.is_none() && i.pending_dismiss.is_none() && !i.frontend_ready);
+        assert_eq!(i.close_now(), "nothing");
+        // Escape closes on its edge, whichever window is in front; a held key closes once.
+        assert!(escape_closes(true, false));
+        assert!(!escape_closes(true, true) && !escape_closes(false, true) && !escape_closes(false, false));
+    }
+    #[test]
+    fn the_journal_says_what_a_press_did_and_never_what_was_selected() {
+        let text = |pressed: Pressed| { let line = press_line(&pressed); (line.code.clone(), line.cause.clone(), line.detail.clone(), line.ms) };
+        assert_eq!(text(Pressed::Captured { menu: true, origin: CaptureOrigin::Uia, can_replace: true, ms: 84 }), ("shortcut.captured".into(), None, Some("menu · uia · replaceable".into()), Some(84)));
+        assert_eq!(text(Pressed::Captured { menu: false, origin: CaptureOrigin::Copy, can_replace: false, ms: 412 }).2.as_deref(), Some("direct · copy · read only"));
+        assert_eq!(text(Pressed::Refused { kind: ErrorKind::NoSelection, reason: "no clipboard change", ms: 960 }), ("shortcut.refused".into(), Some("no_selection".into()), Some("no clipboard change".into()), Some(960)));
+        assert_eq!(text(Pressed::Refused { kind: ErrorKind::ProtectedWindow, reason: "", ms: 3 }), ("shortcut.refused".into(), Some("protected_window".into()), None, Some(3)));
+        assert_eq!(text(Pressed::Ignored("burst")), ("shortcut.ignored".into(), None, Some("burst".into()), None));
+        assert_eq!(text(Pressed::Repeat).0, "shortcut.repeat");
     }
     #[test]
     fn a_menu_capture_is_chosen_once_against_its_frozen_settings_then_carries_its_execution() {

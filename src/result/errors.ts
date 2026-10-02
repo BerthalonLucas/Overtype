@@ -56,6 +56,10 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //                    perhaps on less text); a partial result is never offered for copy.
 //   internal         anything unexpected on our side, and any code this front does not know.
 //   paste_blocked, target_changed, not_editable, keys_held: the paste did not happen: paste.
+//   read_only        0.6: the paste went out and the field reads exactly as before (a PDF in a
+//                    browser used to end on the check): the result exists, Copy result: paste.
+//   protected_window 0.6: the window in front runs as administrator, Windows lets us neither
+//                    read it nor send it a key: content, ✕ only (a capture notice).
 //   too_long, no_selection, protected_field, settings_open, nothing_recent: nothing was read or
 //                    sent: content, ✕ only (the last two are capture notices, no button at all).
 //   cancelled        the user's own Escape: silent.
@@ -73,10 +77,12 @@ const table: Record<ErrorCode, Entry> = {
   paste_blocked: { family: 'paste' },
   target_changed: { family: 'paste' },
   not_editable: { family: 'paste' },
+  read_only: { family: 'paste' },
   keys_held: { family: 'paste' },
   too_long: { family: 'content' },
   no_selection: { family: 'content' },
   protected_field: { family: 'content' },
+  protected_window: { family: 'content' },
   settings_open: { family: 'content' },
   nothing_recent: { family: 'content' },
   cancelled: { family: 'silent' },

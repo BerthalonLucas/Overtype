@@ -18,8 +18,9 @@ use uiautomation::patterns::{UITextPattern, UITextRange};
 use uiautomation::types::{TextPatternRangeEndpoint, TextUnit};
 use uiautomation::UIElement;
 
-/// How long the source gets to show the original again after Ctrl+Z.
-const UNDO_CONFIRM: Duration = Duration::from_millis(800);
+/// How long the source gets to show the original again after Ctrl+Z (0.6: 800 ms was short
+/// for a rich editor that rebuilds its content on undo).
+const UNDO_CONFIRM: Duration = Duration::from_millis(1_600);
 /// How long a selection made by UIA `Select` gets to show (Chromium applies it asynchronously).
 const SELECT_SETTLE: Duration = Duration::from_millis(400);
 
@@ -236,6 +237,20 @@ fn restored(original: &str) -> Option<bool> {
     Some(candidate_units(original).into_iter().any(|units| back_from(&caret, units).and_then(|range| read(&range, units)).is_some_and(|text| canonical(&text) == wanted)))
 }
 
+/// Whether `now` is `before` with one occurrence of `pasted` put back to `original` (line
+/// endings and non-breaking spaces aside): the field reads again as it did before the paste,
+/// wherever the editor left its caret. 0.6: RoosterJS (Outlook on the web) undoes the paste and
+/// puts the caret elsewhere; the two checks of `restored` then saw nothing and the pill said
+/// « Undo not confirmed » over a text that was back.
+pub fn undone_in(before: &str, now: &str, pasted: &str, original: &str) -> bool {
+    let (before, now, pasted, original) = (canonical(before), canonical(now), canonical(pasted), canonical(original));
+    if pasted.is_empty() || now.len() + pasted.len() != before.len() + original.len() { return false; }
+    before.match_indices(&pasted).take(64).any(|(at, _)| {
+        now.len() >= at && now.is_char_boundary(at) && now[..at] == before[..at]
+            && now[at..].strip_prefix(original.as_str()).is_some_and(|rest| rest == &before[at + pasted.len()..])
+    })
+}
+
 /// Undoes the replacement (lot 9): brings the source back when one of our windows is in
 /// front, checks the target after that, waits for the keys to be up, checks again, then
 /// sends Ctrl+Z (`keystroke`) or selects the pasted text and pastes the original over it
@@ -257,18 +272,22 @@ pub fn undo(target: &UndoTarget, strategy: UndoStrategy, reactivate: bool) -> Re
     let (element, range) = check(target)?;
     match strategy {
         UndoStrategy::Keystroke => {
+            // The whole field as it reads with the pasted text: the proof of last resort.
+            let before = capture::field_text(target.window);
             crate::host::send_undo_chord().map_err(|sent| {
                 let error = AppError::new(ErrorKind::PasteBlocked, "L’annulation a été bloquée par Windows ou par l’application.");
                 if sent == 0 { UndoFailure::Refused(error) } else { UndoFailure::Failed(error) }
             })?;
             let started = Instant::now();
             loop {
-                match restored(target.original) {
-                    Some(true) => return Ok(true),
-                    None if started.elapsed() >= Duration::from_millis(300) => return Ok(false),
-                    _ if started.elapsed() >= UNDO_CONFIRM => return Err(UndoFailure::Failed(AppError::new(ErrorKind::PasteBlocked, "L’application n’a pas rendu le texte d’origine."))),
-                    _ => std::thread::sleep(Duration::from_millis(40)),
-                }
+                let near_caret = restored(target.original);
+                if near_caret == Some(true) { return Ok(true); }
+                let whole = before.as_deref().and_then(|before| capture::field_text(target.window).map(|now| undone_in(before, &now, &target.located.text, target.original)));
+                if whole == Some(true) { return Ok(true); }
+                // Nothing can read the field: the chord went out, the undo is assumed.
+                if near_caret.is_none() && whole.is_none() && started.elapsed() >= Duration::from_millis(300) { return Ok(false); }
+                if started.elapsed() >= UNDO_CONFIRM { return Err(UndoFailure::Failed(AppError::new(ErrorKind::PasteBlocked, "L’application n’a pas rendu le texte d’origine.").because("original not read back"))); }
+                std::thread::sleep(Duration::from_millis(40));
             }
         }
         UndoStrategy::Repaste => {
@@ -339,6 +358,27 @@ mod tests {
         assert_eq!(unit_index("é👍", 3), Some(vec![0, 1, 2, 3]));
         assert_eq!(unit_index("é👍", 2), Some(vec![0, 1, 1, 2]));
         assert_eq!(unit_index("abc", 5), None);
+    }
+
+    #[test]
+    fn an_undo_is_confirmed_by_the_whole_field_wherever_the_caret_went() {
+        let before = "Bonjour,\nPourriez-vous envoyer la proposition ?\nMerci.";
+        let now = "Bonjour,\nje voudrai la proposition\nMerci.";
+        assert!(undone_in(before, now, "Pourriez-vous envoyer la proposition ?", "je voudrai la proposition"));
+        // Line endings and Chromium's non-breaking spaces do not matter.
+        assert!(undone_in("a\r\nNOUVEAU\u{a0}b", "a\nancien b", "NOUVEAU", "ancien"));
+        // The pasted text twice in the field: either occurrence may be the one undone.
+        assert!(undone_in("x NEW y NEW z", "x NEW y old z", "NEW", "old"));
+        assert!(undone_in("x NEW y NEW z", "x old y NEW z", "NEW", "old"));
+        // Still the pasted text, something else changed, or more than the paste was undone.
+        assert!(!undone_in(before, before, "Pourriez-vous envoyer la proposition ?", "je voudrai la proposition"));
+        assert!(!undone_in("x NEW y", "x old y!", "NEW", "old"));
+        assert!(!undone_in("x NEW y", "x  y", "NEW", "old"));
+        assert!(!undone_in("x NEW y", "old", "NEW", "old"));
+        assert!(!undone_in("x y", "x y", "", "old"), "nothing pasted, nothing to prove");
+        // Accents and emoji: byte offsets stay on character boundaries.
+        assert!(undone_in("é👍 NEW fin", "é👍 été fin", "NEW", "été"));
+        assert!(!undone_in("é👍 NEW fin", "👍é été fin", "NEW", "été"));
     }
 
     #[test]

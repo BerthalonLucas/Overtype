@@ -33,6 +33,12 @@ pub enum ErrorKind {
     TargetChanged,
     /// The field cannot be written (read-only, a console, a copy without a known selection).
     NotEditable,
+    /// The paste went out and changed nothing: the text is read-only (a PDF in a browser).
+    /// The result exists and was not written: Copy result.
+    ReadOnly,
+    /// The window in front runs as administrator while we do not: Windows lets us neither
+    /// read its text nor send it a key (a capture notice, and a refusal of the paste).
+    ProtectedWindow,
     /// Over 6,000 characters.
     TooLong,
     /// Cancelled by the user or replaced by a newer request.
@@ -54,16 +60,23 @@ pub enum ErrorKind {
     Internal,
 }
 
-/// A code and the French message of 0.4 (user-readable, never any payload).
+/// A code and the French message of 0.4 (user-readable, never any payload). `reason`: which
+/// check gave up, as a fixed word for the journal (`anchor`, `no clipboard change`…); never a
+/// text of the user, empty when there is nothing more to say than the code.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AppError {
     pub kind: ErrorKind,
     pub message: String,
+    pub reason: &'static str,
 }
 
 impl AppError {
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
-        Self { kind, message: message.into() }
+        Self { kind, message: message.into(), reason: "" }
+    }
+    pub fn because(mut self, reason: &'static str) -> Self {
+        self.reason = reason;
+        self
     }
     pub fn internal(message: impl Into<String>) -> Self {
         Self::new(ErrorKind::Internal, message)
@@ -132,6 +145,7 @@ mod tests {
             (ErrorKind::Cancelled, "cancelled"), (ErrorKind::ServerError, "server_error"), (ErrorKind::NoSelection, "no_selection"),
             (ErrorKind::ProtectedField, "protected_field"), (ErrorKind::KeysHeld, "keys_held"), (ErrorKind::Internal, "internal"),
             (ErrorKind::SettingsOpen, "settings_open"), (ErrorKind::NothingRecent, "nothing_recent"),
+            (ErrorKind::ReadOnly, "read_only"), (ErrorKind::ProtectedWindow, "protected_window"),
         ];
         for (kind, name) in codes {
             assert_eq!(serde_json::to_value(kind).unwrap(), serde_json::json!(name));

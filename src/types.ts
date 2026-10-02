@@ -111,6 +111,9 @@ export const errorCodes = [
   'unreachable', 'timeout', 'unauthorized', 'model_not_found', 'bad_endpoint', 'busy', 'length', 'stream_broken',
   'paste_blocked', 'target_changed', 'not_editable', 'too_long', 'cancelled',
   'server_error', 'no_selection', 'protected_field', 'keys_held', 'settings_open', 'nothing_recent', 'internal',
+  // 0.6 (field test of 0.5.1): the paste changed nothing (a PDF in a browser); the window in
+  // front runs as administrator and can neither be read nor written.
+  'read_only', 'protected_window',
 ] as const;
 export type ErrorCode = typeof errorCodes[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.

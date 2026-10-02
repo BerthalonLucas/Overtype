@@ -129,6 +129,9 @@ struct Inner {
     /// Until then a new press is part of the same gesture (the shortcut spammed, a key mash):
     /// it opens nothing more. Set when a bubble opens and when its work starts.
     guard_until: Option<std::time::Instant>,
+    /// The last press of a shortcut, whatever it did: a press that follows it within `RAPID`
+    /// is the same hand still hammering.
+    last_press: Option<std::time::Instant>,
 }
 
 // ——— Robustness (0.6, Lucas 01/10): one flight at a time, and no state that stays frozen ———
@@ -136,6 +139,10 @@ struct Inner {
 /// A press within this long of a bubble opening, or of its work starting, belongs to the same
 /// gesture: ignored (the double press of lot 4, under 400 ms, is told apart before).
 const BURST: std::time::Duration = std::time::Duration::from_millis(1_200);
+/// Presses that follow each other faster than this are one spam, however long it lasts and
+/// whatever the bubble became meanwhile (02/10: twenty presses in two seconds ran their action,
+/// pasted, then captured again and ended on an error pill). The window slides with each press.
+const RAPID: std::time::Duration = std::time::Duration::from_millis(500);
 /// A capture still being taken after this long is given up (UI Automation waiting for an
 /// application that hangs): the shortcut works again, and what it brings back late is dropped.
 const CAPTURE_STALE_MS: u64 = 10_000;
@@ -295,7 +302,14 @@ impl Inner {
             held_keys: None,
             touched: std::time::Instant::now(),
             guard_until: None,
+            last_press: None,
         }
+    }
+    /// Notes the press at `at` and says whether it follows the previous one within `RAPID`.
+    fn rapid_press(&mut self, at: std::time::Instant) -> bool {
+        let rapid = self.last_press.is_some_and(|last| at.saturating_duration_since(last) < RAPID);
+        self.last_press = Some(at);
+        rapid
     }
     /// A transition or a sign of life: the watchdog counts from here.
     fn touch(&mut self) {
@@ -980,8 +994,11 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
         // Nothing is ever queued: the shortcut spammed opens one bubble and runs one request.
         let menu = binding.as_ref().is_some_and(|binding| binding.kind == BindingKind::Menu) && i.settings.ui_version == UiVersion::Ilot;
         let repeat = binding.as_ref().filter(|_| menu).and_then(|binding| i.repeat_press(&binding.id, at));
+        let rapid = shortcut.is_some() && i.rapid_press(at);
         if let Some(repeat) = repeat {
             Err(Press::Repeat(repeat))
+        } else if rapid {
+            Err(Press::Ignored("rapid"))
         } else if shortcut.is_some() && i.in_burst(at) {
             Err(Press::Ignored("burst"))
         } else {
@@ -1831,6 +1848,7 @@ fn force_close(app: &AppHandle, why: &'static str) {
         host::close_escape_scope();
         if CAPTURE_STARTED.load(std::sync::atomic::Ordering::Acquire) == 0 { host::set_menu_open(false, 0, 0); }
         host::disarm_undo_watch();
+        host::close_choice_grace();
         host::hide_handle(overlay);
     };
     silence();
@@ -2292,6 +2310,8 @@ fn choose_action(app: AppHandle, state: State<'_, AppState>, capture_id: String,
         (info, i.source_window, i.menu.as_ref().and_then(|menu| menu.process.clone()))
     };
     if !menu_opening(&state) { host::set_menu_open(false, 0, 0); }
+    // The hand that chose may still be hammering: its keys do not land on the selection.
+    host::open_choice_grace(source);
     let overlay = app.get_webview_window("overlay").map(|window| host::handle(&window)).unwrap_or(0);
     host::set_no_activate(overlay, true);
     return_foreground(overlay, source);
@@ -3378,7 +3398,13 @@ mod tests {
         i.pending_dismiss = None;
         i.visible = false;
         assert!(!i.in_burst(i.touched));
-        let _ = ms;
+        // Twenty presses, one every 100 ms: each follows the previous within half a second, so
+        // the whole spam is one gesture, even after its action has finished and pasted.
+        let mut i = Inner::new(Settings::default());
+        assert!(!i.rapid_press(ms(0)), "the first press");
+        for n in 1..20 { assert!(i.rapid_press(ms(n * 100)), "press {n}"); }
+        assert!(!i.rapid_press(ms(1_900 + 500)), "half a second of rest: a new press");
+        assert!(i.rapid_press(ms(2_400 + 499)));
         // One capture in flight at a time; given up after ten seconds, so a source that hangs
         // never takes the shortcut away for good.
         assert!(!capture_in_flight(0, 5_000));

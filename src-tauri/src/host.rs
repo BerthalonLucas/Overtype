@@ -192,6 +192,32 @@ static TYPED:OnceLock<std::sync::mpsc::SyncSender<Typed>>=OnceLock::new();
 /// Our own synthetic keys carry this in `dwExtraInfo`: the hook tells them from the user's.
 pub const OUR_KEYS:usize=0x464C_5754;
 
+/// After a choice in the Îlot (0.6): the keys of a hand still hammering (Enter mashed to
+/// choose, a head on the keyboard) must not land in the source, where the selection is still
+/// there to be typed over (02/10: twelve Enters after the shortcut replaced the selected
+/// sentence by line breaks). For a short moment after the choice, slid along by each key and
+/// capped, the plain keys typed in the source are dropped. Never ours (the paste), never a
+/// chord with Ctrl, Alt or Windows, never a modifier, never Escape (it cancels the work).
+static GRACE_UNTIL:AtomicU64=AtomicU64::new(0);
+static GRACE_END:AtomicU64=AtomicU64::new(0);
+static GRACE_SOURCE:AtomicIsize=AtomicIsize::new(0);
+const GRACE_MS:u64=700;
+const GRACE_SLIDE_MS:u64=400;
+const GRACE_MAX_MS:u64=3_000;
+pub fn open_choice_grace(source:isize){
+    let now=now_ms();
+    GRACE_SOURCE.store(source,Ordering::Relaxed);
+    GRACE_END.store(now+GRACE_MAX_MS,Ordering::Relaxed);
+    GRACE_UNTIL.store(if source==0{0}else{now+GRACE_MS},Ordering::Release);
+}
+pub fn close_choice_grace(){GRACE_UNTIL.store(0,Ordering::Release);}
+/// Whether the key `vk` typed at `now` in the window `fg` is dropped by the grace that lasts
+/// until `until` (0: none) and `end` at most. `other`: Ctrl, Alt or Windows is held.
+pub fn grace_takes(now:u64,until:u64,end:u64,fg:isize,source:isize,vk:u32,other:bool,extra:usize)->bool{
+    until!=0&&now<until&&now<end&&fg!=0&&fg==source&&extra!=OUR_KEYS&&!other
+        &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
+}
+
 /// A key that reached the source while Undo was offered: the user's own Ctrl+Z (the
 /// application undoes the paste itself), or any other key.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
@@ -453,6 +479,19 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
                 UNDO_WATCH.store(false,Ordering::Release);
                 let undo=key.vkCode==0x5A&&held(VK_CONTROL)&&!held(VK_MENU)&&!held(VK_SHIFT)&&!held(VK_LWIN)&&!held(VK_RWIN);
                 if let Some(typed)=TYPED.get(){let _=typed.try_send(if undo{Typed::UndoKey}else{Typed::Other});}
+            }
+        }
+        if code>=0&&GRACE_UNTIL.load(Ordering::Acquire)!=0&&!MENU_OPEN.load(Ordering::Acquire){
+            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
+            let message=wparam.0 as u32;
+            let (now,until)=(now_ms(),GRACE_UNTIL.load(Ordering::Acquire));
+            if now>=until{GRACE_UNTIL.store(0,Ordering::Release);}
+            else{
+                let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
+                if grace_takes(now,until,GRACE_END.load(Ordering::Relaxed),foreground(),GRACE_SOURCE.load(Ordering::Relaxed),key.vkCode,other,key.dwExtraInfo){
+                    if message==WM_KEYDOWN||message==WM_SYSKEYDOWN{GRACE_UNTIL.store(until.max(now+GRACE_SLIDE_MS),Ordering::Release);}
+                    return LRESULT(1);
+                }
             }
         }
         if code>=0&&OVERLAY_VISIBLE.load(Ordering::Acquire){
@@ -1324,6 +1363,25 @@ mod tests {
         // Space (the free field needs the real WebView), and any chord, are never taken.
         assert_eq!(menu_key(0x20, false, false, none), None);
         for vk in [0x0D, 0x1B, 0x09, 0x28, 0x31, 0x46] { assert_eq!(menu_key(vk, false, true, || Some('f')), None, "{vk:#x} with Ctrl/Alt/Win"); }
+    }
+
+    #[test]
+    fn keys_mashed_after_a_choice_never_reach_the_source() {
+        let (source, other_window) = (7, 9);
+        let takes = |now, vk, other, extra| grace_takes(now, 1_700, 4_000, source, source, vk, other, extra);
+        // Enter, a letter, the space bar, Backspace: dropped while the grace lasts.
+        for vk in [0x0D, 0x51, 0x20, 0x08] { assert!(takes(1_100, vk, false, 0), "{vk:#x}"); }
+        // Our own paste, a chord of the user's, a modifier alone, Escape (it cancels the work).
+        assert!(!takes(1_100, 0x56, true, OUR_KEYS) && !takes(1_100, 0x0D, false, OUR_KEYS));
+        assert!(!takes(1_100, 0x5A, true, 0), "Ctrl+Z stays the user's");
+        for vk in [0x10, 0x11, 0x12, 0x5B, 0xA0, 0x1B] { assert!(!takes(1_100, vk, false, 0), "{vk:#x}"); }
+        // Over: after its moment, after its cap however long the mash slid it, in another
+        // window, and when there is none.
+        assert!(!takes(1_700, 0x0D, false, 0));
+        assert!(!grace_takes(4_000, 4_300, 4_000, source, source, 0x0D, false, 0), "three seconds at most");
+        assert!(!grace_takes(1_100, 1_700, 4_000, other_window, source, 0x0D, false, 0));
+        assert!(!grace_takes(1_100, 0, 4_000, source, source, 0x0D, false, 0));
+        assert!(!grace_takes(1_100, 1_700, 4_000, 0, 0, 0x0D, false, 0));
     }
 
     #[test]

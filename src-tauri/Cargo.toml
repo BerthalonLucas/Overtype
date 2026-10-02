@@ -1,6 +1,6 @@
 [package]
 name = "flowtranslate"
-version = "0.5.1"
+version = "0.6.0"
 description = "FlowTranslate Windows desktop host"
 authors = ["FlowTranslate contributors"]
 edition = "2021"

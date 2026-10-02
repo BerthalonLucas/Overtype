@@ -15,6 +15,7 @@ mod halo;
 mod history;
 mod host;
 mod inference;
+mod legacy_autostart;
 mod menu_memory;
 mod pasted;
 mod placement;
@@ -3197,7 +3198,7 @@ pub fn run() {
             open_front_door(app);
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_autostart::Builder::new().app_name(brand::APP_NAME).build())
         .setup(|app| {
             // FLOWTRANSLATE_DATA_DIR isolates a test run: the executable of the build target
             // would otherwise share settings.json and the history with the installed app.
@@ -3212,6 +3213,13 @@ pub fn run() {
             if !store.exists() {
                 settings.language = host::windows_language();
                 actions::localize_defaults(&mut settings.actions, settings.language);
+            }
+            // The app was FlowTranslate until 0.5.1: its autostart entry is removed, and the
+            // new one registered when the settings ask for it. Never from a test run or a
+            // development build, whose executable must not become the one Windows starts.
+            let test_run = std::env::var_os("FLOWTRANSLATE_DATA_DIR").is_some_and(|dir| !dir.is_empty());
+            if !cfg!(debug_assertions) && !test_run && legacy_autostart::take() && settings.autostart {
+                let _ = app.autolaunch().enable();
             }
             let language = settings.language;
             let setup_done = settings.setup_done;

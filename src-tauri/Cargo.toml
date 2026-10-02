@@ -1,8 +1,8 @@
 [package]
 name = "flowtranslate"
 version = "0.6.0"
-description = "FlowTranslate Windows desktop host"
-authors = ["FlowTranslate contributors"]
+description = "Overtype Windows desktop host"
+authors = ["Overtype contributors"]
 edition = "2021"
 rust-version = "1.91"
 
@@ -11,7 +11,7 @@ name = "flowtranslate_lib"
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [[bin]]
-name = "FlowTranslate"
+name = "Overtype"
 path = "src/main.rs"
 
 [build-dependencies]

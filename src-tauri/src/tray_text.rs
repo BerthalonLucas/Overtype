@@ -24,20 +24,20 @@ fn labels(language: Language) -> Labels {
             close: "Close the bubble",
             settings: "Settings",
             quit: "Quit",
-            simulated: "FlowTranslate · Simulated demo",
+            simulated: "Overtype · Simulated demo",
         },
         Language::Fr => Labels {
             replay: "Revoir la dernière traduction",
             close: "Fermer la bulle",
             settings: "Réglages",
             quit: "Quitter",
-            simulated: "FlowTranslate · Démonstration simulée",
+            simulated: "Overtype · Démonstration simulée",
         },
     }
 }
 
 pub fn tooltip(language: Language, simulated: bool) -> &'static str {
-    if simulated { labels(language).simulated } else { "FlowTranslate" }
+    if simulated { labels(language).simulated } else { "Overtype" }
 }
 
 // The ids « replay », « close », « settings » and « quit » are the ones the menu handler in
@@ -73,9 +73,9 @@ mod tests {
             assert!(!en.trim().is_empty() && !fr.trim().is_empty());
             assert_ne!(en, fr);
         }
-        assert_eq!(tooltip(Language::En, false), "FlowTranslate");
-        assert_eq!(tooltip(Language::Fr, false), "FlowTranslate");
-        assert_eq!(tooltip(Language::En, true), "FlowTranslate · Simulated demo");
-        assert_eq!(tooltip(Language::default(), false), "FlowTranslate");
+        assert_eq!(tooltip(Language::En, false), "Overtype");
+        assert_eq!(tooltip(Language::Fr, false), "Overtype");
+        assert_eq!(tooltip(Language::En, true), "Overtype · Simulated demo");
+        assert_eq!(tooltip(Language::default(), false), "Overtype");
     }
 }

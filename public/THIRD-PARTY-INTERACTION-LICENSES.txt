@@ -1,4 +1,4 @@
-FlowTranslate frontend interaction libraries - third-party notices
+Overtype frontend interaction libraries - third-party notices
 
 These notices cover the newly introduced interaction libraries and their added dependency tree.
 Versions are pinned in package-lock.json. Existing application dependencies have their own licenses.

@@ -18,7 +18,7 @@ test.describe('the first-run setup', () => {
   test('goes from the welcome to the Settings, each answer saved at once', async ({ page }) => {
     await open(page);
     await expect(screen(page, 'welcome')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Bienvenue sur FlowTranslate' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Bienvenue sur Overtype' })).toBeVisible();
     await expect(page.locator('.su-heart-ring')).toHaveCount(2);
     await expect(page.locator('.su-foot-note')).toHaveText('3 questions et une courte démo, environ une minute.');
     await primary(page).click();
@@ -30,7 +30,7 @@ test.describe('the first-run setup', () => {
     await page.getByRole('radio', { name: 'Sombre' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByRole('radio', { name: 'English' }).click();
-    await expect(page.getByRole('heading', { name: 'How do you want to see FlowTranslate?' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'How do you want to see Overtype?' })).toBeVisible();
     await page.getByRole('radio', { name: 'Français' }).click();
     await page.getByRole('radio', { name: 'Clair' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');

@@ -3,7 +3,7 @@
 // (UIA selection, synthetic copy, fresh user copy, notice), whether the clipboard was put
 // back and how long the first pixel took. No user document is opened: every application
 // starts on text written by this script into a temporary profile. Launch through
-// scripts/capture-matrix.ps1 (FlowTranslate started with --simulate-inference and a CDP port).
+// scripts/capture-matrix.ps1 (Overtype started with --simulate-inference and a CDP port).
 import { chromium, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';

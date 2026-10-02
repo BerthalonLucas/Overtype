@@ -112,7 +112,7 @@ export function BugWorkbench() {
   const [width, height] = size.split('x').map(Number);
   const [missing, setMissing] = useState(false);
   return <main className="workbench bug-board">
-    <header><div><span className="eyebrow">FlowTranslate / Diagnostic</span><h1>Défauts signalés</h1><p>Reproduire le problème avant de déclarer un correctif.</p></div><a href="/lab.html?view=states">États techniques →</a></header>
+    <header><div><span className="eyebrow">Overtype / Diagnostic</span><h1>Défauts signalés</h1><p>Reproduire le problème avant de déclarer un correctif.</p></div><a href="/lab.html?view=states">États techniques →</a></header>
     <div className="workspace">
       <nav aria-label="Défauts signalés">{defects.map(item => <button key={item.id} aria-current={defect.id === item.id ? 'page' : undefined} onClick={() => { setId(item.id); setMissing(false); history.replaceState(null, '', `/lab.html?issue=${item.id}`); }}><span>{item.title}</span><small>{item.code}</small></button>)}</nav>
       <section className="review">

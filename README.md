@@ -1,7 +1,11 @@
+# Overtype 0.6.0
+
+Overtype est le nouveau nom de FlowTranslate (0.6.0). Les réglages, les clés et l’historique d’une 0.5 sont gardés ; l’installateur retire l’ancienne application. Nouveautés : [docs/RELEASE-NOTES.md](docs/RELEASE-NOTES.md). Les sections qui suivent datent de la 0.4 et de la 0.5 et n’ont pas encore été réécrites.
+
 # En cours : 0.5.0 « Îlot » (branche `da-ilot`)
 
 La 0.5.0 est en cours d’implémentation sur la branche `da-ilot` et n’est pas publiée. Elle
-fera de FlowTranslate un assistant d’écriture : sélectionner un texte, presser
+fera de Overtype un assistant d’écriture : sélectionner un texte, presser
 `Ctrl+Alt+Espace`, choisir une action dans un petit menu ouvert à côté de la sélection
 (l’« Îlot » : Corriger, Traduire, Rendre professionnel, Raccourcir, Rédiger un mail ou une
 consigne libre), et le texte sera remplacé sur place. Pendant le travail, une petite pilule
@@ -19,9 +23,9 @@ Dans **Réglages → Actions et consignes**, chaque action est une consigne seul
 
 Le serveur livré gagne un profil **général** : Gemma 4 12B QAT avec décodage spéculatif sur `http://127.0.0.1:8003/v1`, modèle `flowtranslate-general`, à mettre dans Rapide ou Qualité pour corriger et reformuler (les Hy-MT ne font que traduire).
 
-L’installateur se trouve dans les [releases](https://github.com/BerthalonLucas/Flow_Translate/releases/latest). Les réglages, consignes et clés sont migrés.
+L’installateur se trouve dans les [releases](https://github.com/BerthalonLucas/Overtype/releases/latest). Les réglages, consignes et clés sont migrés.
 
-# FlowTranslate
+# Overtype
 
 Assistant d’écriture pour Windows 11 : sélectionner un texte dans n’importe quelle
 application, choisir une action (corriger, traduire, professionnaliser, les vôtres) et
@@ -43,12 +47,12 @@ précédente).
 
 ## Installer
 
-1. Prendre l’installateur `FlowTranslate_<version>_x64-setup.exe` dans les
-   [releases GitHub](https://github.com/BerthalonLucas/Flow_Translate/releases) et
+1. Prendre l’installateur `Overtype_<version>_x64-setup.exe` dans les
+   [releases GitHub](https://github.com/BerthalonLucas/Overtype/releases) et
    comparer son SHA-256 au fichier `SHA256SUMS.txt` joint. Installation par utilisateur,
    sans droits administrateur ; Microsoft Edge WebView2 Runtime doit être présent (il
    l’est sur Windows 11).
-2. Lancer FlowTranslate : seule une icône apparaît dans la zone de notification.
+2. Lancer Overtype : seule une icône apparaît dans la zone de notification.
 3. Brancher un moteur (section suivante), puis Réglages → **Connexion avancée** →
    « Vérifier ».
 4. Sélectionner du texte dans n’importe quelle application et presser `Ctrl+Alt+T`
@@ -86,7 +90,7 @@ et la bande de lecture dans la nouvelle matière (voir [docs/DA-PLAN.md](docs/DA
 
 - Un raccourci = une action sur la sélection courante (`Ctrl+Alt+T` : Traduire en
   français au départ) et un résultat : **Afficher dans la bulle** ou **Remplacer la
-  sélection**. Sans sélection lisible, FlowTranslate copie lui-même (Ctrl+Insert
+  sélection**. Sans sélection lisible, Overtype copie lui-même (Ctrl+Insert
   synthétique, presse-papiers remis en place) ; une copie faite soi-même moins de trois
   secondes avant est acceptée ; sinon un avis discret, jamais de boîte de dialogue.
 - Remplacer la sélection : la pilule seule, puis le résultat est collé à la place du
@@ -109,9 +113,9 @@ et la bande de lecture dans la nouvelle matière (voir [docs/DA-PLAN.md](docs/DA
 Modes de démonstration, sans moteur ni historique :
 
 ```powershell
-FlowTranslate.exe --demo-selection
-FlowTranslate.exe --demo-clipboard
-FlowTranslate.exe --demo-long
+Overtype.exe --demo-selection
+Overtype.exe --demo-clipboard
+Overtype.exe --demo-long
 ```
 
 `--simulate-inference` garde la capture Windows réelle mais simule la réponse.

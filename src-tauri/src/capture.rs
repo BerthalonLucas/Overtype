@@ -211,7 +211,7 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
     if demo {
         let public = Capture {
             id: Uuid::new_v4().to_string(),
-            text: "Bonjour, ceci est une démonstration FlowTranslate.".into(),
+            text: "Bonjour, ceci est une démonstration Overtype.".into(),
             source: CaptureSource::Selection,
             origin: CaptureOrigin::Demo,
             can_replace: false,

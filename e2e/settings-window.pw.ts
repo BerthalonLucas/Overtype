@@ -41,7 +41,7 @@ test('the sidebar: one page per topic, each with its colour, in English and Fren
   await openSettings(page);
   await expect(page.getByRole('tab')).toHaveText(['General', 'Shortcuts', 'Actions', 'After replacing', 'Appearance', 'Server', 'Data']);
   await expect(page.getByRole('heading', { level: 2 })).toHaveText('General');
-  await expect(page.locator('.ft-settings-app strong')).toHaveText('FlowTranslate');
+  await expect(page.locator('.ft-settings-app strong')).toHaveText('Overtype');
   // One colour per page: the main area carries the page, its header veil and the nav pill follow.
   const colours = new Set<string>();
   for (const name of ['General', 'Shortcuts', 'Actions', 'After replacing', 'Appearance', 'Server', 'Data']) {
@@ -358,7 +358,7 @@ test('a chord another application holds is said on its row with a free one to ta
   await go(page, 'Shortcuts');
   const menu = page.locator('[data-field="menuShortcut"]');
   const taken = menu.locator('[data-warning="taken"]');
-  await expect(taken).toHaveText('Another app is already using Ctrl+Alt+Space, so Windows did not give it to FlowTranslate. Record another combination, or close that app.');
+  await expect(taken).toHaveText('Another app is already using Ctrl+Alt+Space, so Windows did not give it to Overtype. Record another combination, or close that app.');
   await expect(menu.getByRole('button', { name: 'Use Ctrl+Alt+Shift+Space', exact: true })).toBeVisible();
   await shot(page, 'e2e-shortcut-taken');
   // A double click on the proposal saves once.
@@ -470,7 +470,7 @@ test('« See the welcome again » opens the setup once, whatever the clicks; qui
   await replay.click();
   await expect.poll(async () => (await calls(page, 'open_setup')).length).toBeGreaterThanOrEqual(1);
   expect((await calls(page, 'open_setup'))[0].args).toEqual({ replay: true });
-  await page.getByRole('button', { name: 'Quit FlowTranslate', exact: true }).click();
+  await page.getByRole('button', { name: 'Quit Overtype', exact: true }).click();
   expect(await calls(page, 'quit_app')).toHaveLength(1);
 });
 

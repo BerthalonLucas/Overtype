@@ -10,6 +10,7 @@ import { useSettings } from './useSettings';
 import { useDocumentPreferences } from './preferences';
 import { useT } from './i18n';
 import { MotionPreferences } from './motion/MotionPreferences';
+import { overlayGlassSurfaces, setupGlassSurfaces, startGlassBackdrop } from './glassBackdrop';
 import type { Capture } from './types';
 
 const defaultCapture: Capture = { id: 'demo-selection', text: 'Could you send the updated proposal before Thursday?', source: 'selection', canReplace: true, anchor: { x: 820, y: 410, width: 350, height: 24 } };
@@ -68,6 +69,12 @@ export function App() {
   const settings = useSettings();
   useDocumentPreferences(settings);
   useEffect(() => { document.body.className = `flowtranslate-window flowtranslate-${windowName}`; return () => { document.body.className = ''; }; }, [windowName]);
+  // The real glass (src/glassBackdrop.ts): the windows that float glass tell Windows where it is.
+  useEffect(() => {
+    if (!bridge.native || standaloneDemo) return;
+    if (windowName === 'overlay') return startGlassBackdrop(overlayGlassSurfaces);
+    if (windowName === 'setup') return startGlassBackdrop(setupGlassSurfaces, 'opaque');
+  }, [windowName, standaloneDemo]);
   const content = windowName === 'settings' ? <SettingsWindow />
     : windowName === 'setup' ? <SetupWindow />
     : windowName === 'halo' ? <HaloWindow />

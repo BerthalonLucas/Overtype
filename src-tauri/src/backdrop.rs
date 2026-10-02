@@ -1,35 +1,41 @@
-//! Lot 12, phase B: the hidden Acrylic trial (`settings.glassMaterial` = `acrylic`, never shown
-//! in the settings; docs/DA-PLAN.md lot 12, the findings in docs/ACRYLIC-TRIAL.md). The WebView
-//! cannot blur what lies behind its window, so the default glass is painted (phase A). Here one
-//! native window of our own carries a real Windows Acrylic (`DWMSBT_TRANSIENTWINDOW`) right
-//! under the overlay, sized to the Îlot's surface at rest: the shape the frontend published
-//! last, a single region. Windows has no native morph: the material is cloaked as soon as the
-//! overlay changes shape, place or capture, or starts to leave, and it comes back `SETTLE`
-//! after the last change. While it shows, `data-backdrop="acrylic"` on the overlay's <html>
-//! lets the surface through (the rule at the end of src/theme.css); without it, the painted
-//! glass is unchanged. The window is never activated and lets every click through (layered and
-//! transparent to the mouse: its corners outside the Îlot's rounded region would otherwise take
-//! them, measured on 2026-09-24); it is shown once and then only cloaked (hiding it loses the
-//! material, tauri#12854). Where Windows cannot draw the material as meant, the painted glass
-//! stays (`fallback`).
-use crate::types::{GlassMaterial, Rect};
+//! The real glass of 0.6 (docs/VERRE-0.6.md): what floats (the Îlot, the pills, the bubble, the
+//! setup window) really blurs what lies behind it. The WebView cannot blur what is behind its
+//! window, so Windows' compositor does it: each window that carries glass gets a visual tree of
+//! `Windows.UI.Composition` on its own HWND, *under* the transparent WebView. One visual per
+//! surface: Windows' host backdrop brush (what is behind the window, already blurred by the
+//! shell; no pixel ever reaches this process), clipped by a rounded rectangle whose place, size
+//! and radius are free, so the corners are the page's own (a pill stays a pill).
+//!
+//! The page is the only source of the shapes: its tracker (src/glassBackdrop.ts) measures every
+//! glass surface on each frame it changes and sends the list (`glass_frame`); this module mirrors
+//! it. Nothing here animates by itself and no second window exists: the glass belongs to the
+//! window it backs, moves and hides with it, and cannot outlive it. Tint, grain, rim and shadow
+//! stay the page's (src/theme.css, `data-backdrop="glass"`).
+//!
+//! Where Windows cannot draw it (`fallback`), with `glassMaterial: painted`, or after any native
+//! error, the answer to `glass_frame` is `false`: the page keeps its painted glass, which is the
+//! CSS default, so a silent Rust side never leaves a hole.
+use crate::types::GlassMaterial;
+use serde::Deserialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager};
+use std::time::{Duration, Instant};
+use tauri::AppHandle;
 
-/// How long the shape must rest before the material comes back: the slowest spring of the
-/// Îlot settles in 775 ms (src/motion/tokens.ts, bouncy morph), the entrance in 700 ms.
-pub const SETTLE: std::time::Duration = std::time::Duration::from_millis(800);
-/// The first build with `DWMWA_SYSTEMBACKDROP_TYPE` (Windows 11 22H2).
-pub const FIRST_BUILD: u32 = 22621;
+/// The first build with `DWMWA_USE_HOSTBACKDROPBRUSH` (Windows 11 21H2).
+pub const FIRST_BUILD: u32 = 22000;
 /// Test injection for the real window (docs/BRIDGE.md): forces one fallback condition.
 pub const FORCE_FALLBACK: &str = "FLOWTRANSLATE_ACRYLIC_FALLBACK";
-const SHOW: &str = "document.documentElement.setAttribute('data-backdrop','acrylic')";
-const CONCEAL: &str = "document.documentElement.removeAttribute('data-backdrop')";
+/// A page never has more glass surfaces than this at once (the Îlot, a pill, a menu, a notice).
+pub const MAX_SHAPES: usize = 8;
+/// How long what Windows said stays good: the conditions are read again at most this often
+/// while a surface shows, so turning transparency off switches to the painted glass at once.
+const CONDITIONS_TTL: Duration = Duration::from_millis(500);
 
 /// Why Windows would not draw the material as meant: the painted glass stays.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fallback {
-    /// Windows 10, or Windows 11 before 22H2: no system backdrop.
+    /// Windows 10, or Windows 11 before build 22000: no host backdrop for a Win32 window.
     OldWindows,
     /// Remote desktop: the material is drawn flat, and costs bandwidth.
     RemoteDesktop,
@@ -41,7 +47,7 @@ pub enum Fallback {
     EnergySaver,
 }
 
-/// What Windows says right now; read each time the material would show.
+/// What Windows says right now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Conditions {
     pub build: u32,
@@ -60,21 +66,20 @@ pub fn fallback(c: Conditions) -> Option<Fallback> {
     None
 }
 
-/// Why a shape keeps the painted glass.
+/// Why a window keeps the painted glass.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Painted {
-    /// `glassMaterial` is `painted` (the default).
+    /// `glassMaterial` is `painted`.
     Setting,
-    /// Not the Îlot's single surface (the v4 glass, several regions, no capture).
-    Shape,
     Fallback(Fallback),
+    /// The compositor refused something once: painted until the app starts again.
+    Native,
 }
 
-/// Whether the material shows under this shape. Windows is only read for an Îlot shape with
-/// the setting on.
-pub fn material(setting: GlassMaterial, ilot_shape: bool, conditions: impl FnOnce() -> Conditions) -> Result<(), Painted> {
-    if setting != GlassMaterial::Acrylic { return Err(Painted::Setting); }
-    if !ilot_shape { return Err(Painted::Shape); }
+/// Whether the real glass shows. Windows is only read with the setting on and no native failure.
+pub fn material(setting: GlassMaterial, failed: bool, conditions: impl FnOnce() -> Conditions) -> Result<(), Painted> {
+    if setting != GlassMaterial::Glass { return Err(Painted::Setting); }
+    if failed { return Err(Painted::Native); }
     match fallback(conditions()) {
         Some(reason) => Err(Painted::Fallback(reason)),
         None => Ok(()),
@@ -95,183 +100,283 @@ pub fn forced(injection: Option<&str>, mut c: Conditions) -> Conditions {
     c
 }
 
+/// What Windows says, read at most every `CONDITIONS_TTL`.
 pub fn conditions() -> Conditions {
-    forced(std::env::var(FORCE_FALLBACK).ok().as_deref(), imp::read())
-}
-
-/// Where the material goes: `rect` is physical, right under `overlay` in the z-order.
-pub struct Target {
-    pub overlay: isize,
-    pub rect: Rect,
-    pub dark: bool,
-}
-
-struct Backdrop {
-    hwnd: isize,
-    shown: bool,
-    generation: u64,
-}
-static STATE: Mutex<Backdrop> = Mutex::new(Backdrop { hwnd: 0, shown: false, generation: 0 });
-
-/// The overlay changed shape, place or capture: the material leaves at once and, with the
-/// trial on, comes back on the shape that rests `SETTLE` later. Any thread.
-pub fn reshape(app: &AppHandle, trial: bool) {
-    let generation = conceal(app);
-    if !trial { return; }
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(SETTLE).await;
-        let inner = handle.clone();
-        let _ = handle.run_on_main_thread(move || settle(&inner, generation));
-    });
-}
-
-/// The overlay starts to leave, or hides: the material leaves at once. Any thread.
-pub fn hide(app: &AppHandle) {
-    conceal(app);
-}
-
-/// Cloaks the material and gives the surface its painted glass back. The attribute goes first:
-/// the painted fill covers the material while it disappears. Windows is called after the lock
-/// is released (this may run off the main thread while `settle` holds it there); a later
-/// `settle` needs a later change, `SETTLE` away. The window stays where it is, cloaked.
-fn conceal(app: &AppHandle) -> u64 {
-    let (generation, shown) = {
-        let Ok(mut state) = STATE.lock() else { return 0 };
-        state.generation = state.generation.wrapping_add(1);
-        let shown = std::mem::take(&mut state.shown).then_some(state.hwnd);
-        (state.generation, shown)
-    };
-    if let Some(hwnd) = shown {
-        if let Some(overlay) = app.get_webview_window("overlay") { let _ = overlay.eval(CONCEAL); }
-        imp::conceal(hwnd);
+    static LAST: Mutex<Option<(Instant, Conditions)>> = Mutex::new(None);
+    let now = Instant::now();
+    let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    if let Some((at, conditions)) = *last {
+        if now.duration_since(at) < CONDITIONS_TTL { return conditions; }
     }
-    generation
+    let conditions = forced(std::env::var(FORCE_FALLBACK).ok().as_deref(), imp::read());
+    *last = Some((now, conditions));
+    conditions
 }
 
-/// On the main thread, once the shape rested: the material under it, unless something changed
-/// since or the shape keeps the painted glass (`crate::backdrop_target`).
-fn settle(app: &AppHandle, generation: u64) {
-    let Ok(mut state) = STATE.lock() else { return };
-    if state.generation != generation || state.shown { return; }
-    let Some(target) = crate::backdrop_target(app) else { return };
-    if state.hwnd == 0 {
-        let Some(hwnd) = imp::create() else { return };
-        state.hwnd = hwnd;
+/// One glass surface as the page measured it: CSS pixels in the window's client area, the
+/// radius of its corners, and the opacity it shows with (its own and its ancestors').
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Shape {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    pub radius: f64,
+    pub opacity: f64,
+}
+
+/// A surface for the compositor: physical pixels, every value finite and within reason.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Pane {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub radius: f32,
+    pub opacity: f32,
+}
+
+/// The page's shapes made safe for the compositor. Whatever a page sends, nothing here can
+/// draw outside reason: a value that is not a number drops its shape, a shape without area or
+/// fully transparent is not drawn, a radius never exceeds half the smaller side (a « 999 px »
+/// pill), coordinates stay within ±32 000 px and no more than `MAX_SHAPES` are kept.
+pub fn panes(shapes: &[Shape], scale: f64) -> Vec<Pane> {
+    let scale = if scale.is_finite() { scale.clamp(0.5, 8.) } else { 1. };
+    shapes
+        .iter()
+        .filter(|s| [s.x, s.y, s.width, s.height, s.radius, s.opacity].iter().all(|v| v.is_finite()))
+        .filter(|s| s.width >= 1. && s.height >= 1. && s.opacity > 0.004)
+        .take(MAX_SHAPES)
+        .map(|s| {
+            let width = (s.width * scale).min(32000.);
+            let height = (s.height * scale).min(32000.);
+            Pane {
+                x: (s.x * scale).clamp(-32000., 32000.) as f32,
+                y: (s.y * scale).clamp(-32000., 32000.) as f32,
+                width: width as f32,
+                height: height as f32,
+                radius: (s.radius * scale).clamp(0., width.min(height) / 2.) as f32,
+                opacity: blur_opacity(s.opacity) as f32,
+            }
+        })
+        .collect()
+}
+
+/// How much of the blur shows under a surface of this opacity. A surface fades in and out by
+/// its opacity; a blur faded the same way lets the sharp text behind it show through for most
+/// of the fade (seen frame by frame in the real window). So the blur comes faster than the
+/// tint and leaves later: 75 % at half opacity, the same at both ends.
+pub fn blur_opacity(surface: f64) -> f64 {
+    let o = surface.clamp(0., 1.);
+    1. - (1. - o) * (1. - o)
+}
+
+/// Set once the compositor refused something: painted glass everywhere until the next start.
+static FAILED: AtomicBool = AtomicBool::new(false);
+
+/// One frame of a page's glass (`glass_frame`), on the main thread: `label` names the window,
+/// `hwnd` is its handle, `seq` orders the messages of that page (an older one is dropped).
+/// Returns whether the real glass shows, so the page knows which material to paint; the
+/// second value is the cause of a native failure, the one time it happens (for the journal:
+/// an error code of Windows, never anything of the user's).
+pub fn frame(label: &str, hwnd: isize, seq: u64, shapes: &[Shape], scale: f64, setting: GlassMaterial) -> (bool, Option<String>) {
+    let real = material(setting, FAILED.load(Ordering::Acquire), conditions).is_ok();
+    if !real {
+        imp::clear(label);
+        return (false, None);
     }
-    if !imp::show(state.hwnd, &target) { return; }
-    state.shown = true;
-    if let Some(overlay) = app.get_webview_window("overlay") { let _ = overlay.eval(SHOW); }
+    match imp::apply(label, hwnd, seq, &panes(shapes, scale)) {
+        Ok(()) => (true, None),
+        Err(cause) => {
+            let first = !FAILED.swap(true, Ordering::AcqRel);
+            imp::clear(label);
+            (false, first.then_some(cause))
+        }
+    }
+}
+
+/// The window hides: its glass is emptied, so nothing of the last surface can show for an
+/// instant the next time the window does (the page sends its shapes again as soon as it
+/// paints). Any thread.
+pub fn hide(app: &AppHandle, label: &'static str) {
+    let _ = app.run_on_main_thread(move || imp::clear(label));
+}
+
+/// The window is destroyed (the setup closes): its visual tree goes with it. Any thread.
+pub fn forget(app: &AppHandle, label: &'static str) {
+    let _ = app.run_on_main_thread(move || imp::forget(label));
 }
 
 #[cfg(windows)]
 mod imp {
-    use super::{Conditions, Target};
-    use windows::core::{s, w, PCWSTR};
-    use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
-    use windows::Win32::Graphics::Dwm::{
-        DwmExtendFrameIntoClientArea, DwmSetWindowAttribute, DWMSBT_TRANSIENTWINDOW, DWMWA_BORDER_COLOR, DWMWA_CLOAK,
-        DWMWA_COLOR_NONE, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DWMWA_WINDOW_CORNER_PREFERENCE,
-        DWMWCP_ROUND, DWMWINDOWATTRIBUTE,
-    };
+    use super::{Conditions, Pane};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use windows::core::{s, w, Interface, PCWSTR};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED, DWMWA_USE_HOSTBACKDROPBRUSH};
     use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
     use windows::Win32::System::Registry::{RegGetValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RRF_RT_REG_SZ};
+    use windows::Win32::System::WinRT::Composition::ICompositorDesktopInterop;
+    use windows::Win32::System::WinRT::{CreateDispatcherQueueController, DispatcherQueueOptions, DQTAT_COM_NONE, DQTYPE_THREAD_CURRENT};
     use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
-    use windows::Win32::UI::Controls::MARGINS;
-    use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, GetSystemMetrics, RegisterClassExW, SendMessageW, SetLayeredWindowAttributes,
-        SetWindowPos, ShowWindow, SystemParametersInfoW, LWA_ALPHA, MA_NOACTIVATE, SM_REMOTESESSION, SPI_GETHIGHCONTRAST,
-        SWP_NOACTIVATE, SWP_SHOWWINDOW, SW_SHOWNOACTIVATE,
-        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WM_MOUSEACTIVATE, WM_NCACTIVATE, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-        WS_EX_NOREDIRECTIONBITMAP, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, IsWindow, SystemParametersInfoW, SM_REMOTESESSION, SPI_GETHIGHCONTRAST, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS};
+    use windows::System::{DispatcherQueue, DispatcherQueueController};
+    use windows::UI::Composition::Desktop::DesktopWindowTarget;
+    use windows::UI::Composition::{CompositionBrush, CompositionRoundedRectangleGeometry, Compositor, ContainerVisual};
+    use windows_numerics::Vector2;
 
-    const CLASS: PCWSTR = w!("FlowTranslateBackdrop");
-    // Where it is created, out of every screen, until its first shape.
-    const PARKED: i32 = -32000;
+    fn v2(x: f32, y: f32) -> Vector2 { Vector2 { X: x, Y: y } }
 
-    // DWM draws a system backdrop « active » only on an active frame, and this window never is
-    // one (the source or the Îlot keeps the keyboard): every deactivation is answered as an
-    // activation, with lParam -1 (nothing repainted; plan, lot 12). Never activated.
-    unsafe extern "system" fn proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-        unsafe {
-            match msg {
-                WM_NCACTIVATE => DefWindowProcW(hwnd, msg, WPARAM(1), LPARAM(-1)),
-                WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
-                _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    /// One surface: a container the size of the window, clipped to the rounded rectangle, with
+    /// the host backdrop inside. Kept and reused from one frame to the next.
+    struct Slot {
+        visual: ContainerVisual,
+        geometry: CompositionRoundedRectangleGeometry,
+        shown: Option<Pane>,
+    }
+
+    /// The glass of one window.
+    struct Surface {
+        hwnd: isize,
+        seq: u64,
+        target: DesktopWindowTarget,
+        root: ContainerVisual,
+        slots: Vec<Slot>,
+    }
+
+    #[derive(Default)]
+    struct Glass {
+        // The compositor needs a dispatcher queue on its thread; ours when the thread had none.
+        queue: Option<DispatcherQueueController>,
+        compositor: Option<Compositor>,
+        brush: Option<CompositionBrush>,
+        surfaces: HashMap<String, Surface>,
+    }
+
+    // Everything of the compositor lives on the main thread, where the windows are.
+    thread_local! { static GLASS: RefCell<Glass> = RefCell::new(Glass::default()); }
+
+    fn text(error: windows::core::Error) -> String { format!("0x{:08X}", error.code().0) }
+
+    impl Glass {
+        fn compositor(&mut self) -> windows::core::Result<(Compositor, CompositionBrush)> {
+            if let (Some(compositor), Some(brush)) = (&self.compositor, &self.brush) { return Ok((compositor.clone(), brush.clone())); }
+            if DispatcherQueue::GetForCurrentThread().is_err() {
+                let options = DispatcherQueueOptions { dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32, threadType: DQTYPE_THREAD_CURRENT, apartmentType: DQTAT_COM_NONE };
+                self.queue = Some(unsafe { CreateDispatcherQueueController(options) }?);
+            }
+            let compositor = Compositor::new()?;
+            let brush: CompositionBrush = compositor.CreateHostBackdropBrush()?.cast()?;
+            self.compositor = Some(compositor.clone());
+            self.brush = Some(brush.clone());
+            Ok((compositor, brush))
+        }
+
+        fn surface(&mut self, label: &str, hwnd: isize) -> windows::core::Result<&mut Surface> {
+            // A window created again under the same label (the setup, reopened) starts afresh.
+            if self.surfaces.get(label).is_some_and(|surface| surface.hwnd != hwnd) { self.drop_surface(label); }
+            if !self.surfaces.contains_key(label) {
+                let (compositor, _) = self.compositor()?;
+                let window = HWND(hwnd as *mut _);
+                unsafe {
+                    // Without it the host backdrop of a Win32 window is black.
+                    let on = 1i32;
+                    DwmSetWindowAttribute(window, DWMWA_USE_HOSTBACKDROPBRUSH, &on as *const i32 as *const _, std::mem::size_of::<i32>() as u32)?;
+                    let _ = DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &on as *const i32 as *const _, std::mem::size_of::<i32>() as u32);
+                }
+                let interop: ICompositorDesktopInterop = compositor.cast()?;
+                // Not topmost: under the window's children, so under the transparent WebView.
+                let target = unsafe { interop.CreateDesktopWindowTarget(window, false) }?;
+                let root = compositor.CreateContainerVisual()?;
+                root.SetRelativeSizeAdjustment(v2(1., 1.))?;
+                target.SetRoot(&root)?;
+                self.surfaces.insert(label.to_string(), Surface { hwnd, seq: 0, target, root, slots: Vec::new() });
+            }
+            Ok(self.surfaces.get_mut(label).expect("just inserted"))
+        }
+
+        fn drop_surface(&mut self, label: &str) {
+            if let Some(surface) = self.surfaces.remove(label) {
+                // The handle may already be gone: nothing to tell Windows then.
+                if unsafe { IsWindow(Some(HWND(surface.hwnd as *mut _))) }.as_bool() {
+                    let _ = surface.root.Children().and_then(|children| children.RemoveAll());
+                }
+                let _ = surface.target.Close();
             }
         }
     }
 
-    unsafe fn set<T>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE, value: T) -> bool {
-        unsafe { DwmSetWindowAttribute(hwnd, attribute, &value as *const T as *const _, std::mem::size_of::<T>() as u32).is_ok() }
+    fn slot(compositor: &Compositor, brush: &CompositionBrush, root: &ContainerVisual) -> windows::core::Result<Slot> {
+        let visual = compositor.CreateContainerVisual()?;
+        visual.SetRelativeSizeAdjustment(v2(1., 1.))?;
+        let geometry = compositor.CreateRoundedRectangleGeometry()?;
+        visual.SetClip(&compositor.CreateGeometricClipWithGeometry(&geometry)?)?;
+        let blur = compositor.CreateSpriteVisual()?;
+        blur.SetRelativeSizeAdjustment(v2(1., 1.))?;
+        blur.SetBrush(brush)?;
+        visual.Children()?.InsertAtTop(&blur)?;
+        visual.SetIsVisible(false)?;
+        root.Children()?.InsertAtTop(&visual)?;
+        Ok(Slot { visual, geometry, shown: None })
     }
 
-    /// The backdrop window, on the main thread: a popup without a surface of its own
-    /// (WS_EX_NOREDIRECTIONBITMAP), its whole area given to the frame, rounded by Windows
-    /// without a border, layered at full opacity and transparent to the mouse (Windows routes
-    /// the clicks under such a window), shown once while cloaked. None when Windows refuses
-    /// the material.
-    pub fn create() -> Option<isize> {
-        unsafe {
-            let instance = GetModuleHandleW(None).ok()?;
-            let class = WNDCLASSEXW {
-                cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-                lpfnWndProc: Some(proc),
-                hInstance: instance.into(),
-                lpszClassName: CLASS,
-                ..Default::default()
-            };
-            // 0 once the class exists: CreateWindowExW tells whether it does.
-            let _ = RegisterClassExW(&class);
-            let hwnd = CreateWindowExW(
-                WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TRANSPARENT,
-                CLASS,
-                w!("FlowTranslate"),
-                WS_POPUP,
-                PARKED,
-                PARKED,
-                1,
-                1,
-                None,
-                None,
-                Some(instance.into()),
-                None,
-            )
-            .ok()?;
-            let ready = SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA).is_ok()
-                && set(hwnd, DWMWA_CLOAK, 1i32)
-                && set(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND)
-                && set(hwnd, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE)
-                && set(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW)
-                && DwmExtendFrameIntoClientArea(hwnd, &MARGINS { cxLeftWidth: -1, cxRightWidth: -1, cyTopHeight: -1, cyBottomHeight: -1 }).is_ok();
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
-            let _ = SendMessageW(hwnd, WM_NCACTIVATE, Some(WPARAM(1)), Some(LPARAM(0)));
-            ready.then_some(hwnd.0 as isize)
+    fn apply_panes(glass: &mut Glass, label: &str, hwnd: isize, seq: u64, panes: &[Pane]) -> windows::core::Result<()> {
+        let (compositor, brush) = glass.compositor()?;
+        let surface = glass.surface(label, hwnd)?;
+        // Messages of one page are numbered; one that arrives after a later one is dropped.
+        if seq < surface.seq { return Ok(()); }
+        surface.seq = seq;
+        while surface.slots.len() < panes.len() {
+            let slot = slot(&compositor, &brush, &surface.root)?;
+            surface.slots.push(slot);
         }
-    }
-
-    /// Under the overlay, on the shape, in the theme, then uncloaked (main thread).
-    pub fn show(handle: isize, target: &Target) -> bool {
-        let hwnd = HWND(handle as *mut _);
-        let (x, y) = (target.rect.x.round() as i32, target.rect.y.round() as i32);
-        let (width, height) = (target.rect.width.round().max(1.) as i32, target.rect.height.round().max(1.) as i32);
-        unsafe {
-            let _ = set(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, i32::from(target.dark));
-            if SetWindowPos(hwnd, Some(HWND(target.overlay as *mut _)), x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW).is_err() {
-                return false;
+        for (index, slot) in surface.slots.iter_mut().enumerate() {
+            let pane = panes.get(index).copied();
+            if slot.shown == pane { continue; }
+            match pane {
+                Some(pane) => {
+                    slot.geometry.SetOffset(v2(pane.x, pane.y))?;
+                    slot.geometry.SetSize(v2(pane.width, pane.height))?;
+                    slot.geometry.SetCornerRadius(v2(pane.radius, pane.radius))?;
+                    slot.visual.SetOpacity(pane.opacity)?;
+                    if slot.shown.is_none() { slot.visual.SetIsVisible(true)?; }
+                }
+                None => slot.visual.SetIsVisible(false)?,
             }
-            set(hwnd, DWMWA_CLOAK, 0i32)
+            slot.shown = pane;
         }
+        Ok(())
     }
 
-    /// Cloaked where it stands (any thread): no SetWindowPos while the surface springs, and
-    /// the mouse goes through it anyway.
-    pub fn conceal(handle: isize) {
-        if handle == 0 { return; }
-        unsafe {
-            let _ = set(HWND(handle as *mut _), DWMWA_CLOAK, 1i32);
-        }
+    /// The panes of this frame under the window's WebView (main thread). An error is Windows'
+    /// code as text.
+    pub fn apply(label: &str, hwnd: isize, seq: u64, panes: &[Pane]) -> Result<(), String> {
+        GLASS.with(|glass| match glass.try_borrow_mut() {
+            Ok(mut glass) => apply_panes(&mut glass, label, hwnd, seq, panes).map_err(text),
+            Err(_) => Ok(()),
+        })
+    }
+
+    /// Nothing shows in this window's glass any more (main thread); the tree stays for the
+    /// next frame.
+    pub fn clear(label: &str) {
+        GLASS.with(|glass| {
+            let Ok(mut glass) = glass.try_borrow_mut() else { return };
+            let Some(surface) = glass.surfaces.get_mut(label) else { return };
+            for slot in surface.slots.iter_mut().filter(|slot| slot.shown.is_some()) {
+                let _ = slot.visual.SetIsVisible(false);
+                slot.shown = None;
+            }
+        });
+    }
+
+    /// The window is gone (main thread).
+    pub fn forget(label: &str) {
+        GLASS.with(|glass| {
+            if let Ok(mut glass) = glass.try_borrow_mut() { glass.drop_surface(label); }
+        });
     }
 
     fn dword(root: HKEY, key: PCWSTR, value: PCWSTR) -> Option<u32> {
@@ -306,7 +411,7 @@ mod imp {
     struct PowerStatus { ac: u8, battery: u8, percent: u8, system: u8, life: u32, full: u32 }
 
     // GetSystemPowerStatus, looked up in kernel32: its SystemStatusFlag is 1 while the battery
-    // (energy) saver is on. Found by name to keep the crate's feature list as the plan names it.
+    // (energy) saver is on. Found by name to keep the crate's feature list short.
     fn energy_saver() -> bool {
         type GetSystemPowerStatus = unsafe extern "system" fn(*mut PowerStatus) -> i32;
         unsafe {
@@ -340,10 +445,10 @@ mod imp {
 
 #[cfg(not(windows))]
 mod imp {
-    use super::{Conditions, Target};
-    pub fn create() -> Option<isize> { None }
-    pub fn show(_: isize, _: &Target) -> bool { false }
-    pub fn conceal(_: isize) {}
+    use super::{Conditions, Pane};
+    pub fn apply(_: &str, _: isize, _: u64, _: &[Pane]) -> Result<(), String> { Err("unsupported".into()) }
+    pub fn clear(_: &str) {}
+    pub fn forget(_: &str) {}
     pub fn read() -> Conditions { Conditions { build: 0, transparency: false, energy_saver: false, high_contrast: false, remote: false } }
 }
 
@@ -354,18 +459,18 @@ mod tests {
     const WINDOWS_11: Conditions = Conditions { build: 26200, transparency: true, energy_saver: false, high_contrast: false, remote: false };
 
     #[test]
-    fn the_material_shows_only_for_the_ilot_shape_with_the_trial_on_and_windows_able_to_draw_it() {
+    fn the_real_glass_shows_only_with_the_setting_on_no_native_failure_and_windows_able_to_draw_it() {
         let read = std::cell::Cell::new(0);
         let conditions = || { read.set(read.get() + 1); WINDOWS_11 };
-        assert_eq!(material(GlassMaterial::Painted, true, conditions), Err(Painted::Setting));
-        assert_eq!(material(GlassMaterial::Acrylic, false, conditions), Err(Painted::Shape));
+        assert_eq!(material(GlassMaterial::Painted, false, conditions), Err(Painted::Setting));
+        assert_eq!(material(GlassMaterial::Glass, true, conditions), Err(Painted::Native));
         assert_eq!(read.get(), 0, "Windows is read only when the material could show");
-        assert_eq!(material(GlassMaterial::Acrylic, true, conditions), Ok(()));
+        assert_eq!(material(GlassMaterial::Glass, false, conditions), Ok(()));
         assert_eq!(read.get(), 1);
-        let off = |c: Conditions| material(GlassMaterial::Acrylic, true, || c);
+        let off = |c: Conditions| material(GlassMaterial::Glass, false, || c);
         assert_eq!(off(Conditions { build: 19045, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::OldWindows)));
-        assert_eq!(off(Conditions { build: 22000, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::OldWindows)), "Windows 11 21H2 has no system backdrop");
-        assert_eq!(off(Conditions { build: FIRST_BUILD, ..WINDOWS_11 }), Ok(()));
+        assert_eq!(off(Conditions { build: 21999, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::OldWindows)));
+        assert_eq!(off(Conditions { build: FIRST_BUILD, ..WINDOWS_11 }), Ok(()), "Windows 11 21H2 has the host backdrop");
         assert_eq!(off(Conditions { remote: true, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::RemoteDesktop)));
         assert_eq!(off(Conditions { high_contrast: true, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::HighContrast)));
         assert_eq!(off(Conditions { transparency: false, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::Transparency)));
@@ -384,5 +489,45 @@ mod tests {
         assert_eq!(fallback_of(Some("energy")), Some(Fallback::EnergySaver));
         assert_eq!(fallback_of(Some("anything")), None);
         assert_eq!(forced(Some("energy"), WINDOWS_11), Conditions { energy_saver: true, ..WINDOWS_11 });
+    }
+
+    fn shape(x: f64, y: f64, width: f64, height: f64, radius: f64, opacity: f64) -> Shape { Shape { x, y, width, height, radius, opacity } }
+
+    #[test]
+    fn a_shape_reaches_the_compositor_in_physical_pixels_with_the_radius_of_the_page() {
+        // The work pill (a capsule: « 999 px ») and the grid (16 px), at 100 and 150 %.
+        assert_eq!(panes(&[shape(40., 12., 300., 44., 999., 1.)], 1.), vec![Pane { x: 40., y: 12., width: 300., height: 44., radius: 22., opacity: 1. }]);
+        assert_eq!(panes(&[shape(40., 12., 218., 176., 16., 0.5)], 1.5), vec![Pane { x: 60., y: 18., width: 327., height: 264., radius: 24., opacity: 0.75 }]);
+        // Sub-pixel places are kept: the page's own layout is not rounded either.
+        assert_eq!(panes(&[shape(10.25, 0.5, 20.5, 20.5, 4., 1.)], 1.)[0], Pane { x: 10.25, y: 0.5, width: 20.5, height: 20.5, radius: 4., opacity: 1. });
+    }
+
+    #[test]
+    fn the_blur_comes_faster_than_the_surface_fades_in_and_meets_it_at_both_ends() {
+        assert_eq!((blur_opacity(0.), blur_opacity(1.)), (0., 1.));
+        assert_eq!(blur_opacity(0.5), 0.75);
+        assert!((0..=100).map(|i| blur_opacity(i as f64 / 100.)).collect::<Vec<_>>().windows(2).all(|pair| pair[0] <= pair[1]));
+        assert_eq!((blur_opacity(-3.), blur_opacity(9.)), (0., 1.));
+    }
+
+    #[test]
+    fn nothing_a_page_sends_can_draw_out_of_reason() {
+        let nan = f64::NAN;
+        let hostile = [
+            shape(nan, 0., 10., 10., 0., 1.),
+            shape(0., 0., f64::INFINITY, 10., 0., 1.),
+            shape(0., 0., 10., 10., nan, 1.),
+            shape(0., 0., 0., 10., 0., 1.),
+            shape(0., 0., 10., -4., 0., 1.),
+            shape(0., 0., 10., 10., 0., 0.),
+            shape(0., 0., 10., 10., 0., -1.),
+        ];
+        assert!(panes(&hostile, 1.).is_empty(), "no number, no area or no opacity: not drawn");
+        let pane = panes(&[shape(-1e9, 1e9, 1e9, 30., -5., 7.)], 1.)[0];
+        assert_eq!(pane, Pane { x: -32000., y: 32000., width: 32000., height: 30., radius: 0., opacity: 1. });
+        assert_eq!(panes(&[shape(0., 0., 10., 10., 0., 1.)], nan)[0].width, 10., "an unreadable scale is 100 %");
+        assert_eq!(panes(&[shape(0., 0., 10., 10., 0., 1.)], 1e9)[0].width, 80., "a scale stays within 50 and 800 %");
+        let many: Vec<Shape> = (0..40).map(|i| shape(i as f64, 0., 10., 10., 0., 1.)).collect();
+        assert_eq!(panes(&many, 1.).len(), MAX_SHAPES);
     }
 }

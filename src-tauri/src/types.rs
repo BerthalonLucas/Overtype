@@ -72,13 +72,16 @@ pub enum PillPlacement {
     Margin,
 }
 
-/// Hidden trial (lot 12, phase B): `painted` glass (default) or real Windows Acrylic.
+/// What floats is made of: the real `glass` (Windows blurs what is behind, src/backdrop.rs;
+/// the default, painted by itself wherever Windows cannot) or the `painted` glass always.
+/// `acrylic` was the hidden trial of 0.5: a file that says so asked for the real material.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum GlassMaterial {
-    #[default]
     Painted,
-    Acrylic,
+    #[default]
+    #[serde(alias = "acrylic")]
+    Glass,
 }
 
 /// What follows a replacement: the drawn check, Undo with its countdown, the changed

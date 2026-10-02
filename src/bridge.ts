@@ -15,7 +15,7 @@ type Handler<T> = (payload: T) => void;
 // A fresh install, as Rust's Settings::default(): one server, nothing set up, the setup to do.
 const emptyServer: Server = { id: 's1', name: '', endpoint: '', apiKey: '', noKey: false, model: '' };
 const defaultSettings: Settings = {
-  defaultActionId, actions: structuredClone(defaultActions), shortcutBindings: structuredClone(defaultBindings), historyEnabled: false, autostart: false, textSize: 'normal', autoClose: 'normal', uiVersion: 'ilot', language: 'en', theme: 'system', motion: 'system', motionPreset: 'smooth', indicator: 'perle', afterReplace: { check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60 }, undoStrategy: 'keystroke', pillPlacement: 'below', glassMaterial: 'painted', menuActionIds: [...defaultMenuActionIds],
+  defaultActionId, actions: structuredClone(defaultActions), shortcutBindings: structuredClone(defaultBindings), historyEnabled: false, autostart: false, textSize: 'normal', autoClose: 'normal', uiVersion: 'ilot', language: 'en', theme: 'system', motion: 'system', motionPreset: 'smooth', indicator: 'perle', afterReplace: { check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60 }, undoStrategy: 'keystroke', pillPlacement: 'below', glassMaterial: 'glass', menuActionIds: [...defaultMenuActionIds],
   servers: [structuredClone(emptyServer)], defaultServerId: 's1', setupDone: false, changedWordsStyle: 'encre',
 };
 // The servers of the preview. The setup window starts as a fresh install does; every other
@@ -260,6 +260,10 @@ export const bridge = {
   checkConnection: (serverId?: string) => command<ConnectionStatus>('check_connection', serverId ? { serverId } : undefined),
   getHistory: () => command<HistoryEntry[]>('get_history'),
   deleteHistory: (id: string | null) => command<void>('delete_history', { id }),
+  // The real glass (src/glassBackdrop.ts): the glass surfaces this page shows right now, for
+  // Windows' compositor to blur what is behind them. Answers whether the real glass shows;
+  // false outside the native app (the painted material, or the page's own backdrop-filter).
+  glassFrame: (seq: number, scale: number, shapes: { x: number; y: number; width: number; height: number; radius: number; opacity: number }[]) => native ? command<boolean>('glass_frame', { seq, scale, shapes }) : Promise.resolve(false),
   // The Windows app mode read by Rust (null when unknown, or outside the native app).
   systemTheme: () => native ? command<unknown>('system_theme').catch(() => null) : Promise.resolve(null),
   // Whether Windows asks to reduce animations (Rust reads SPI_GETCLIENTAREAANIMATION); null or

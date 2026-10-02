@@ -227,7 +227,9 @@ impl SettingsStore {
             after_replace: raw.after_replace,
             undo_strategy: raw.undo_strategy,
             pill_placement: raw.pill_placement,
-            glass_material: raw.glass_material,
+            // Until 0.5.1 the material was a hidden trial, `painted` unless hand-edited: such a
+            // file never chose it, and gets the real glass of 0.6 (src/backdrop.rs).
+            glass_material: if from_0_5 { crate::types::GlassMaterial::Glass } else { raw.glass_material },
             menu_action_ids: raw.menu_action_ids.unwrap_or_default(),
             servers,
             default_server_id,
@@ -659,7 +661,14 @@ mod tests {
         assert_eq!(migrated.after_replace.undo_seconds, 12);
         assert_eq!(migrated.shortcut_bindings[0].shortcut, "Ctrl+Alt+Shift+Space");
         assert_eq!(migrated.changed_words_style, ChangedWordsStyle::Encre);
+        // The material was a hidden trial until 0.5.1: its `painted` was never chosen.
+        assert_eq!(file["glassMaterial"], "painted");
+        assert_eq!(migrated.glass_material, crate::types::GlassMaterial::Glass);
         fs::remove_dir_all(root).unwrap();
+        // In a 0.6 file the choice is kept, and the trial's `acrylic` reads as the real glass.
+        let read = |value: &str| serde_json::from_str::<crate::types::GlassMaterial>(value).unwrap();
+        assert_eq!((read("\"painted\""), read("\"glass\""), read("\"acrylic\"")), (crate::types::GlassMaterial::Painted, crate::types::GlassMaterial::Glass, crate::types::GlassMaterial::Glass));
+        assert_eq!(serde_json::to_string(&crate::types::GlassMaterial::Glass).unwrap(), "\"glass\"");
     }
     #[cfg(windows)]
     #[test]

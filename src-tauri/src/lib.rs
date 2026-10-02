@@ -769,7 +769,6 @@ fn store_capture(
     let overlay = host::overlay_handle();
     host::set_no_activate(overlay, false);
     halo::hide(app);
-    backdrop::hide(app);
     host::disarm_undo_watch();
     let is_menu = menu.is_some();
     let menu_scene;
@@ -881,6 +880,7 @@ fn show_notice(app: &AppHandle, message: &str, code: Option<ErrorKind>) {
             let state = inner.state::<AppState>();
             if state.inner.lock().is_ok_and(|i| !i.visible && i.notice_generation == generation) {
                 if let Some(window) = inner.get_webview_window("overlay") { let _ = host::hide(&window); }
+                backdrop::hide(&inner, "overlay");
             }
         });
     });
@@ -1811,8 +1811,8 @@ fn schedule_finish_dismiss(app: AppHandle, capture_id: String, generation: u64) 
         let state = handle.state::<AppState>();
         let should_hide = state.inner.lock().map(|mut i| i.complete_pending_dismiss(&capture_id, generation)).unwrap_or(false);
         if should_hide {
-            backdrop::hide(&handle);
             if let Some(window) = handle.get_webview_window("overlay") { let _ = host::hide(&window); }
+            backdrop::hide(&handle, "overlay");
         }
     }).map_err(|_| "Fermeture de la traduction indisponible.".to_string())
 }
@@ -1824,7 +1824,6 @@ fn dismiss(app: &AppHandle, state: &AppState) -> Result<(), String> {
     }
     // Marks already fading out (the end of Undo's countdown) finish their fade.
     halo::dismiss(app);
-    backdrop::hide(app);
     host::disarm_undo_watch();
     // The overlay had the keyboard (the Îlot, a click in the glass): the source gets it
     // back before the window hides, its selection untouched and nothing pasted. Hiding
@@ -1879,7 +1878,7 @@ fn force_close(app: &AppHandle, why: &'static str) {
     };
     silence();
     halo::hide(app);
-    backdrop::hide(app);
+    backdrop::hide(app, "overlay");
     let handle = app.clone();
     let _ = std::thread::Builder::new().name("force-close".into()).spawn(move || {
         let state = handle.state::<AppState>();
@@ -2087,11 +2086,14 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
     }
     let (work, scale) = host::monitor(None);
     let (width, height) = panel_size(SETUP_SIZE, work, scale);
-    // The frosted window: Windows' own Acrylic under a transparent page while it can draw it
-    // (the real glass of docs/VERRE-0.6.md replaces it when it lands); an opaque page otherwise.
-    let glass = backdrop::fallback(backdrop::conditions()).is_none();
+    // The frosted window: the real glass of docs/VERRE-0.6.md under a transparent page (the
+    // page's tracker sends the window's shape, src/glassBackdrop.ts) while Windows can draw it
+    // and the setting asks for it; an opaque page otherwise. The page starts on what is
+    // expected and follows what `glass_frame` answers.
+    let setting = app.state::<AppState>().inner.lock().map(|i| i.settings.glass_material).unwrap_or_default();
+    let glass = backdrop::material(setting, false, backdrop::conditions).is_ok();
     let url = if replay { "/?window=setup&replay=1" } else { "/?window=setup" };
-    let mut builder = inspectable(tauri::WebviewWindowBuilder::new(app, "setup", tauri::WebviewUrl::App(url.into())))
+    let builder = inspectable(tauri::WebviewWindowBuilder::new(app, "setup", tauri::WebviewUrl::App(url.into())))
         .title(brand::APP_NAME)
         .inner_size(width, height)
         .resizable(false)
@@ -2102,9 +2104,6 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
         .center()
         .focused(true)
         .initialization_script(backdrop_script(glass));
-    if glass {
-        builder = builder.effects(tauri::window::EffectsBuilder::new().effect(tauri::window::Effect::Acrylic).build());
-    }
     let window = builder.build().map_err(|_| "Ouverture de l’accueil impossible.".to_string())?;
     browser_keys::disable(&window);
     let handle = app.clone();
@@ -2113,6 +2112,7 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
             // Closed (its cross, Alt+F4): its checks stop, and a demo never outlives it.
             if let Ok(mut running) = handle.state::<AppState>().probes.lock() { cancel_window(&mut running, "setup"); }
             if let Some(demo) = handle.get_webview_window("demo") { let _ = demo.destroy(); }
+            backdrop::forget(&handle, "setup");
         }
     });
     Ok(())
@@ -2285,8 +2285,8 @@ fn focus_overlay_now(app: &AppHandle) -> Result<bool, String> {
     };
     if !current {
         if should_hide {
-            backdrop::hide(app);
             let _ = host::hide(&w);
+            backdrop::hide(app, "overlay");
         }
         return Err("La capture n’est plus active.".into());
     }
@@ -2908,37 +2908,29 @@ fn finish_position(
           if apply_rect || apply_regions { i.last_overlay = Some((rect, regions)); }
           Ok(())
         })();
-        // Lot 12 phase B: a new shape or place cloaks the Acrylic until it rests.
-        if result.is_ok() && (apply_rect || apply_regions) {
-            let trial = state.inner.lock().is_ok_and(|i| i.settings.glass_material == GlassMaterial::Acrylic);
-            backdrop::reshape(&handle, trial);
-        }
         if let Some(placed) = placed { let _ = placed.send(result); }
     }).map_err(|_| "Placement indisponible.".to_string())
 }
-/// Lot 12 phase B: where the Acrylic goes under the shape at rest, or None to keep the painted
-/// glass (src-tauri/src/backdrop.rs): the Îlot journey (uiVersion `ilot`, a menu capture) on
-/// screen with its single region, the trial on and Windows able to draw it. The region is the
-/// one last applied, over the window's real rectangle; the theme is the one the pages resolve.
-fn backdrop_target(app: &AppHandle) -> Option<backdrop::Target> {
-    let state = app.state::<AppState>();
-    let i = state.inner.lock().ok()?;
-    if !i.visible || i.pending_dismiss.is_some() || i.dragging { return None; }
-    let journey = i.settings.ui_version == UiVersion::Ilot && i.capture.as_ref().is_some_and(|capture| capture.public.menu.is_some());
-    let (_, regions) = i.last_overlay.as_ref()?;
-    backdrop::material(i.settings.glass_material, journey && regions.len() == 1, backdrop::conditions).ok()?;
-    let region = regions[0];
-    let dark = match i.settings.theme {
-        Theme::Dark => true,
-        Theme::Light => false,
-        Theme::System => system_theme::current().is_some_and(|theme| theme.dark),
+/// One frame of a page's real glass (docs/VERRE-0.6.md, src/glassBackdrop.ts): the surfaces
+/// the page shows right now, in CSS pixels of its window (`scale`: its devicePixelRatio), `seq`
+/// numbering the messages of that page. Windows' compositor mirrors them under the WebView.
+/// Answers whether the real glass shows: `false` (painted glass asked, Windows unable, a native
+/// error) tells the page to keep its painted material. Only the windows that float glass.
+#[tauri::command]
+fn glass_frame(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, seq: u64, scale: f64, shapes: Vec<backdrop::Shape>) -> bool {
+    let label: &'static str = match window.label() {
+        "overlay" => "overlay",
+        "setup" => "setup",
+        _ => return false,
     };
-    let s = i.scale;
-    drop(i);
-    let overlay = host::handle(&app.get_webview_window("overlay")?);
-    let window = host::window_rect(overlay)?;
-    let rect = Rect { x: window.x + (region.x * s).round(), y: window.y + (region.y * s).round(), width: (region.width * s).round(), height: (region.height * s).round() };
-    Some(backdrop::Target { overlay, rect, dark })
+    let setting = state.inner.lock().map(|i| i.settings.glass_material).unwrap_or(GlassMaterial::Painted);
+    let hwnd = host::handle(&window);
+    if hwnd == 0 { return false; }
+    let (real, failure) = backdrop::frame(label, hwnd, seq, &shapes, scale, setting);
+    if let Some(cause) = failure {
+        record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "glass.unavailable").cause(cause));
+    }
+    real
 }
 fn reset_tray_tooltip(app: &AppHandle, simulated: bool) {
     let Some(language) = app.state::<AppState>().inner.lock().ok().map(|i| i.settings.language) else { return };
@@ -3296,6 +3288,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            glass_frame,
             save_settings,
             reset_settings,
             suggest_shortcut,

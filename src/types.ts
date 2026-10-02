@@ -52,8 +52,9 @@ export type Indicator = 'perle' | 'nebuleuse' | 'ruban';
 // Undo: Ctrl+Z sent to the source (option A) or the original pasted back (option B).
 export type UndoStrategy = 'keystroke' | 'repaste';
 export type PillPlacement = 'below' | 'margin';
-// Hidden trial of lot 12 (phase B): real Windows Acrylic instead of the painted glass.
-export type GlassMaterial = 'painted' | 'acrylic';
+// What floats is made of: the real glass (Windows blurs what is behind; the default, painted by
+// itself wherever Windows cannot) or the painted glass always (src-tauri/src/backdrop.rs).
+export type GlassMaterial = 'painted' | 'glass';
 // undoSeconds: 2 to 20. changedWordsSeconds: 5 to 120, the longest the marks stay without an action in the text.
 export type AfterReplace = { check: boolean; undo: boolean; undoSeconds: number; changedWords: boolean; changedWordsSeconds: number };
 // 0.4.0: no target language any more; each action's instruction names its language.

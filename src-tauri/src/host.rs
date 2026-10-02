@@ -516,6 +516,12 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
             }else if key.vkCode==VK_ESCAPE.0 as u32&&fg!=0&&[SOURCE.load(Ordering::Relaxed),OVERLAY.load(Ordering::Relaxed)].contains(&fg){
                 if [WM_KEYDOWN,WM_SYSKEYDOWN].contains(&message){ESCAPE_PENDING.store(true,Ordering::Release);return LRESULT(1);}
                 if [WM_KEYUP,WM_SYSKEYUP].contains(&message){return LRESULT(1);}
+            }else if key.vkCode==VK_ESCAPE.0 as u32&&[WM_KEYDOWN,WM_SYSKEYDOWN].contains(&message)&&key.dwExtraInfo!=OUR_KEYS{
+                // 0.6: Escape in front of any other window closes the bubble too (02/10: a
+                // working pill over a silent server, a click on the desktop, and Escape did
+                // nothing: the watcher polls the key every 35 ms and a short tap fell between
+                // two looks). Seen here, at its press, and left to the application in front.
+                ESCAPE_PENDING.store(true,Ordering::Release);
             }
         }
         unsafe{CallNextHookEx(None,code,wparam,lparam)}

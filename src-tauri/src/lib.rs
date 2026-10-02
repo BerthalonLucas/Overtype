@@ -206,6 +206,8 @@ impl Watched {
         match self { Watched::Menu => "menu", Watched::Working => "working", Watched::Delivering => "delivering", Watched::Pill => "pill", Watched::Reading => "reading" }
     }
 }
+/// A request that says nothing while its target is already lost (the user went elsewhere).
+const WORKING_LEFT: std::time::Duration = std::time::Duration::from_secs(30);
 /// What the watchdog does with a state that outlived its limit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Verdict {
@@ -344,7 +346,12 @@ impl Inner {
         if !matches!(watched, Watched::Working | Watched::Delivering) {
             if let Some(near) = near { silent = silent.min(near); }
         }
-        (silent >= watched.limit()).then_some((watched, silent))
+        // The user left the source while the request says nothing (02/10: a working pill left
+        // floating over another window, a silent server behind it): nothing can be pasted any
+        // more, and the pill has no button. It waits `WORKING_LEFT`, not the whole limit.
+        let left = watched == Watched::Working && self.capture.as_ref().is_some_and(|capture| capture.invalidated);
+        let limit = if left { WORKING_LEFT } else { watched.limit() };
+        (silent >= limit).then_some((watched, silent))
     }
     /// The emergency exit: everything on screen is forgotten at once, whatever the page says.
     /// The overlay page is loaded again afterwards (`frontend_ready` false until it answers).
@@ -3451,6 +3458,13 @@ mod tests {
         assert_eq!(verdict(&i, 150, Some(1), true), Some(Verdict::TimeOut));
         i.touched = after(140);
         assert_eq!(verdict(&i, 150, None, true), None);
+        // The user went elsewhere (the target is lost) and the server says nothing: thirty
+        // seconds, then the error pill, which has a close button.
+        i.touched = start;
+        i.capture.as_mut().unwrap().invalidated = true;
+        assert_eq!(verdict(&i, 29, None, true), None);
+        assert_eq!(verdict(&i, 30, None, true), Some(Verdict::TimeOut));
+        i.capture.as_mut().unwrap().invalidated = false;
         // The answer is complete and the paste never reports: twenty seconds, then the exit.
         i.touched = start;
         i.active = None;

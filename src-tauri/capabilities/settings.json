@@ -1,12 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings-resize",
-  "description": "Resize the settings window from its corner grip and title it in the interface language",
+  "description": "The framed windows (settings, setup): drag by the home-made title bar, minimise, resize the settings from its corner grip, and title them in the interface language",
   "windows": [
-    "settings"
+    "settings",
+    "setup"
   ],
   "permissions": [
     "core:window:allow-start-resize-dragging",
-    "core:window:allow-set-title"
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-set-title",
+    "core:window:allow-is-visible"
   ]
 }

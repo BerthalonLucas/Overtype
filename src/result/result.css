@@ -4,10 +4,13 @@
    ink (src/theme.css); the error icon from --error-icon (#D14343, #FF8A80 in dark, app.css:170-171).
    The surface and its centred layer are src/menu/ilot.css and src/glass.css (.shape-layer). */
 
-/* Check and Undo: 28 high, the lab's gap 6 and padding 10 / 6 (Simulator.jsx:279). The check
+/* Check and Undo: 28 high, the lab's gap 6 and left padding 10 (Simulator.jsx:279). The check
    alone and Undo alone keep their content centred (symmetric padding), the check in the same
-   44 × 28 as the work pill. */
-.result-row { display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; min-width: 44px; padding: 0 6px 0 10px; white-space: nowrap; }
+   44 × 28 as the work pill.
+   Centring (0.6, measured on the painted ink at 100, 125, 150 and 200 %): an oval that ends a
+   pill sits concentric in the pill's round end, as far from the end as from the top and the
+   bottom: (28 − 22) / 2 = 3 here, (30 − 22) / 2 = 4 in the error pill (they were 6). */
+.result-row { display: flex; align-items: center; justify-content: center; gap: 6px; height: 28px; min-width: 44px; padding: 0 3px 0 10px; white-space: nowrap; }
 .result-row.is-check-only { padding: 0 12px; }
 .result-row.is-undo-only { padding: 0 3px; }
 
@@ -20,13 +23,16 @@
 .result-check.is-drawn path { animation: none; stroke-dashoffset: 0; }
 .result-undo[aria-disabled="true"] { cursor: default; }
 
-/* Buttons in the pill (app.css:159-160): 22 high, radius 11, a light ink fill. */
+/* Buttons in the pill (app.css:159-160): 22 high, radius 11, a light ink fill. Undo's arrow
+   keeps 2 px of air inside its own 12 px box and the ring less than 1: one pixel less padding
+   on the arrow's side puts the ink (arrow · Undo · ring) in the middle of the oval. */
 .result-btn { appearance: none; display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 5px; height: 22px; padding: 0 8px; border: 0; border-radius: 11px; background: rgb(var(--ink-rgb) / .07); color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 .result-btn:hover { background: rgb(var(--ink-rgb) / .13); }
 /* Inside the button: the shape clips anything outside it. */
 .result-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .result-btn svg { display: block; flex: none; }
 .result-close { padding: 0 6px; }
+.result-undo { padding: 0 8px 0 7px; }
 
 /* The countdown ring: r 5 in a 14 viewBox, 12 px, starting at the top (app.css:163-165). Its
    arc is written by DoneContent (stroke-dasharray). */
@@ -41,7 +47,7 @@
 
 /* The compact error pill: 30 high, icon 14, text, one button, ✕ (app.css:169-171). Its width is
    capped (ErrorContent, ilotMetrics.error.maxWidth: the Îlot's window holds it). */
-.result-error { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 6px 0 10px; white-space: nowrap; }
+.result-error { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 10px; white-space: nowrap; }
 .result-error-icon { display: flex; flex: none; color: var(--error-icon); }
 .result-error-icon svg { display: block; }
 /* Only a model's name can make it longer than the cap: the text gives way and ends in an ellipsis. */
@@ -54,3 +60,13 @@
 /* The work pill's content without its surface (lot 8, src/loaders/loaders.css). */
 .result-working { display: flex; align-items: center; justify-content: center; }
 .result-working[data-paused] .ldr, .result-working[data-paused] .ldr *, .result-working[data-paused] .ldr::before, .result-working[data-paused] .ldr::after { animation-play-state: paused; }
+
+/* 0.6: while it works the pill is its own way out. A click cancels; under the pointer (or the
+   focus) the orb gives way to a ✕, in place, the pill keeping its size. */
+.result-cancel { appearance: none; position: relative; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
+.result-cancel .working-slot { transition: opacity 120ms ease; }
+.result-cancel .working-x { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 120ms ease; }
+.result-cancel .working-x svg { display: block; }
+.result-cancel:is(:hover, :focus-visible) .working-slot { opacity: 0; }
+.result-cancel:is(:hover, :focus-visible) .working-x { opacity: 1; }
+.result-cancel:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

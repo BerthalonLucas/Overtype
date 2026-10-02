@@ -1,11 +1,9 @@
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import * as Switch from '@radix-ui/react-switch';
-import * as ToggleGroup from '@radix-ui/react-toggle-group';
 import { BriefcaseBusiness, Check, ChevronDown, ChevronUp, Clipboard, Copy, Cpu, Ellipsis, FoldVertical, KeyRound, Languages, LoaderCircle, Mail, Pin, PinOff, Server, Settings2, SpellCheck, TriangleAlert, Undo2, WandSparkles, X } from 'lucide-react';
 import { useT } from './i18n';
-import { useContentPresence, useStateTransition, useSurfacePresence } from './motion/MotionPreferences';
+import { useContentPresence, useSurfacePresence } from './motion/MotionPreferences';
 import type { Grow } from './motion/presence';
 
 // Motion follows the « Îlot » tokens (src/motion/tokens.ts, the chosen preset) and the setting
@@ -76,20 +74,4 @@ export function BubbleMenuTrigger({ onClick, pressed }: { onClick: () => void; p
   // Keep Radix keyboard semantics, but let a pointer click finish before opening.
   const t = useT();
   return <DropdownMenu.Trigger asChild onPointerDown={event => event.preventDefault()} onClick={onClick}><IconButton label={t('glass.more')} data-pressed={pressed || undefined}><Icon name="more" /></IconButton></DropdownMenu.Trigger>;
-}
-
-export function SettingSwitch({ label, checked, onCheckedChange }: { label: string; checked: boolean; onCheckedChange: (checked: boolean) => void }) {
-  const transition = useStateTransition();
-  return <Switch.Root className="setting-switch" checked={checked} onCheckedChange={onCheckedChange} aria-label={label}>
-    <Switch.Thumb asChild><motion.span className="switch-thumb" initial={false} animate={{ x: checked ? 18 : 0 }} transition={transition} /></Switch.Thumb>
-  </Switch.Root>;
-}
-
-// Two-way choice rendered as a segmented control on top of Radix ToggleGroup.
-export function Segmented<T extends string>({ label, value, options, onChange }: {
-  label: string; value: T; options: Array<{ value: T; label: string }>; onChange: (value: T) => void;
-}) {
-  return <ToggleGroup.Root type="single" className="segmented" aria-label={label} value={value} onValueChange={next => { if (next) onChange(next as T); }}>
-    {options.map(option => <ToggleGroup.Item key={option.value} value={option.value}>{option.label}</ToggleGroup.Item>)}
-  </ToggleGroup.Root>;
 }

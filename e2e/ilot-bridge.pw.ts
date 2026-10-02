@@ -98,7 +98,7 @@ test('Îlot: a menu capture opens the Îlot by its selection, takes the keyboard
   // The same surface, not a second one, springs to the working pill of lot 8.
   await expect(ilot).toHaveAttribute('data-shape', 'pill');
   expect(await page.locator('[data-ilot-shape]').evaluate((element, before) => element === before, surface)).toBe(true);
-  const pill = page.getByRole('img', { name: 'Working' });
+  const pill = page.locator('.result-working');
   await expect(pill).toHaveAttribute('data-orb', 'shown');
   await expect(page.locator('.working-pill')).toHaveCount(0);
   await expect.poll(async () => { const b = await box(page); return [b.width, b.height]; }).toEqual([44, 28]);

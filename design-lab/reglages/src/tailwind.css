@@ -1,0 +1,45 @@
+/* Tailwind v4 for shadcn-style components, precompiled by build.mjs (@tailwindcss/cli).
+   Scoped so it cannot restyle the rest of the lab:
+   - NO preflight (only theme + utilities are imported);
+   - every utility carries the prefix  tw:  (write  tw:flex tw:gap-2 tw:bg-accent …);
+   - its layers lose against the lab's unlayered CSS.
+   The shadcn colour names are mapped onto the lab tokens, so a shadcn component copied here
+   (with the tw: prefix added) follows direction / palette / theme like everything else. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme) prefix(tw);
+@import "tailwindcss/utilities.css" layer(utilities);
+@source "./";
+@source not "./heroui";
+
+@theme inline {
+  --color-background: var(--ft-bg);
+  --color-foreground: var(--ft-text);
+  --color-card: var(--ft-surface);
+  --color-card-foreground: var(--ft-text);
+  --color-popover: var(--ft-surface);
+  --color-popover-foreground: var(--ft-text);
+  --color-primary: var(--ft-accent);
+  --color-primary-foreground: var(--ft-on-accent);
+  --color-secondary: rgb(var(--ft-ink-rgb) / .07);
+  --color-secondary-foreground: var(--ft-text);
+  --color-muted: rgb(var(--ft-ink-rgb) / .05);
+  --color-muted-foreground: var(--ft-text-3);
+  --color-accent: var(--ft-accent-soft);
+  --color-accent-foreground: var(--ft-accent-text);
+  --color-destructive: var(--ft-danger);
+  --color-border: var(--ft-line);
+  --color-input: rgb(var(--ft-ink-rgb) / .14);
+  --color-ring: var(--ft-accent);
+  --color-sidebar: var(--ft-sidebar);
+  --color-tile-1: var(--ft-tile-1);
+  --color-tile-2: var(--ft-tile-2);
+  --color-tile-3: var(--ft-tile-3);
+  --color-tile-4: var(--ft-tile-4);
+  --radius-sm: calc(var(--ft-r-control) - 2px);
+  --radius-md: var(--ft-r-control);
+  --radius-lg: var(--ft-r-group);
+  --radius-xl: var(--ft-r-window);
+  --font-sans: var(--ft-font);
+  --font-display: var(--ft-font-display);
+  --font-mono: var(--ft-font-mono);
+}

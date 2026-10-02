@@ -14,7 +14,8 @@ export default defineConfig({
   // `motion` (the bare package, for animate() in src/motion/surface.ts) is reached only from a
   // test's dynamic import until the Îlot uses it: discovered mid-run, it reloaded every page.
   optimizeDeps: { entries: ['index.html', 'lab.html', 'lab-frame.html', 'e2e/native-fixture.ts'], include: ['motion'] },
-  server: { watch: { ignored: foreign } },
+  // src-tauri/target: cargo locks the files it builds, and the watcher dies on them (EBUSY).
+  server: { watch: { ignored: [...foreign, '**/src-tauri/**', '**/test-results/**'] } },
   // css.include: src/theme.test.ts reads the theme tokens as text (vitest empties CSS otherwise).
   test: { environment: 'jsdom', globals: true, css: { include: [/theme\.css/] }, exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**', 'visual-tests/**', ...foreign] }
 });

@@ -1,0 +1,12 @@
+/* HeroUI v3, compiled WITHOUT Tailwind's preflight; build.mjs then scopes every selector
+   under .heroui-scope so nothing here can restyle the rest of the lab. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "tw-animate-css";
+@import "@heroui/styles/base" layer(base);
+@import "@heroui/styles/components/index.css" layer(components);
+@import "@heroui/styles/themes/default" layer(theme);
+@import "@heroui/styles/utilities";
+@import "@heroui/styles/variants";
+@source "./HeroDemo.jsx";

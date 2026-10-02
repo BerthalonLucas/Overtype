@@ -13,7 +13,7 @@ describe('translationReducer', () => {
     const menu: Capture = { ...selected, menu: { lastActionId: null } };
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: menu });
     expect(state).toMatchObject({ phase: 'idle', delivery: null, requestId: null });
-    const execution = { actionId: 'correct', actionName: 'Fix grammar', outputMode: 'replace' as const, mode: 'quality' as const };
+    const execution = { actionId: 'correct', actionName: 'Fix grammar', outputMode: 'replace' as const, serverId: 's1' as const };
     expect(translationReducer(state, { type: 'CHOOSE', captureId: 'stale', execution })).toBe(state);
     state = translationReducer(state, { type: 'TARGET', captureId: 'c1', canReplace: false });
     state = translationReducer(state, { type: 'CHOOSE', captureId: 'c1', execution });
@@ -21,12 +21,12 @@ describe('translationReducer', () => {
     expect(translationReducer(state, { type: 'CHOOSE', captureId: 'c1', execution: { ...execution, actionId: 'translate' } })).toBe(state);
   });
   it('ignores events belonging to a stale request', () => {
-    const active = translationReducer(translationReducer(initialTranslationState, { type: 'CAPTURE', capture: selected }), { type: 'START', requestId: 'new', mode: 'quality' });
+    const active = translationReducer(translationReducer(initialTranslationState, { type: 'CAPTURE', capture: selected }), { type: 'START', requestId: 'new', serverId: 's1' });
     expect(translationReducer(active, { type: 'STREAM', event: { requestId: 'old', kind: 'done' } })).toEqual(active);
   });
   it('enables completed actions only after the done event', () => {
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: selected });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'delta', text: 'Bonjour' } });
     expect(state.phase).toBe('streaming');
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done' } });
@@ -40,7 +40,7 @@ describe('translationReducer', () => {
   });
   it('ignores done events after cancellation', () => {
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: selected });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'CANCEL' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done' } });
     expect(state.phase).toBe('cancelled');
@@ -48,7 +48,7 @@ describe('translationReducer', () => {
   });
   it('does not restore replacement after invalidation arrives during a stream', () => {
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: selected });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'INVALIDATE', message: 'La sélection a changé.' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done' } });
     expect(state).toMatchObject({ phase: 'complete', replacementValid: false });
@@ -56,7 +56,7 @@ describe('translationReducer', () => {
   it('offers replacement only once the native target arrives, for the current capture', () => {
     const pending = { ...selected, canReplace: false };
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: pending });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done' } });
     expect(state.replacementValid).toBe(false);
     expect(translationReducer(state, { type: 'TARGET', captureId: 'other', canReplace: true })).toEqual(state);
@@ -67,27 +67,27 @@ describe('translationReducer', () => {
   });
   it('shows the final text of the done event in place of the deltas, and keeps them without it', () => {
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: selected });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'delta', text: '```\nBonjour\n```' } });
     expect(translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done', text: 'Bonjour' } }).result).toBe('Bonjour');
     expect(translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done' } }).result).toBe('```\nBonjour\n```');
   });
   it('a replace capture waits for its delivery, applied or fallback', () => {
-    const replace = { ...selected, execution: { actionId: 'correct', actionName: 'Corriger', outputMode: 'replace' as const, mode: 'quality' as const } };
+    const replace = { ...selected, execution: { actionId: 'correct', actionName: 'Corriger', outputMode: 'replace' as const, serverId: 's1' as const } };
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: replace });
     expect(state.delivery).toBe('pending');
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done', text: 'Bonjour' } });
     expect(state.delivery).toBe('pending');
     expect(translationReducer(state, { type: 'DELIVERY', event: { requestId: 'other', status: 'applied', confirmed: true, message: '' } }).delivery).toBe('pending');
     expect(translationReducer(state, { type: 'DELIVERY', event: { requestId: 'r1', status: 'applied', confirmed: true, message: '' } })).toMatchObject({ delivery: 'applied', replacementValid: false });
     expect(translationReducer(state, { type: 'DELIVERY', event: { requestId: 'r1', status: 'fallback', confirmed: false, message: 'x' } })).toMatchObject({ delivery: 'fallback', result: 'Bonjour' });
     // A relaunch with the other profile shows its result: no second delivery.
-    expect(translationReducer(state, { type: 'START', requestId: 'r2', mode: 'fast' }).delivery).toBeNull();
+    expect(translationReducer(state, { type: 'START', requestId: 'r2', serverId: 's2' }).delivery).toBeNull();
   });
   it('offers Undo only after Rust’s own paste found its text, until undo-state withdraws it for that request', () => {
-    let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: { id: 'c1', text: 'x', source: 'selection', canReplace: true, anchor: null, execution: { actionId: 'correct', actionName: 'Fix', outputMode: 'replace', mode: 'quality' } } });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: { id: 'c1', text: 'x', source: 'selection', canReplace: true, anchor: null, execution: { actionId: 'correct', actionName: 'Fix', outputMode: 'replace', serverId: 's1' } } });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done', text: 'y' } });
     expect(state.undoable).toBe(false);
     expect(translationReducer(state, { type: 'DELIVERY', event: { requestId: 'r1', status: 'applied', confirmed: true, message: '' } }).undoable).toBe(false);
@@ -97,12 +97,12 @@ describe('translationReducer', () => {
     expect(translationReducer(pasted, { type: 'UNDO_LOST', requestId: 'stale', reason: 'typed' })).toBe(pasted);
     expect(translationReducer(pasted, { type: 'UNDO_LOST', requestId: 'r1', reason: 'typed' })).toMatchObject({ undoable: false, undoLost: 'typed' });
     // A retry starts without Undo.
-    expect(translationReducer(pasted, { type: 'START', requestId: 'r2', mode: 'quality' }).undoable).toBe(false);
+    expect(translationReducer(pasted, { type: 'START', requestId: 'r2', serverId: 's1' }).undoable).toBe(false);
   });
 
   it('keeps why Undo was withdrawn, the first reason only, even when undo-state comes before the delivery', () => {
-    let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: { id: 'c1', text: 'x', source: 'selection', canReplace: true, anchor: null, execution: { actionId: 'correct', actionName: 'Fix', outputMode: 'replace', mode: 'quality' } } });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: { id: 'c1', text: 'x', source: 'selection', canReplace: true, anchor: null, execution: { actionId: 'correct', actionName: 'Fix', outputMode: 'replace', serverId: 's1' } } });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done', text: 'y' } });
     const delivered = { type: 'DELIVERY', event: { requestId: 'r1', status: 'applied', confirmed: true, message: '', undoable: true } } as const;
     // Rust watched the caret move between its paste and the delivery reaching the page.
@@ -115,14 +115,14 @@ describe('translationReducer', () => {
     expect(undone).toMatchObject({ undoable: false, undoLost: 'undo_key' });
     expect(translationReducer(undone, { type: 'UNDO_LOST', requestId: 'r1', reason: 'typed' })).toBe(undone);
     // Another request, another capture: nothing withdrawn yet.
-    expect(translationReducer(undone, { type: 'START', requestId: 'r2', mode: 'quality' }).undoLost).toBeNull();
+    expect(translationReducer(undone, { type: 'START', requestId: 'r2', serverId: 's1' }).undoLost).toBeNull();
     expect(translationReducer(undone, { type: 'CAPTURE', capture: { id: 'c2', text: 'x', source: 'selection', canReplace: true, anchor: null } }).undoLost).toBeNull();
   });
 
   it('keeps the code of lot 10 beside the message, an unknown one read as internal, none as null', () => {
-    const replace = { ...selected, execution: { actionId: 'correct', actionName: 'Corriger', outputMode: 'replace' as const, mode: 'quality' as const } };
+    const replace = { ...selected, execution: { actionId: 'correct', actionName: 'Corriger', outputMode: 'replace' as const, serverId: 's1' as const } };
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: replace });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     expect(translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'error', message: 'Clé refusée.', code: 'unauthorized' } })).toMatchObject({ phase: 'error', error: 'Clé refusée.', code: 'unauthorized' });
     expect(translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'error', message: 'x', code: 'teapot' as never } }).code).toBe('internal');
     expect(translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'error', message: 'x' } }).code).toBeNull();
@@ -131,11 +131,11 @@ describe('translationReducer', () => {
     expect(translationReducer(done, { type: 'DELIVERY', event: { requestId: 'r1', status: 'applied', confirmed: true, message: '' } }).code).toBeNull();
     // A relaunch starts clean.
     const failed = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'error', message: 'x', code: 'busy' } });
-    expect(translationReducer(failed, { type: 'START', requestId: 'r2', mode: 'quality' }).code).toBeNull();
+    expect(translationReducer(failed, { type: 'START', requestId: 'r2', serverId: 's1' }).code).toBeNull();
   });
   it('keeps a target that arrives before the result for the done event', () => {
     let state = translationReducer(initialTranslationState, { type: 'CAPTURE', capture: { ...selected, canReplace: false } });
-    state = translationReducer(state, { type: 'START', requestId: 'r1', mode: 'quality' });
+    state = translationReducer(state, { type: 'START', requestId: 'r1', serverId: 's1' });
     state = translationReducer(state, { type: 'TARGET', captureId: 'c1', canReplace: true });
     expect(state.replacementValid).toBe(false);
     state = translationReducer(state, { type: 'STREAM', event: { requestId: 'r1', kind: 'done' } });

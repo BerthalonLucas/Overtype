@@ -51,5 +51,5 @@ jobs:
       - run: npm run tauri -- build --bundles nsis
       - uses: actions/upload-artifact@v4
         with:
-          name: FlowTranslate-Windows
+          name: Overtype-Windows
           path: src-tauri/target/release/bundle/nsis/*.exe

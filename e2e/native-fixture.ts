@@ -2,14 +2,16 @@ import { defaultActionId, defaultActions, defaultBindings, defaultMenuActionIds,
 // Browser-only IPC fixture. This does not launch a native window or read user data.
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
-import type { BindingState, Capture, ErrorCode, ExecutionInfo, HaloEvent, PillSide, PillTarget, Rect, Settings, ShortcutStatus, TranslationRequest, UndoLoss, UndoOutcome } from '../src/types';
+import type { BindingState, Capture, DiagEntry, ErrorCode, ExecutionInfo, HaloEvent, PillSide, PillTarget, ProbeStepEvent, Rect, Settings, ShortcutStatus, TranslationRequest, UndoLoss, UndoOutcome } from '../src/types';
+import { connectionCommand, isConnectionCommand, normalizeEndpoint, setConnScenario, type ConnScenario } from '../src/bridge.mock';
 import { ilotReserve } from '../src/layout';
 import { resetFrom } from '../src/settings/reset';
 
 // The Îlot, as Rust's default (UiVersion::Ilot); `&ui=v4` in the URL starts in the 0.4 journey,
 // for the tests that ask for it.
-let settings: Settings = { mode: 'quality', defaultActionId, actions: structuredClone(defaultActions), shortcutBindings: structuredClone(defaultBindings), historyEnabled: false, autostart: false, connectionExpanded: false, textSize: 'normal', autoClose: 'normal', uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot', language: 'en', theme: 'system', motion: 'system', motionPreset: 'smooth', indicator: 'perle', afterReplace: { check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60 }, undoStrategy: 'keystroke', pillPlacement: 'below', glassMaterial: 'painted', menuActionIds: [...defaultMenuActionIds],
-  profiles: { fast: { endpoint: '', model: 'test', apiKey: '' }, quality: { endpoint: '', model: 'test', apiKey: '' } } };
+let settings: Settings = { defaultActionId, actions: structuredClone(defaultActions), shortcutBindings: structuredClone(defaultBindings), historyEnabled: false, autostart: false, textSize: 'normal', autoClose: 'normal', uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot', language: 'en', theme: 'system', motion: 'system', motionPreset: 'smooth', indicator: 'perle', afterReplace: { check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60 }, undoStrategy: 'keystroke', pillPlacement: 'below', glassMaterial: 'painted', menuActionIds: [...defaultMenuActionIds],
+  // Two servers, named as the two profiles of 0.5 were, so the journeys that switch server keep their words.
+  servers: [{ id: 's1', name: 'Quality', endpoint: '', apiKey: '', noKey: false, model: 'test' }, { id: 's2', name: 'Fast', endpoint: '', apiKey: '', noKey: false, model: 'test' }], defaultServerId: 's1', setupDone: true, changedWordsStyle: 'encre' };
 // A fresh install's settings (Rust's Settings::default), for `reset_settings`.
 const freshSettings: Settings = { ...structuredClone(settings), uiVersion: 'ilot' };
 // What `suggest_shortcut` answers (Rust's first free proposal; null: none free).
@@ -17,7 +19,7 @@ let suggestion: string | null = 'Ctrl+Alt+Shift+Space';
 // canReplace is false here; a test raises it with `target` (Rust knows it at the capture since 0.4.0).
 // The fixture's captures are anchored on a 1920 × 1040 screen unless a test says otherwise.
 const capture = (id: string, text = 'Example selection', execution?: ExecutionInfo): Capture => ({ id, text, source: 'selection', canReplace: false, anchor: { x: 400, y: 300, width: 120, height: 18 }, screen: { width: 1920, height: 1040, scale: 1 }, ...(execution ? { execution } : {}) });
-const replaceExecution: ExecutionInfo = { actionId: 'correct', actionName: 'Corriger', outputMode: 'replace', mode: 'quality' };
+const replaceExecution: ExecutionInfo = { actionId: 'correct', actionName: 'Corriger', outputMode: 'replace', serverId: 's1' };
 // Every command the page invokes, with the page's clock when it did (performance.now()).
 const calls: Array<{ command: string; args: Record<string, unknown> | undefined; at: number }> = [];
 let request: TranslationRequest;
@@ -27,7 +29,6 @@ let resultText = '';
 let currentCapture = capture('first');
 let heldCopy = false;
 let failSettings = new URLSearchParams(location.search).has('settingsError');
-let connected = false;
 let refuseShortcut = false;
 // Rust's refusal of the next `replace_result`: `{message, code}` (Refusal) since the review of
 // da-ilot, the French message for the 0.4 glass, the code for the Îlot.
@@ -169,10 +170,12 @@ mockIPC((command, args) => {
   if (command === 'get_history') return [];
   if (command === 'system_motion') return windowsMotion;
   if (command === 'save_settings') {
-    const next = args?.settings as Settings;
+    const next = structuredClone(args?.settings as Settings);
     if (refuseShortcut && JSON.stringify(next.shortcutBindings) !== JSON.stringify(settings.shortcutBindings)) return Promise.reject('Le raccourci est déjà utilisé ou indisponible.');
-    // As Rust (settings::validate_endpoint): a remote server in plain HTTP is refused.
-    if (Object.values(next.profiles).some(profile => /^http:\/\/(?!127\.0\.0\.1[:/]|localhost[:/]|\[::1\][:/])/i.test(profile.endpoint))) return Promise.reject('Un serveur distant doit utiliser HTTPS; HTTP est réservé au bouclage local.');
+    // As Rust (settings::sanitize, then validate): an address that does not read is refused;
+    // what is saved is clean (the address normalised, no key for a server without one).
+    if (next.servers.some(server => server.endpoint.trim() !== '' && !normalizeEndpoint(server.endpoint).ok)) return Promise.reject('L’adresse du serveur est invalide.');
+    next.servers = next.servers.map(server => { const endpoint = normalizeEndpoint(server.endpoint); return { ...server, endpoint: endpoint.ok ? endpoint.base : '', model: server.model.trim(), apiKey: server.noKey ? '' : server.apiKey }; });
     // As Rust: a binding saved on another chord registered it (a taken one refuses the save), and
     // every save sends the state of each shortcut.
     for (const binding of next.shortcutBindings) if (settings.shortcutBindings.find(b => b.id === binding.id)?.shortcut !== binding.shortcut) delete shortcutStates[binding.id];
@@ -192,7 +195,11 @@ mockIPC((command, args) => {
     return structuredClone(settings);
   }
   if (command === 'suggest_shortcut') return suggestion;
-  if (command === 'check_connection') return { connected, message: connected ? 'Modèle trouvé.' : 'Serveur indisponible.' };
+  // 0.6: the connection commands answer from the simulated server of the preview (src/bridge.mock.ts),
+  // its scenario chosen by `?conn=` or `nativeFixture.conn(id)`; steps and journal lines arrive as events.
+  if (isConnectionCommand(command)) return connectionCommand(command, args, (name, payload: ProbeStepEvent | DiagEntry) => { void emit(name, payload); }, id => settings.servers.find(server => server.id === id));
+  if (command === 'finish_setup') { settings = { ...settings, setupDone: true }; void emit('settings-changed', settings); return undefined; }
+  if (command === 'close_demo') { void emit('demo-ended', { done: (args as { done?: boolean } | undefined)?.done === true }); return undefined; }
   if (command === 'frontend_ready') return currentCapture;
   if (command === 'translate') { request = args?.request as TranslationRequest; resultText = ''; }
   if (command === 'focus_overlay') return overlayFocus;
@@ -209,7 +216,7 @@ mockIPC((command, args) => {
     const action = settings.actions.find(item => item.id === actionId);
     if (instruction !== undefined ? actionId !== instructionActionId || instructionError(instruction) : !action) return Promise.reject('L’action n’existe plus.');
     chosen.add(captureId);
-    const execution = { actionId, actionName: action?.name ?? instructionActionName, outputMode: 'replace', mode: settings.mode } satisfies ExecutionInfo;
+    const execution = { actionId, actionName: action?.name ?? instructionActionName, outputMode: 'replace', serverId: settings.defaultServerId } satisfies ExecutionInfo;
     if (holdChoice) { holdChoice = false; return new Promise<ExecutionInfo>(resolve => { releaseChoice = () => resolve(execution); }); }
     return execution;
   }
@@ -258,7 +265,6 @@ mockWindows('overlay');
 Object.assign(window, { nativeFixture: {
   calls,
   recoverSettings: () => { failSettings = false; },
-  connect: () => { connected = true; },
   refuseShortcut: () => { refuseShortcut = true; },
   refuseReplace: (message: string | null = 'La fenêtre source a changé; remplacement refusé.', code: ErrorCode = 'target_changed') => { refuseReplace = message === null ? null : { message, code }; },
   // A failed request; lot 10 sends its code beside the French message (none: a 0.4 error).
@@ -330,7 +336,9 @@ Object.assign(window, { nativeFixture: {
   menuRepeat: (captureId = currentCapture.id) => emit('menu-repeat', { captureId }),
   // Lot 6: what Rust sends the halo window (lines in logical pixels relative to it).
   halo: (event: HaloEvent) => emit('halo', event),
-  replay: (id: string) => { currentCapture = { ...capture(id, 'Example selection'), source: 'clipboard', canReplace: false, anchor: null, replay: { requestId: `replay-${id}`, translatedText: 'Exemple de sélection', mode: 'quality' } }; return emit('capture', currentCapture); },
+  // 0.6: the scenario of the simulated server (ok, cle-requise, cle-refusee, pas-d-api, refuse, delai, certificat, dns, vide, lent).
+  conn: (scenario: ConnScenario) => setConnScenario(scenario),
+  replay: (id: string) => { currentCapture = { ...capture(id, 'Example selection'), source: 'clipboard', canReplace: false, anchor: null, replay: { requestId: `replay-${id}`, translatedText: 'Exemple de sélection', serverId: 's1' } }; return emit('capture', currentCapture); },
 } });
 await import('../src/main');
 

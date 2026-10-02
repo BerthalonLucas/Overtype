@@ -1,0 +1,112 @@
+/* The simulated desktop (src/stage/). Coordinates are desktop pixels (1280 × 800); the stage
+   scales the whole desktop with one transform. */
+.ft-stage { position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+.ft-desktop {
+  position: absolute; left: 50%; top: 50%; transform-origin: 50% 50%;
+  overflow: hidden; border-radius: 10px; background: var(--ft-wall-3);
+  box-shadow: 0 0 0 1px rgb(var(--ft-ink-rgb) / .08), 0 20px 60px rgb(0 0 0 / .18);
+  font-family: var(--ft-font); color: var(--ft-text);
+}
+.ft-workarea { position: absolute; left: 0; top: 0; right: 0; }
+
+/* Wallpaper: a Windows 11 « Bloom » in the base's colours (static, painted once). Crisp petals with
+   a thin light rim, so real glass above them visibly blurs something. */
+.ft-wallpaper { position: absolute; inset: 0; overflow: hidden; background: linear-gradient(160deg, var(--ft-wall-3) 0%, var(--ft-wall-4) 100%); }
+.ft-bloom { position: absolute; display: block; border-radius: 50%; filter: blur(70px); opacity: .9; }
+.ft-bloom.a { width: 900px; height: 620px; left: 250px; top: 220px; background: radial-gradient(closest-side, var(--ft-wall-2), transparent); }
+.ft-bloom.b { width: 620px; height: 480px; left: 140px; top: 300px; background: radial-gradient(closest-side, var(--ft-wall-1), transparent); }
+.ft-bloom.c { width: 520px; height: 420px; left: 760px; top: -80px; background: radial-gradient(closest-side, rgb(var(--ft-accent-rgb) / .3), transparent); }
+[data-ft-theme="dark"] .ft-bloom { opacity: .8; }
+.ft-petals { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ft-petal { stroke: rgb(255 255 255 / .55); stroke-width: 1.5; opacity: .92; }
+[data-ft-theme="dark"] .ft-petal { stroke: rgb(255 255 255 / .16); opacity: .85; }
+.ft-petal-heart { fill: var(--ft-wall-3); opacity: .5; }
+[data-ft-theme="dark"] .ft-petal-heart { fill: var(--ft-wall-1); opacity: .6; }
+.ft-desktop:not([data-wallpaper]) .ft-wallpaper { background: var(--ft-wall-3); }
+.ft-desktop:not([data-wallpaper]) :is(.ft-bloom, .ft-petals) { display: none; }
+
+/* Taskbar (Windows 11): 48 px, centred apps, tray on the right. */
+.ft-taskbar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 48px; z-index: 900;
+  display: flex; align-items: center; justify-content: center; padding: 0 12px;
+  background: color-mix(in srgb, var(--ft-bg) 40%, rgb(238 238 238 / .86));
+  -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6);
+  box-shadow: 0 -.5px 0 rgb(var(--ft-ink-rgb) / .1);
+  color: var(--ft-text);
+}
+[data-ft-theme="dark"] .ft-taskbar { background: color-mix(in srgb, var(--ft-bg) 40%, rgb(28 28 28 / .86)); box-shadow: 0 -.5px 0 rgb(255 255 255 / .08); }
+.ft-taskbar-center { display: flex; align-items: center; gap: 4px; }
+.ft-tb-app { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 6px; color: var(--ft-text-2); }
+.ft-tb-start { grid-template-columns: 9px 9px; grid-template-rows: 9px 9px; gap: 1.5px; place-content: center; }
+.ft-tb-start i { display: block; border-radius: 1.5px; background: linear-gradient(135deg, var(--ft-accent), color-mix(in srgb, var(--ft-accent) 55%, #fff)); }
+.ft-tb-search { display: flex; align-items: center; gap: 8px; width: 200px; height: 32px; margin: 0 6px; padding: 0 12px; border-radius: 16px; font-size: 12.5px; color: var(--ft-text-3); background: rgb(var(--ft-ink-rgb) / .06); box-shadow: inset 0 0 0 .5px rgb(var(--ft-ink-rgb) / .08); }
+.ft-taskbar-tray { position: absolute; right: 8px; top: 0; bottom: 0; display: flex; align-items: center; gap: 2px; }
+.ft-tray-btn { position: relative; display: grid; place-items: center; height: 40px; min-width: 32px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ft-text-2); }
+.ft-tray-sys { display: flex; gap: 8px; }
+button.ft-tray-btn:hover { background: rgb(var(--ft-ink-rgb) / .07); }
+button.ft-tray-btn:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: -2px; }
+.ft-tray-app[data-active] { background: rgb(var(--ft-ink-rgb) / .08); }
+.ft-tray-badge { position: absolute; top: 8px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--ft-accent); box-shadow: 0 0 0 1.5px var(--ft-bg); }
+.ft-tray-clock { display: grid; justify-items: end; gap: 1px; padding: 0 8px 0 6px; font-size: 11.5px; line-height: 1.25; color: var(--ft-text); font-variant-numeric: tabular-nums; }
+
+/* The app mark: the Îlot's iridescent dot on a small rounded square. */
+.ft-appmark { --s: 16px; display: inline-grid; place-items: center; width: var(--s); height: var(--s); border-radius: calc(var(--s) * .28); background: #16181d; box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .12); flex: none; }
+.ft-appmark i { display: block; width: calc(var(--s) * .5); height: calc(var(--s) * .5); border-radius: 50%; background: conic-gradient(#BC82F3, #8D9FFF, #FF6778, #FFBA71, #BC82F3); box-shadow: 0 0 calc(var(--s) * .3) rgb(188 130 243 / .6); }
+
+/* ——— Windows: two materials ———
+   window    matte, opaque, crisp (Réglages, installer): no blur, no sheen.
+   floating  REAL glass (welcome / setup): blurs the desktop actually behind it, luminous rim, grain. */
+.ft-window {
+  position: absolute; display: block; overflow: hidden; isolation: isolate;
+  border-radius: var(--ft-r-window);
+  color: var(--ft-text); background: var(--ft-win-bg);
+  box-shadow: var(--ft-win-border), var(--ft-win-shadow);
+  font-family: var(--ft-font); font-size: var(--ft-body-size);
+  will-change: transform, opacity;
+}
+.ft-window:is([data-material="floating"], [data-material="frost"]) {
+  border-radius: var(--ft-r-float);
+  background: var(--ft-float-grain), var(--ft-float-tint);
+  -webkit-backdrop-filter: var(--ft-float-blur); backdrop-filter: var(--ft-float-blur);
+  box-shadow: var(--ft-float-edge), var(--ft-float-rim), var(--ft-float-shadow);
+}
+.ft-window-body { position: absolute; inset: 0; }
+
+.ft-titlebar { position: absolute; left: 0; right: 0; top: 0; height: var(--ft-titlebar-h); display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+.ft-titlebar-title { display: inline-flex; align-items: center; gap: 10px; padding-left: 14px; font-size: 12px; color: var(--ft-text-2); }
+.ft-caption { display: flex; height: 100%; margin-left: auto; pointer-events: auto; }
+.ft-caption-btn { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; background: transparent; color: var(--ft-text); transition: background-color 90ms linear, color 90ms linear; }
+.ft-caption-btn:hover:not(:disabled) { background: rgb(var(--ft-ink-rgb) / .07); }
+.ft-caption-btn:disabled { color: var(--ft-text-3); }
+.ft-caption-close:hover { background: #C42B1C !important; color: #fff; }
+.ft-caption-close:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: -2px; }
+.ft-window .ft-caption-btn:last-child { border-top-right-radius: var(--ft-r-window); }
+
+/* The app mark's heartbeat (welcome screen): two soft beats then rest, transform only. */
+.ft-heartbeat { display: grid; place-items: center; animation: ft-heartbeat 2.4s cubic-bezier(.3, 0, .3, 1) infinite; will-change: transform; }
+.ft-heartbeat .ft-appmark { box-shadow: 0 12px 30px rgb(0 0 0 / .18), inset 0 0 0 .5px rgb(255 255 255 / .12); }
+@keyframes ft-heartbeat {
+  0%, 40%, 100% { transform: scale(1); }
+  10% { transform: scale(1.06); }
+  20% { transform: scale(.99); }
+  28% { transform: scale(1.035); }
+}
+
+/* ——— Narrow screens (phone): readable scale, swipe to pan, panels below ——— */
+.ft-stage[data-narrow] { display: flex; }
+.ft-stage-scroll { position: absolute; inset: 0; overflow: hidden; }
+.ft-stage-pan { position: relative; }
+.ft-taskbar-slot[hidden] { display: none; }
+/* Narrow: swipe to pan. No visible scrollbar at all (panning is by dragging); never set
+   scrollbar-width here, it would disable the ::-webkit-scrollbar styles and bring back the grey bar. */
+.ft-stage[data-narrow] .ft-stage-scroll { position: relative; inset: auto; flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.ft-stage[data-narrow] .ft-stage-scroll::-webkit-scrollbar { display: none; width: 0; height: 0; }
+.ft-stage[data-narrow] .ft-stage-pan { overflow: hidden; background: var(--ft-wall-3); }
+.ft-stage[data-narrow] .ft-desktop { left: 0; top: 0; border-radius: 0; box-shadow: none; }
+.ft-stage-aside { position: sticky; left: 0; }
+.ft-stage-aside:empty { display: none; }
+.ft-stage-tray { position: absolute; right: 12px; bottom: 12px; z-index: 60; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+  background: rgb(var(--ft-surface-rgb) / .86); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: 0 6px 18px rgb(0 0 0 / .18), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .14); }
+.ft-stage-tray[data-active] { box-shadow: 0 6px 18px rgb(0 0 0 / .18), 0 0 0 2px var(--ft-accent); }
+.ft-stage-tray:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 2px; }
+.ft-stage-tray .ft-tray-badge { top: 6px; right: 6px; }

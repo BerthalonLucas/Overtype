@@ -75,5 +75,5 @@ jobs:
             git push origin "refs/tags/$tag"
             if ($LASTEXITCODE -ne 0) { throw 'Publication du tag impossible.' }
           }
-          gh release create $tag $exe.FullName SHA256SUMS.txt --title "FlowTranslate $tag" --notes-file release-notes.md --verify-tag
+          gh release create $tag $exe.FullName SHA256SUMS.txt --title "Overtype $tag" --notes-file release-notes.md --verify-tag
           if ($LASTEXITCODE -ne 0) { throw 'Publication de la release impossible.' }

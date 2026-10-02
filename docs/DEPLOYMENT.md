@@ -11,7 +11,7 @@ fourni dans ce dépôt ; distribuer le paquet par le canal interne approuvé.
 
 Lorsqu’un installateur est lancé depuis une application Windows empaquetée,
 `%LOCALAPPDATA%` peut être redirigé dans son espace privé. Sur le poste de
-développement, passer `/D=C:\Users\Lucas\Apps\FlowTranslate` en dernier argument
+développement, passer `/D=C:\Users\Lucas\Apps\Overtype` en dernier argument
 NSIS évite cette ambiguïté. Utiliser ensuite le chemin réellement installé dans
 les commandes de lancement ; ne pas déduire sa visibilité depuis le seul shell Codex.
 
@@ -26,11 +26,11 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 npm run tauri -- build --bundles nsis
 ```
 
-Au repos, chercher FlowTranslate dans la zone de notification. Configurer la
+Au repos, chercher Overtype dans la zone de notification. Configurer la
 langue cible et les deux connexions dans Réglages → Connexion avancée
 ([ENDPOINTS.md](ENDPOINTS.md) pour un moteur autre que le serveur livré). Le
 raccourci initial est `Ctrl+Alt+T` : la traduction démarre sur la sélection, ou sur
-la copie que FlowTranslate fait lui-même quand la sélection n’est pas lisible. La bulle
+la copie que Overtype fait lui-même quand la sélection n’est pas lisible. La bulle
 s’efface d’elle-même au temps de lecture ; `Échap` ferme ou annule.
 
 ## Serveur
@@ -50,14 +50,14 @@ appartiennent à la configuration du déploiement, jamais au dépôt Git.
 
 1. Conserver l’installateur précédent, son SHA-256, le commit du client et le
    fichier `server/model-lock.json` correspondant avant une mise à jour.
-2. Quitter FlowTranslate depuis la zone de notification. Sauvegarder son
+2. Quitter Overtype depuis la zone de notification. Sauvegarder son
    dossier de données utilisateur avant de changer de version ; les données
    protégées par DPAPI ne sont pas portables vers un autre compte Windows.
 3. Réinstaller le paquet précédent. Ne pas effacer les données utilisateur
    pour effectuer un simple retour arrière. Si leur schéma a changé, restaurer
    la sauvegarde correspondante après avoir conservé une copie de la version
    la plus récente.
-4. Sur le serveur, arrêter uniquement les services FlowTranslate concernés,
+4. Sur le serveur, arrêter uniquement les services Overtype concernés,
    remettre la configuration du commit précédent, puis recréer ces services.
    Conserver le volume de cache des modèles. Ne pas utiliser de nettoyage
    global Docker ni supprimer les volumes pour revenir en arrière.

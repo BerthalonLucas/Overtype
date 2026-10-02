@@ -83,7 +83,11 @@
 .icon-button:active:not(:disabled), .icon-button[data-pressed], .icon-button[data-copied] { color: var(--text); background: var(--pressed); }
 .icon-button:disabled { cursor: default; color: var(--text-disabled); }
 .icon-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.action-glyph { display: grid; place-items: center; width: 15px; height: 15px; }
+/* Centring (0.6): a 15 px glyph cannot sit in the middle of a 24 px button (4.5 px each side:
+   half a pixel off at 100 %, blurred or shifted); 16 px leaves 4 whole pixels. Close and Pin
+   are 14 px already. The button and the pill keep their sizes. */
+.action-glyph { display: grid; place-items: center; width: 16px; height: 16px; }
+.icon-button svg[width="15"] { width: 16px; height: 16px; }
 .action-glyph > span { grid-area: 1 / 1; display: grid; place-items: center; }
 /* Popper geometry is replaced by an absolute anchor under the pill, no portal; the halo offsets it. Bottom, it opens above the pill. */
 .glass-overlay [data-radix-popper-content-wrapper] { position: absolute !important; top: calc(34px + var(--halo-top)) !important; right: calc(16px + var(--halo-x)) !important; left: auto !important; transform: none !important; min-width: 0 !important; width: 196px !important; z-index: 3; }

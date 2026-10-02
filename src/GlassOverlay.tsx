@@ -245,6 +245,11 @@ function GlassSession({ controller }: { controller: TranslationController }) {
   // reaches this glass (GlassOverlay renders IlotStage for it).
   const ilot = settings?.uiVersion === 'ilot';
   const indicator = indicatorOf(settings?.indicator);
+  // « Run again with … » (0.6): the server after the one that answered, with two servers or more.
+  const servers = settings?.servers ?? [];
+  const currentServer = servers.findIndex(server => server.id === (state.serverId ?? settings?.defaultServerId));
+  const nextServer = servers.length > 1 ? servers[(Math.max(currentServer, 0) + 1) % servers.length] : null;
+  const serverLabel = (server: { id: string; name: string; endpoint: string }) => server.name || server.endpoint.replace(/^https?:\/\//, '') || server.id;
   // Under the Îlot the working pill enters from the selection's side, as the lab's surfaces do
   // (Surface.jsx:46, Simulator.jsx:68): down from it when the glass hangs below the selection, up
   // toward it above, up from the bottom edge (review of bc57857, finding 8). The side is read once
@@ -505,7 +510,8 @@ function GlassSession({ controller }: { controller: TranslationController }) {
       { label: t(state.comparing ? 'menu.hideOriginal' : 'menu.showOriginal'), disabled: !ready, run: act(() => dispatch({ type: 'TOGGLE_COMPARE' })) },
       ...(state.replacementValid ? [{ label: t('menu.replace'), disabled: !ready, run: () => void invokeResult('replace') }] : []),
       ...(state.phase === 'error' ? [{ label: t('menu.retry'), run: act(() => { if (state.capture) start(state.capture); }) }] : []),
-      { label: t('menu.rerun', { mode: t(state.mode === 'quality' ? 'mode.fast' : 'mode.quality') }), disabled: streaming || replacing || Boolean(state.capture?.replay), run: act(() => { if (state.capture) start(state.capture, { mode: state.mode === 'quality' ? 'fast' : 'quality' }); }) },
+      // « Run again with {server} »: only with two servers or more, towards the next one.
+      ...(nextServer ? [{ label: t('menu.rerun', { server: serverLabel(nextServer) }), disabled: streaming || replacing || Boolean(state.capture?.replay), run: act(() => { if (state.capture) start(state.capture, { serverId: nextServer.id }); }) }] : []),
       { label: t('menu.settings'), run: act(() => void bridge.openSettings().catch(() => setFeedback(t('feedback.openSettingsFromTray')))) },
       { label: t('menu.close'), run: cancelAndDismiss, close: true },
     ]}>

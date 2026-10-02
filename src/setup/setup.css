@@ -1,0 +1,237 @@
+/* The first-run setup (src/setup/), ported from design-lab/reglages/src/journey/journey.css and
+   variants.css. Only --ft-* tokens (src/components/tokens.css, base.css). Every round thing is an
+   even-sized grid cell centred with place-items. Animations: transform and opacity only. */
+
+/* ——— The window ———
+   Natively the page IS the window (620 × 720, frosted by Windows: data-backdrop="glass" on <html>,
+   or opaque when Windows cannot). The browser preview paints a desktop and floats the window on it. */
+body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; background: transparent; }
+.su-desk { position: fixed; inset: 0; display: grid; place-items: center; overflow: hidden;
+  --dm-wall-1: #D9D2FB; --dm-wall-2: #B7A8FF; --dm-wall-3: #F7F5FC; --dm-wall-4: #E9E4FA; }
+:root[data-theme="dark"] .su-desk { --dm-wall-1: #3A2C8A; --dm-wall-2: #1D1450; --dm-wall-3: #08070D; --dm-wall-4: #2A2150; }
+.su-desk :where(svg) { display: block; flex: none; }
+.su-window {
+  position: relative; flex: none; overflow: hidden; isolation: isolate; --ft-titlebar-h: 32px;
+  max-width: 100vw; max-height: 100vh;
+  border-radius: var(--ft-r-float); color: var(--ft-text); font-family: var(--ft-font); font-size: var(--ft-body-size);
+  background: var(--ft-float-grain), var(--ft-float-tint);
+  -webkit-backdrop-filter: var(--ft-float-blur); backdrop-filter: var(--ft-float-blur);
+  box-shadow: var(--ft-float-edge), var(--ft-float-rim), var(--ft-float-shadow);
+  will-change: transform, opacity;
+}
+/* Native: the whole page. Windows draws the frost behind a transparent page (the tint and the
+   grain stay ours); without it the page paints its own opaque ground. */
+.su-desk[data-native] .su-window { position: absolute; inset: 0; width: auto; height: auto; border-radius: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+:root[data-backdrop="opaque"] .su-desk[data-native] .su-window, :root:not([data-backdrop]) .su-desk[data-native] .su-window { background: var(--ft-win-bg-solid); }
+/* The real frost shows whatever is behind, and this is a window one READS: under the lab's 50 %
+   tint a white page behind a dark theme (or a dark one behind a light theme) turns the ground
+   mid-grey and the small print disappears (seen in the real window, 02/10). Denser here than
+   on a pill, and the small print takes the secondary ink: 4.5:1 holds on white and on black. */
+:root[data-backdrop="glass"] .su-desk[data-native] .su-window { background: var(--ft-float-grain), rgb(var(--ft-surface-rgb) / .78); }
+:root[data-backdrop="glass"][data-theme="dark"] .su-desk[data-native] .su-window { background: var(--ft-float-grain), rgb(var(--ft-bg-rgb) / .78); }
+:root[data-backdrop="glass"] .su-desk[data-native] :is(.su-foot-note, .su-note:not([data-problem])) { color: var(--ft-text-2); }
+.su-window .ft-caption-btn:last-child { border-top-right-radius: var(--ft-r-float); }
+.su-desk[data-native] .ft-caption-btn:last-child { border-top-right-radius: 0; }
+
+.su-setup { position: absolute; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding-top: var(--ft-titlebar-h); }
+.su-setup > :not(.su-veil, .su-log-layer) { position: relative; z-index: 1; }
+/* The veil of the question's colour: on glass the page veil (9 %) disappears into the blurred
+   ground, a little more here. */
+.su-veil { z-index: 0; height: 300px; border-radius: var(--ft-r-float) var(--ft-r-float) 0 0;
+  background: radial-gradient(120% 100% at 50% 0%, rgb(var(--ft-page-rgb) / .2), rgb(var(--ft-page-rgb) / .07) 55%, transparent 100%); }
+:root[data-theme="dark"] .su-veil { background: radial-gradient(120% 100% at 50% 0%, rgb(var(--ft-page-rgb) / .22), rgb(var(--ft-page-rgb) / .06) 55%, transparent 100%); }
+.su-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 40px; padding: 0 14px; }
+.su-back { justify-self: start; }
+.su-skip { justify-self: end; }
+.su-nav :is(.su-back, .su-skip) { color: var(--ft-page-text); transition: color 320ms ease, background-color var(--ft-t-fast) ease; }
+
+.su-screens { position: relative; overflow: hidden; }
+.su-screen { position: absolute; inset: 0; will-change: transform, opacity; }
+.su-screen > .su-scroll { position: absolute; inset: 0; height: 100%; }
+.su-scroll-vp > div { min-height: 100%; display: flex !important; flex-direction: column; }
+.su-screen-in { flex: 1; display: flex; flex-direction: column; padding: 10px 48px 14px; }
+.su-setup[data-step="welcome"] .su-screen-in, .su-setup[data-step="ready"] .su-screen-in { justify-content: center; }
+.su-body { display: flex; flex-direction: column; min-height: 0; }
+.su-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 0 48px; color: var(--ft-text-2); }
+
+/* Progress: dots; the dot of the question's colour glides by transform. */
+.su-dots { position: relative; display: inline-grid; grid-auto-flow: column; gap: 8px; }
+.su-dots i { display: block; width: 8px; height: 8px; border-radius: 50%; background: rgb(var(--ft-ink-rgb) / .16); transition: background-color var(--ft-t) ease; }
+.su-dots i[data-done] { background: rgb(var(--ft-ink-rgb) / .38); }
+.su-dots-on { position: absolute; left: 0; top: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--ft-page); transition: background-color 320ms ease; }
+
+/* Header of a question: the same on every screen (icon tile, question, one line). */
+.su-head { display: grid; justify-items: center; gap: 8px; margin: 2px 0 20px; text-align: center; }
+.su-head-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 6px; border-radius: 13px; color: var(--ft-page-text); background: var(--ft-page-soft); box-shadow: inset 0 0 0 .5px rgb(var(--ft-page-rgb) / .22); }
+.su-head-icon svg { width: 22px; height: 22px; }
+.su-title, .su-hero { margin: 0; font-family: var(--ft-font-display); font-weight: var(--ft-hero-weight); letter-spacing: var(--ft-title-tracking); line-height: 1.12; text-wrap: balance; outline: none; }
+.su-title { font-size: calc(var(--ft-hero-size) * .76); }
+.su-hero { font-size: calc(var(--ft-hero-size) * 1.06); }
+.su-sub { margin: 0; max-width: 48ch; font-size: 14.5px; line-height: 1.45; color: var(--ft-text-2); text-wrap: pretty; }
+.su-note { margin: 16px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--ft-text-3); text-align: center; }
+.su-note[data-problem] { color: var(--ft-danger); }
+
+/* Footer: the big button. */
+.su-foot { position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px 10px; padding: 12px 48px 22px; }
+.su-primary { min-width: 280px; }
+.su-foot-note { flex-basis: 100%; min-height: 18px; text-align: center; font-size: 12px; color: var(--ft-text-3); }
+.su-setup[data-step="ready"] .su-primary { min-width: 240px; }
+
+/* ——— Welcome: the mark beats (lub-dub every 2.4 s), a ring leaves on each beat ——— */
+.su-welcome { display: grid; justify-items: center; gap: 16px; text-align: center; padding-bottom: 12px; }
+.su-welcome-mark { display: grid; place-items: center; margin-bottom: 14px; }
+.su-heart { --hs: 88px; position: relative; display: inline-grid; grid-template: var(--hs) / var(--hs); place-items: center; width: var(--hs); height: var(--hs); isolation: isolate; }
+.su-heart > * { grid-area: 1 / 1; }
+.su-heart-mark { display: grid; place-items: center; will-change: transform; animation: su-lubdub 2.4s cubic-bezier(.3, 0, .3, 1) infinite; }
+.su-heart-mark .ft-appmark { box-shadow: 0 14px 34px rgb(0 0 0 / .22), 0 2px 6px rgb(0 0 0 / .12), inset 0 0 0 .5px rgb(255 255 255 / .14); }
+.su-heart-ring { width: var(--hs); height: var(--hs); border-radius: calc(var(--hs) * .28); box-shadow: 0 0 0 1.5px rgb(var(--ft-accent-rgb) / .9); opacity: 0; z-index: -1; will-change: transform, opacity; animation: su-ring 2.4s cubic-bezier(.2, .7, .3, 1) infinite; }
+.su-heart-ring-2 { animation-name: su-ring-2; }
+@keyframes su-lubdub { 0%, 38%, 100% { transform: scale(1); } 8% { transform: scale(1.07); } 16% { transform: scale(.985); } 24% { transform: scale(1.04); } }
+@keyframes su-ring { 0%, 4% { transform: scale(1); opacity: 0; } 8% { transform: scale(1.04); opacity: .55; } 46% { transform: scale(1.62); opacity: 0; } 100% { transform: scale(1.62); opacity: 0; } }
+@keyframes su-ring-2 { 0%, 20% { transform: scale(1); opacity: 0; } 24% { transform: scale(1.03); opacity: .35; } 58% { transform: scale(1.45); opacity: 0; } 100% { transform: scale(1.45); opacity: 0; } }
+/* Reduced motion: a still mark, no rings. */
+:root[data-motion="reduced"] .su-heart-ring { display: none; }
+:root[data-motion="reduced"] .su-heart-mark { animation: none; }
+
+/* ——— Selection check (looks, cards): a centred disc ——— */
+.su-check {
+  position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  color: var(--ft-win-bg-solid, var(--ft-bg)); background: var(--ft-page); opacity: 0; transform: scale(.6);
+  transition: opacity var(--ft-t-fast) ease, transform var(--ft-t) var(--ft-ease-out);
+}
+[data-state="on"] > .su-check, [data-state="on"] > * > .su-check { opacity: 1; transform: scale(1); }
+
+/* ——— (1) Appearance ——— */
+.su-body-center { display: flex; flex-direction: column; align-items: center; }
+.su-looks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; width: 100%; }
+.su-look { display: grid; gap: 10px; align-content: start; justify-items: center; padding: 0; border: 0; background: transparent; color: var(--ft-text); font: inherit; -webkit-tap-highlight-color: transparent; }
+.su-look-thumb {
+  position: relative; display: block; width: 100%; aspect-ratio: 4 / 3.4; overflow: hidden; border-radius: calc(var(--ft-r-control) + 4px);
+  box-shadow: 0 0 0 1px rgb(var(--ft-ink-rgb) / .14); transition: box-shadow var(--ft-t) ease, transform var(--ft-t) var(--ft-ease-out);
+}
+.su-look:hover .su-look-thumb { transform: translateY(-2px); }
+.su-look:active .su-look-thumb { transform: scale(.98); }
+.su-look[data-state="on"] .su-look-thumb { box-shadow: 0 0 0 2px var(--ft-page), 0 0 0 5px var(--ft-page-soft); }
+.su-look:focus-visible { outline: none; }
+.su-look:focus-visible .su-look-thumb { box-shadow: 0 0 0 2px var(--ft-win-bg-solid, var(--ft-bg)), 0 0 0 4px var(--ft-focus); }
+/* Each thumbnail carries its own theme (the lab's palette, light and dark), whatever the app's. */
+.su-look-scope { position: absolute; inset: 0; display: grid; place-items: center; background: linear-gradient(160deg, var(--m-wall-a), var(--m-wall-b));
+  --m-bg: #F5F4FA; --m-side: #ECEAF5; --m-surface: #FFFFFF; --m-ink: 22 20 31; --m-accent: 91 75 219; --m-wall-a: #F7F5FC; --m-wall-b: #E9E4FA; }
+.su-look-scope[data-look="dark"] { --m-bg: #131219; --m-side: #0E0D13; --m-surface: #1C1A24; --m-ink: 241 239 248; --m-accent: 183 168 255; --m-wall-a: #08070D; --m-wall-b: #2A2150; }
+.su-look-half { position: absolute; inset: 0; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+.su-look-label { display: grid; gap: 2px; justify-items: center; font-size: 13.5px; font-weight: 600; }
+.su-look-label small { font-size: 11.5px; font-weight: 400; color: var(--ft-text-3); }
+.su-look[data-state="on"] .su-look-label { color: var(--ft-page-text); }
+.su-mini { position: relative; display: grid; grid-template-columns: 30% 1fr; width: 80%; height: 72%; overflow: hidden; border-radius: 7px; background: var(--m-bg); box-shadow: 0 6px 18px rgb(0 0 0 / .14), 0 0 0 .5px rgb(var(--m-ink) / .14); }
+.su-mini-side { display: grid; align-content: start; gap: 5px; padding: 9px 7px; background: var(--m-side); }
+.su-mini-side i { display: block; height: 5px; border-radius: 3px; background: rgb(var(--m-ink) / .14); }
+.su-mini-side i:first-child { background: rgb(var(--m-accent)); }
+.su-mini-main { position: relative; display: grid; align-content: start; gap: 6px; padding: 9px 9px; }
+.su-mini-main b { display: block; width: 55%; height: 6px; border-radius: 3px; background: rgb(var(--m-ink) / .7); }
+.su-mini-line { display: flex; gap: 3px; }
+.su-mini-line em { display: block; flex: 1; height: 5px; border-radius: 3px; background: rgb(var(--m-ink) / .14); }
+.su-mini-line s { display: block; width: 36%; height: 5px; border-radius: 2px; background: rgb(var(--m-accent) / .45); }
+.su-mini-line.short em { flex: 0 0 60%; }
+.su-mini-ilot { position: absolute; right: 8px; bottom: 9px; display: flex; gap: 3px; padding: 3px 5px; border-radius: 999px; background: var(--m-surface); box-shadow: 0 2px 6px rgb(0 0 0 / .18), 0 0 0 .5px rgb(var(--m-ink) / .12); }
+.su-mini-ilot i { display: block; width: 6px; height: 6px; border-radius: 50%; background: rgb(var(--m-ink) / .3); }
+.su-mini-ilot i:first-child { background: rgb(var(--m-accent)); }
+.su-language { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-top: 18px; padding: 10px 14px; border-radius: var(--ft-r-group); background: var(--ft-group-bg); box-shadow: var(--ft-group-border); }
+
+/* ——— (2) Shortcut ——— */
+.su-body-stack { display: grid; gap: 18px; }
+.su-rec { display: grid; justify-items: center; gap: 12px; }
+.su-rec .st-recorder { justify-items: center; width: 100%; gap: 12px; }
+/* The lab's recorder (journey.css .jr-rec): the keycaps in an 88 px band that takes the page's
+   colour while it listens, the buttons centred underneath. */
+.su-rec .st-recorder-line { position: relative; display: grid; place-items: center; width: 100%; min-height: 88px; border-radius: var(--ft-r-group); }
+.su-rec .st-recorder-box { width: 100%; min-width: 0; height: 88px; justify-content: center; padding: 0 14px; border-radius: var(--ft-r-group); background: var(--ft-page-soft); box-shadow: inset 0 0 0 1.5px rgb(var(--ft-page-rgb) / .55); }
+.su-rec .st-recorder-box::after { display: none; }
+.su-rec .st-recorder-hint { font-size: 15px; font-weight: 500; color: var(--ft-page-text); animation: su-blink 1.6s ease-in-out infinite; }
+@keyframes su-blink { 50% { opacity: .45; } }
+:root[data-motion="reduced"] .su-rec .st-recorder-hint { animation: none; }
+.su-rec .st-recorder-keys, .su-rec .st-recorder-key { gap: 14px; }
+.su-rec .st-recorder-key .ft-keycombo-plus { font-size: 18px; }
+.su-rec .st-recorder-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.su-rec .st-recorder-problem, .su-rec .shortcut-notice { text-align: center; }
+.su-rec .shortcut-notice[data-ok] { color: var(--ft-ok); }
+.su-rec-note { margin: 0; min-height: 18px; font-size: 12.5px; text-align: center; color: var(--ft-text-3); }
+.su-q { display: grid; }
+.su-q-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; margin-bottom: 8px; }
+.su-q-label { font-size: 13px; font-weight: 600; color: var(--ft-group-title-color, var(--ft-text-2)); }
+.su-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.su-card {
+  position: relative; display: grid; gap: 12px; align-content: start; padding: 12px; border: 0; text-align: left; color: var(--ft-text); font: inherit;
+  border-radius: var(--ft-r-group); background: var(--ft-group-bg); box-shadow: var(--ft-group-border), var(--ft-group-rim, 0 0 0 transparent);
+  transition: box-shadow var(--ft-t) ease, transform var(--ft-t) var(--ft-ease-out);
+}
+.su-card:hover { transform: translateY(-1px); }
+.su-card:active { transform: scale(.985); }
+.su-card[data-state="on"] { box-shadow: 0 0 0 2px var(--ft-page), 0 0 0 5px var(--ft-page-soft); }
+.su-card:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 3px; }
+.su-card-copy { display: grid; gap: 3px; padding-right: 22px; }
+.su-card-copy strong { font-size: 14px; font-weight: 600; }
+.su-card-copy small { font-size: 12.5px; line-height: 1.4; color: var(--ft-text-2); }
+.su-card > .su-check { top: 10px; right: 10px; }
+.su-sk { position: relative; display: grid; align-content: center; gap: 8px; height: 68px; padding: 0 12px; border-radius: var(--ft-r-control); background: rgb(var(--ft-ink-rgb) / .045); overflow: hidden; }
+.su-sk-text { font-size: 11.5px; color: var(--ft-text-2); white-space: nowrap; }
+.su-sk-text em { font-style: normal; color: var(--ft-text); background: rgb(var(--ft-accent-rgb) / .28); border-radius: 2px; box-shadow: 0 0 0 1px rgb(var(--ft-accent-rgb) / .28); }
+.su-sk-menu { display: inline-flex; justify-self: start; gap: 3px; padding: 4px; border-radius: 999px; background: var(--ft-surface); box-shadow: 0 4px 12px rgb(0 0 0 / .14), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .14); }
+.su-sk-menu i { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-style: normal; font-size: 9.5px; font-weight: 600; color: var(--ft-text-2); background: rgb(var(--ft-ink-rgb) / .06); }
+.su-sk-menu i:first-child { color: var(--ft-on-accent); background: var(--ft-accent); }
+.su-sk-pill { display: inline-flex; justify-self: start; align-items: center; gap: 5px; max-width: 100%; height: 22px; padding: 0 9px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--ft-on-accent); background: var(--ft-accent); }
+.su-sk-pill span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-direct { display: inline-flex; }
+
+/* ——— (3) Your model ——— */
+.su-body-form { display: grid; gap: 14px; }
+.su-body-form .ft-field-hint b { font-weight: 500; color: var(--ft-text-2); }
+.su-trial-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -6px 0 0 -10px; }
+.su-trial { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.su-trial-bubble { padding: 7px 12px; border-radius: 14px 14px 14px 4px; font-size: 13px; color: var(--ft-text); background: var(--ft-page-soft); }
+.su-trial-ms { font-size: 12px; color: var(--ft-text-3); font-variant-numeric: tabular-nums; }
+.su-trial-failed { font-size: 12.5px; line-height: 1.4; color: var(--ft-danger); }
+/* The journal, as a sheet inside the setup window (the same panel as Settings › Diagnostic). */
+.su-log-layer { position: absolute; inset: 0; z-index: 20; }
+.su-log-scrim { position: absolute; inset: 0; border: 0; padding: 0; background: rgb(0 0 0 / .22); border-radius: inherit; }
+.su-log-sheet {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 76%; display: grid; grid-template-rows: auto minmax(0, 1fr);
+  padding: 14px 14px 8px; border-radius: var(--ft-r-group); color: var(--ft-text); background: var(--ft-win-bg-solid, var(--ft-bg)); box-shadow: var(--ft-popover-shadow);
+}
+.su-log-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.su-log-head strong { font-size: 14px; font-weight: 600; }
+.su-log-scroll { min-height: 0; }
+
+/* ——— (4) Before the demo ——— */
+.su-how { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: 100%; margin: 0; padding: 0; }
+.su-how li {
+  display: grid; justify-items: center; align-content: start; gap: 6px; padding: 18px 10px 16px; text-align: center;
+  border-radius: var(--ft-r-group); background: var(--ft-group-bg); box-shadow: var(--ft-group-border);
+  animation: su-rise 520ms var(--ft-ease-out) both; animation-delay: calc(120ms + var(--i) * 90ms);
+}
+@keyframes su-rise { from { opacity: 0; transform: translateY(8px); } }
+.su-how-icon { display: grid; place-items: center; min-width: 44px; height: 44px; margin-bottom: 6px; padding: 0 8px; border-radius: 12px; color: var(--ft-page-text); background: var(--ft-page-soft); }
+.su-how-icon .ft-keycombo, .su-how-icon .ft-keycombo-item { gap: 3px; }
+.su-how strong { font-size: 14px; font-weight: 600; }
+.su-how small { font-size: 12px; color: var(--ft-text-2); }
+
+/* ——— (5) Ready ——— */
+.su-done { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.su-done-mark { display: grid; place-items: center; width: 72px; height: 72px; margin-bottom: 8px; color: var(--ft-on-accent); }
+.su-done-mark > * { grid-area: 1 / 1; }
+.su-done-disc { display: block; width: 72px; height: 72px; border-radius: 50%; background: var(--ft-accent); box-shadow: 0 10px 28px rgb(var(--ft-accent-rgb) / .35); }
+.su-done-mark svg { position: relative; }
+.su-recap { width: 100%; margin: 18px 0 0; text-align: left; border-radius: var(--ft-r-group); background: var(--ft-group-bg); box-shadow: var(--ft-group-border), var(--ft-group-rim, 0 0 0 transparent); }
+.su-recap-row { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 48px; padding: 8px 16px; }
+.su-recap-row + .su-recap-row { box-shadow: inset 0 1px 0 var(--ft-row-divider); }
+.su-recap dt { font-size: 13px; color: var(--ft-text-2); }
+.su-recap dd { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 13.5px; font-weight: 500; }
+.su-recap-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-recap-sub { flex: none; max-width: 60%; font-weight: 400; color: var(--ft-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.su-recap-todo { font-weight: 400; color: var(--ft-warn); }
+.su-rec .st-recorder:has(.shortcut-notice) + .su-rec-note { display: none; }
+/* Nothing in the setup ever scrolls sideways. */
+.su-scroll-vp { overflow-x: hidden !important; }
+.su-screen-in { min-width: 0; max-width: 100%; }
+/* More below the fold (a small screen): the thumb stays visible at rest until the end is reached,
+   so a question cut between its two halves says so. */
+.su-scroll:has(> .ft-scroll-viewport[data-fade-bottom]) > .ft-scrollbar { opacity: 1; }

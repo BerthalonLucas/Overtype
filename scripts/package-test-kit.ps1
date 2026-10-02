@@ -9,8 +9,8 @@ $version = (Get-Content -LiteralPath (Join-Path $repo "package.json") -Raw | Con
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected release version" }
 if (-not $EvaluationVersion) { $EvaluationVersion = $version }
 $release = Join-Path $repo "release"
-$kit = Join-Path $release "FlowTranslate-$version-test-kit"
-$installer = Join-Path $release "FlowTranslate_${version}_x64-setup.exe"
+$kit = Join-Path $release "Overtype-$version-test-kit"
+$installer = Join-Path $release "Overtype_${version}_x64-setup.exe"
 if (-not (Test-Path -LiteralPath $installer)) { throw "Build and copy the installer to $installer first" }
 New-Item -ItemType Directory -Path $kit -Force | Out-Null
 Copy-Item -LiteralPath $installer -Destination $kit
@@ -33,26 +33,26 @@ Copy-Item -LiteralPath (Join-Path $repo "docs/evaluation/$EvaluationVersion/READ
 @'
 @echo off
 setlocal
-set "EXE=%LOCALAPPDATA%\FlowTranslate\FlowTranslate.exe"
-if not exist "%EXE%" set "EXE=%~dp0FlowTranslate.exe"
+set "EXE=%LOCALAPPDATA%\Overtype\Overtype.exe"
+if not exist "%EXE%" set "EXE=%~dp0Overtype.exe"
 if not exist "%EXE%" (
-  echo FlowTranslate.exe introuvable. Installez d'abord l'application, ou copiez ce fichier dans son dossier.
+  echo Overtype.exe introuvable. Installez d'abord l'application, ou copiez ce fichier dans son dossier.
   pause
   exit /b 1
 )
-tasklist /FI "IMAGENAME eq FlowTranslate.exe" | find /I "FlowTranslate.exe" >nul
+tasklist /FI "IMAGENAME eq Overtype.exe" | find /I "Overtype.exe" >nul
 if not errorlevel 1 (
-  echo Quittez d'abord FlowTranslate depuis l'icone de notification, puis relancez ce fichier.
+  echo Quittez d'abord Overtype depuis l'icone de notification, puis relancez ce fichier.
   pause
   exit /b 1
 )
 start "" "%EXE%" --simulate-inference
-echo FlowTranslate est lance en mode simule : selectionnez un texte puis Ctrl+Alt+T.
+echo Overtype est lance en mode simule : selectionnez un texte puis Ctrl+Alt+T.
 '@ | Set-Content -LiteralPath (Join-Path $kit "Mode-simule.cmd") -Encoding ASCII
 @"
-FlowTranslate $version - kit d'essai Windows pour un autre poste
+Overtype $version - kit d'essai Windows pour un autre poste
 
-1. Installer avec FlowTranslate_${version}_x64-setup.exe (par utilisateur, sans droits administrateur).
+1. Installer avec Overtype_${version}_x64-setup.exe (par utilisateur, sans droits administrateur).
 2. Tester l'interface sans serveur : Mode-simule.cmd lance le client en mode simulé
    (capture réelle, réponse synthétique). Sélectionner un texte puis Ctrl+Alt+T.
    Sortir la souris de la bulle : elle se replie en onglet en bas de l'écran ; le survoler la rouvre.
@@ -60,7 +60,7 @@ FlowTranslate $version - kit d'essai Windows pour un autre poste
    powershell -NoProfile -ExecutionPolicy Bypass -File .\server\start.ps1 -Profile fast
    puis Réglages, mode Rapide, Enregistrer et vérifier le moteur. Les poids (~4 Go) se téléchargent au premier lancement.
    Un serveur distant n'est accepté qu'en HTTPS : hors périmètre de ce kit.
-4. Quitter FlowTranslate depuis l'icône de notification avant toute réinstallation.
+4. Quitter Overtype depuis l'icône de notification avant toute réinstallation.
 
 LIRE-POUR-TESTER.md détaille l'installation, les points à observer et quoi rapporter.
 VALIDATION.md distingue les contrôles automatiques faits et ce qui reste à confirmer à l'œil.
@@ -78,6 +78,6 @@ $manifest = [ordered]@{
     simulation = $false
 }
 $manifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $kit "manifest.json") -Encoding UTF8
-$archive = Join-Path $release "FlowTranslate-$version-test-kit.zip"
+$archive = Join-Path $release "Overtype-$version-test-kit.zip"
 Compress-Archive -Path (Join-Path $kit '*') -DestinationPath $archive -Force
 Get-Item -LiteralPath $archive | Select-Object FullName,Length

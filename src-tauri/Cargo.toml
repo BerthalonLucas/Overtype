@@ -1,8 +1,8 @@
 [package]
 name = "flowtranslate"
-version = "0.5.1"
-description = "FlowTranslate Windows desktop host"
-authors = ["FlowTranslate contributors"]
+version = "0.6.0"
+description = "Overtype Windows desktop host"
+authors = ["Overtype contributors"]
 edition = "2021"
 rust-version = "1.91"
 
@@ -11,7 +11,7 @@ name = "flowtranslate_lib"
 crate-type = ["rlib", "cdylib", "staticlib"]
 
 [[bin]]
-name = "FlowTranslate"
+name = "Overtype"
 path = "src/main.rs"
 
 [build-dependencies]
@@ -40,10 +40,21 @@ url = "2.5.7"
 uuid = { version = "1.18.1", features = ["v4", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-numerics = "0.3.1"
 windows = { version = "0.62.2", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Foundation_Numerics",
+  "System",
+  "UI",
+  "UI_Composition",
+  "UI_Composition_Desktop",
+  "Win32_System_WinRT",
+  "Win32_System_WinRT_Composition",
   "Win32_Foundation",
   "Win32_Graphics_Dwm",
   "Win32_Graphics_Gdi",
+  "Win32_Security",
   "Win32_Security_Cryptography",
   "Win32_System_Com",
   "Win32_System_DataExchange",

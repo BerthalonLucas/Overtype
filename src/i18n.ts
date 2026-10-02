@@ -1,11 +1,22 @@
 import { useSyncExternalStore } from 'react';
 import type { Language } from './types';
+import { setupMessages } from './setup/messages.i18n';
+import { connectionMessages } from './connection/messages.i18n';
+import { settingsPagesMessages } from './settings/pages/messages.i18n';
+import { componentsMessages } from './components/messages.i18n';
+import { demoMessages } from './demo/messages.i18n';
+import { appName } from './brand';
 
 // The interface language (docs/DA-PLAN.md, lot 1): English by default, French complete.
 // No dependency: one typed dictionary, `t(key, params)`, and a hook that follows
 // settings.language. Action names are user data and never pass through here; the
 // French messages Rust sends stay as they are until the error codes of lot 10.
 const dictionary = {
+  ...setupMessages,
+  ...connectionMessages,
+  ...settingsPagesMessages,
+  ...componentsMessages,
+  ...demoMessages,
   // Overlay: the glass, its pill and its menu.
   'glass.copy': { en: 'Copy translation', fr: 'Copier la traduction' },
   'glass.more': { en: 'More options', fr: 'Plus d’options' },
@@ -23,11 +34,12 @@ const dictionary = {
   'glass.errorHint': { en: 'Settings and Try again are in the ⋯ menu.', fr: 'Réglages et Réessayer dans le menu ⋯.' },
   // The Îlot's working pill (lot 8): its accessible name, never shown (design-lab/src/data.js:17-18).
   'pill.working': { en: 'Working', fr: 'En cours' },
+  'pill.cancel': { en: 'Working — click to cancel', fr: 'En cours, cliquez pour annuler' },
   'menu.showOriginal': { en: 'Show original', fr: 'Afficher l’original' },
   'menu.hideOriginal': { en: 'Hide original', fr: 'Masquer l’original' },
   'menu.replace': { en: 'Replace', fr: 'Remplacer' },
   'menu.retry': { en: 'Try again', fr: 'Réessayer' },
-  'menu.rerun': { en: 'Run again in {mode}', fr: 'Relancer en {mode}' },
+  'menu.rerun': { en: 'Run again with {server}', fr: 'Relancer avec {server}' },
   'menu.settings': { en: 'Settings', fr: 'Réglages' },
   'menu.close': { en: 'Close', fr: 'Fermer' },
   // The Îlot (lot 7): wording of the design lab (design-lab/src/data.js:11, 17-18) where it has one.
@@ -41,7 +53,7 @@ const dictionary = {
   'feedback.replaceUnavailable': { en: 'Replace is unavailable; use Copy.', fr: 'Remplacement indisponible; utilisez Copier.' },
   'feedback.displayUnavailable': { en: 'Display unavailable. Try again.', fr: 'Affichage indisponible. Réessayez.' },
   'feedback.moveUnavailable': { en: 'Moving unavailable. Try again.', fr: 'Déplacement indisponible. Réessayez.' },
-  'feedback.openSettingsFromTray': { en: 'Open the settings from the FlowTranslate icon.', fr: 'Ouvrez les réglages depuis l’icône FlowTranslate.' },
+  'feedback.openSettingsFromTray': { en: 'Open the settings from the {app} icon.', fr: 'Ouvrez les réglages depuis l’icône {app}.' },
   'error.failed': { en: 'The translation did not complete.', fr: 'La traduction n’a pas abouti.' },
   'error.startFailed': { en: 'The action could not start.', fr: 'L’action n’a pas pu démarrer.' },
   'error.deliveryTimeout': { en: 'The replacement did not answer; the result stays in the bubble.', fr: 'Le remplacement n’a pas répondu; le résultat reste dans la bulle.' },
@@ -76,25 +88,27 @@ const dictionary = {
   'result.error.target_changed': { en: 'Text changed — not replaced', fr: 'Texte modifié, rien remplacé' },
   'result.error.not_editable': { en: 'Read-only text, not replaced', fr: 'Texte non modifiable, rien remplacé' },
   'result.error.keys_held': { en: 'Keys held down, not replaced', fr: 'Touches enfoncées, rien remplacé' },
+  // 0.6: the paste changed nothing (a PDF in a browser); the window runs as administrator.
+  'result.error.read_only': { en: 'Read-only text, not replaced', fr: 'Texte en lecture seule, rien remplacé' },
+  'result.error.protected_window': { en: 'Administrator window — can’t be read', fr: 'Fenêtre administrateur, lecture impossible' },
   'result.error.too_long': { en: 'Selection too long (max 6,000 characters)', fr: 'Sélection trop longue (6 000 caractères max)' },
   'result.error.no_selection': { en: 'Select some text first', fr: 'Sélectionnez d’abord du texte' },
   'result.error.protected_field': { en: 'Protected field, not read', fr: 'Champ protégé, rien lu' },
   // Capture notices with a code of their own: the Settings window was in front, the tray's
   // « Revoir » found nothing recent.
   'result.error.settings_open': { en: 'Close Settings first', fr: 'Fermez d’abord les Réglages' },
+  'result.error.setup_open': { en: 'Finish the setup first', fr: 'Terminez d’abord l’accueil' },
   'result.error.nothing_recent': { en: 'No recent translation', fr: 'Aucune traduction récente' },
   'result.error.cancelled': { en: 'Cancelled', fr: 'Annulé' },
   // A capture Rust refused (capture-notice), where the request's words would mislead: the source
   // window changed during the capture, nothing was tried (src/result/errors.ts, source 'capture').
   'result.notice.target_changed': { en: 'Window changed — try again', fr: 'Fenêtre changée, réessayez' },
-  'init.connection': { en: 'The connection to FlowTranslate is unavailable.', fr: 'La connexion à FlowTranslate est indisponible.' },
+  'init.connection': { en: 'The connection to {app} is unavailable.', fr: 'La connexion à {app} est indisponible.' },
   'init.close': { en: 'Closing failed. Try again.', fr: 'La fermeture a échoué. Réessayez.' },
   'init.restart': { en: 'Restart the app if the problem persists.', fr: 'Relancez l’application si le problème persiste.' },
   'common.retry': { en: 'Try again', fr: 'Réessayer' },
   'common.close': { en: 'Close', fr: 'Fermer' },
   'common.settings': { en: 'Settings', fr: 'Réglages' },
-  'mode.quality': { en: 'Quality', fr: 'Qualité' },
-  'mode.fast': { en: 'Fast', fr: 'Rapide' },
   // Browser preview.
   'preview.label': { en: 'Browser preview · simulated response', fr: 'Aperçu navigateur · réponse simulée' },
   'preview.backgrounds': { en: 'Preview background', fr: 'Fond de l’aperçu' },
@@ -120,38 +134,33 @@ const dictionary = {
   'demo.openSettings': { en: 'Open settings', fr: 'Voir les réglages' },
   // Settings window.
   'settings.title': { en: 'Settings', fr: 'Réglages' },
-  'settings.windowTitle': { en: 'FlowTranslate Settings', fr: 'Réglages FlowTranslate' },
+  'settings.windowTitle': { en: '{app} Settings', fr: 'Réglages {app}' },
   'settings.animations': { en: 'Animations', fr: 'Animations' },
   'settings.animationsHelp': { en: 'Reduced: short fades only, no spring and no movement.', fr: 'Réduites : fondus courts seulement, sans ressort ni déplacement.' },
   'settings.animationsSystemReduces': { en: 'Windows asks to reduce animations.', fr: 'Windows demande de réduire les animations.' },
   'settings.animationsSystem': { en: 'Follow Windows', fr: 'Suivre Windows' },
   'settings.animationsFull': { en: 'Always', fr: 'Toujours' },
   'settings.animationsReduced': { en: 'Reduced', fr: 'Réduites' },
-  'settings.close': { en: 'Close', fr: 'Fermer' },
   'settings.loading': { en: 'Loading settings…', fr: 'Chargement des réglages…' },
-  'settings.loadError': { en: 'Settings are unavailable. Try again or restart FlowTranslate.', fr: 'Les réglages sont indisponibles. Réessayez ou redémarrez FlowTranslate.' },
+  'settings.loadError': { en: 'Settings are unavailable. Try again or restart {app}.', fr: 'Les réglages sont indisponibles. Réessayez ou redémarrez {app}.' },
   'settings.notSaved': { en: 'Settings were not saved.', fr: 'Les réglages n’ont pas été enregistrés.' },
-  'settings.appearance': { en: 'Appearance', fr: 'Apparence' },
   'settings.language': { en: 'Language', fr: 'Langue' },
-  'settings.languageHelp': { en: 'Menus, messages and settings. Action names stay as written.', fr: 'Menus, messages et réglages. Les noms des actions restent tels quels.' },
+  'settings.languageHelp': { en: 'Menus, messages and settings. The actions you renamed keep their names.', fr: 'Menus, messages et réglages. Les actions que vous avez renommées gardent leur nom.' },
   'settings.theme': { en: 'Theme', fr: 'Thème' },
-  'settings.themeHelp': { en: 'Follow Windows, or keep one look.', fr: 'Suivre Windows, ou garder un seul aspect.' },
   'settings.themeSystem': { en: 'Follow Windows', fr: 'Suivre Windows' },
   'settings.themeLight': { en: 'Light', fr: 'Clair' },
   'settings.themeDark': { en: 'Dark', fr: 'Sombre' },
   'settings.indicator': { en: 'Indicator', fr: 'Indicateur' },
-  'settings.indicatorHelp': { en: 'In the pill while the model works.', fr: 'Dans la pilule pendant que le modèle travaille.' },
+  'settings.indicatorHelp': { en: 'In the pill while the model works.', fr: 'Dans la pilule, pendant que le modèle travaille.' },
   'settings.indicatorPerle': { en: 'Perle', fr: 'Perle' },
   'settings.indicatorNebula': { en: 'Nebula', fr: 'Nébuleuse' },
   'settings.indicatorRibbon': { en: 'Ribbon', fr: 'Ruban' },
   'settings.motionPreset': { en: 'Motion style', fr: 'Style de mouvement' },
-  'settings.motionPresetHelp': { en: 'How the menu and the pill open and change shape.', fr: 'Comment le menu et la pilule s’ouvrent et changent de forme.' },
   'settings.motionSmooth': { en: 'Smooth', fr: 'Fluide' },
   'settings.motionBouncy': { en: 'Bouncy', fr: 'Rebondi' },
   'settings.menu': { en: 'Menu', fr: 'Menu' },
-  'settings.menuShortcut': { en: 'Shortcut', fr: 'Raccourci' },
   'settings.menuShortcutField': { en: 'Menu shortcut', fr: 'Raccourci du menu' },
-  'settings.menuShortcutHelp': { en: 'Opens the menu beside the selected text.', fr: 'Ouvre le menu à côté du texte sélectionné.' },
+  'settings.menuShortcutHelp': { en: 'Select some text, then press these keys: the menu opens beside it.', fr: 'Sélectionnez du texte, puis appuyez sur ces touches : le menu s’ouvre à côté.' },
   'settings.menuShortcutHelpV4': { en: 'Runs the default action on the selected text.', fr: 'Lance l’action par défaut sur le texte sélectionné.' },
   'settings.menuShortcutOff': { en: 'Off. Record a combination to turn it on.', fr: 'Désactivé. Enregistrez une combinaison pour l’activer.' },
   'settings.defaultAction': { en: 'Default action', fr: 'Action par défaut' },
@@ -161,7 +170,6 @@ const dictionary = {
   'settings.bubbleIntro': { en: 'When a shortcut shows the result, or a paste fails.', fr: 'Quand un raccourci affiche le résultat, ou qu’un collage échoue.' },
   'settings.autostartUnavailable': { en: 'Starting at sign-in is unavailable.', fr: 'Démarrage automatique indisponible.' },
   // After replacing (lot 9's settings).
-  'after.title': { en: 'After replacing', fr: 'Après remplacement' },
   'after.check': { en: 'Check mark', fr: 'Coche' },
   'after.checkHelp': { en: 'Shows that the text was replaced.', fr: 'Montre que le texte a été remplacé.' },
   'after.undo': { en: 'Undo', fr: 'Annuler' },
@@ -171,12 +179,12 @@ const dictionary = {
   'after.seconds': { en: '{count} s', fr: '{count} s' },
   'after.minutes': { en: '{count} min', fr: '{count} min' },
   'after.strategy': { en: 'How to undo', fr: 'Méthode' },
-  'after.strategyHelp': { en: 'Ctrl+Z in the app, or FlowTranslate pastes the original back.', fr: 'Ctrl+Z dans l’application, ou FlowTranslate recolle l’original.' },
+  'after.strategyHelp': { en: 'Ctrl+Z in the app, or {app} pastes the original back.', fr: 'Ctrl+Z dans l’application, ou {app} recolle l’original.' },
   'after.strategyKeystroke': { en: 'Ctrl+Z', fr: 'Ctrl+Z' },
   'after.strategyRepaste': { en: 'Paste original', fr: 'Recoller l’original' },
-  'after.changedWords': { en: 'Highlight changed words', fr: 'Surligner les mots changés' },
-  'after.changedWordsHelp': { en: 'The words the model changed, until your next action in the text.', fr: 'Les mots changés par le modèle, jusqu’à la prochaine action dans le texte.' },
-  'after.changedWordsSeconds': { en: 'Highlight time', fr: 'Durée du surlignage' },
+  'after.changedWords': { en: 'Highlight changed words', fr: 'Mettre en valeur les mots changés' },
+  'after.changedWordsHelp': { en: 'The words the model changed, until your next action in the text.', fr: 'Les mots changés par le modèle, jusqu’à votre prochaine action dans le texte.' },
+  'after.changedWordsSeconds': { en: 'Highlight time', fr: 'Durée de la mise en valeur' },
   'after.changedWordsSecondsHelp': { en: 'The longest it stays without an action.', fr: 'Le plus longtemps qu’il reste sans action.' },
   'after.placement': { en: 'Pill position', fr: 'Position de la pilule' },
   'after.placementHelp': { en: 'Never over the new text.', fr: 'Jamais sur le nouveau texte.' },
@@ -189,42 +197,31 @@ const dictionary = {
   'grid.letter': { en: 'Letter for {name}', fr: 'Lettre de {name}' },
   'grid.up': { en: 'Move {name} up', fr: 'Monter {name}' },
   'grid.down': { en: 'Move {name} down', fr: 'Descendre {name}' },
-  'grid.remove': { en: 'Remove {name} from the menu', fr: 'Retirer {name} du menu' },
-  'grid.add': { en: 'Add to the menu', fr: 'Ajouter au menu' },
-  'grid.addPlaceholder': { en: 'Choose an action…', fr: 'Choisir une action…' },
-  'grid.full': { en: 'The menu holds 6 actions. Remove one to add another.', fr: 'Le menu contient six actions. Retirez-en une pour en ajouter une autre.' },
-  'grid.empty': { en: 'No action in the menu: only the free instruction.', fr: 'Aucune action dans le menu : seulement la consigne libre.' },
-  'grid.free': { en: 'Free instruction: Space or /, and the last tile while there is room.', fr: 'Consigne libre : Espace ou /, et la dernière tuile tant qu’il reste de la place.' },
   'grid.letterInvalid': { en: 'Use a single letter.', fr: 'Une seule lettre.' },
   'grid.letterTaken': { en: '{letter} is already used by {name}.', fr: '{letter} est déjà utilisée par {name}.' },
   'grid.lettersInvalid': { en: 'Each action takes one letter, different from the others.', fr: 'Chaque action prend une lettre, différente des autres.' },
   'grid.tooMany': { en: 'The menu holds 6 actions at most.', fr: 'Le menu contient six actions au plus.' },
-  'settings.defaultProfile': { en: 'Default profile', fr: 'Profil par défaut' },
-  'settings.defaultProfileHelp': { en: 'Quality: slower, better phrasing. Can be changed from the bubble menu.', fr: 'Qualité : plus lent, meilleures tournures. Changeable depuis le menu de la bulle.' },
   'settings.textSize': { en: 'Text size', fr: 'Taille du texte' },
-  'settings.textSizeHelp': { en: 'Short glass 16, 18 or 20 px; reader 22, 24 or 26 px. The reader takes half the screen.', fr: 'Verre court 16, 18 ou 20 px ; lecteur 22, 24 ou 26 px. Le lecteur occupe la moitié de l’écran.' },
+  'settings.textSizeHelp': { en: 'Short glass 16, 18 or 20 px; reader 22, 24 or 26 px.', fr: 'Verre court 16, 18 ou 20 px ; lecteur 22, 24 ou 26 px.' },
   'settings.textNormal': { en: 'Normal', fr: 'Normale' },
   'settings.textLarge': { en: 'Large', fr: 'Grande' },
   'settings.textXLarge': { en: 'Extra large', fr: 'Très grande' },
   'settings.autoClose': { en: 'Auto close', fr: 'Fermeture automatique' },
-  'settings.autoCloseHelp': { en: 'The estimated reading time, then a fade. Hovering, scrolling or pinning holds it.', fr: 'Le temps de lecture estimé, puis un fondu. Survoler, faire défiler ou épingler la retient.' },
+  'settings.autoCloseHelp': { en: 'The estimated reading time, then a fade. Hovering or pinning holds it.', fr: 'Le temps de lecture estimé, puis un fondu. Survoler ou épingler la retient.' },
   'settings.closeFast': { en: 'Fast', fr: 'Rapide' },
   'settings.closeNormal': { en: 'Normal', fr: 'Normale' },
   'settings.closeSlow': { en: 'Slow', fr: 'Lente' },
   'settings.closeNever': { en: 'Never', fr: 'Jamais' },
   'settings.device': { en: 'On this device', fr: 'Sur cet appareil' },
-  'settings.history': { en: 'Keep encrypted history', fr: 'Conserver l’historique chiffré' },
-  'settings.historyHelp': { en: '7 days, 100 entries, protected by Windows (DPAPI). Nothing leaves the device.', fr: '7 jours, 100 entrées, protégé par Windows (DPAPI). Rien ne quitte l’appareil.' },
+  'settings.historyHelp': { en: '7 days, 100 entries, protected by Windows. Nothing leaves the device.', fr: '7 jours, 100 entrées, protégé par Windows. Rien ne quitte l’appareil.' },
   'settings.historyRemove': { en: 'Delete this entry', fr: 'Supprimer cette entrée' },
-  'settings.historyEmpty': { en: 'No saved translations.', fr: 'Aucune traduction enregistrée.' },
-  'settings.historyCountOne': { en: '{count} entry', fr: '{count} entrée' },
   'settings.historyCountOther': { en: '{count} entries', fr: '{count} entrées' },
   'settings.historyClear': { en: 'Delete all', fr: 'Tout supprimer' },
   'settings.deleteFailed': { en: 'Deletion failed.', fr: 'La suppression a échoué.' },
   'settings.autostart': { en: 'Start when you sign in', fr: 'Lancer à l’ouverture de session' },
-  'settings.autostartHelp': { en: 'Only the notification area icon shows at rest.', fr: 'Seule l’icône de notification est visible au repos.' },
+  'settings.autostartHelp': { en: 'Only the notification area icon shows at rest.', fr: 'Seule l’icône de la zone de notification est visible au repos.' },
   'settings.reset': { en: 'Default settings', fr: 'Réglages par défaut' },
-  'settings.resetHelp': { en: 'Every setting goes back to a fresh install’s, except your connection, history, language and start at sign-in.', fr: 'Chaque réglage revient à celui d’une nouvelle installation, sauf votre connexion, l’historique, la langue et le lancement à l’ouverture de session.' },
+  'settings.resetHelp': { en: 'Everything goes back to a fresh install, except your connection, history, language and start at sign-in.', fr: 'Tout revient à une nouvelle installation, sauf votre connexion, l’historique, la langue et le lancement à l’ouverture de session.' },
   'settings.resetAction': { en: 'Restore…', fr: 'Rétablir…' },
   'settings.resetConfirm': { en: 'Your own actions and shortcuts will be removed. Restore the default settings?', fr: 'Vos propres actions et raccourcis seront supprimés. Rétablir les réglages par défaut ?' },
   'settings.resetConfirmAction': { en: 'Restore default settings', fr: 'Rétablir les réglages par défaut' },
@@ -232,30 +229,12 @@ const dictionary = {
   'settings.resetDone': { en: 'Default settings restored.', fr: 'Réglages par défaut rétablis.' },
   'settings.resetDoneKept': { en: 'Default settings restored, except the menu shortcut: Windows did not give {default}, so the menu keeps {shortcut}.', fr: 'Réglages par défaut rétablis, sauf le raccourci du menu : Windows n’a pas donné {default}, le menu garde {shortcut}.' },
   'settings.resetFailed': { en: 'The default settings could not be restored. Try again.', fr: 'Impossible de rétablir les réglages par défaut. Réessayez.' },
-  'settings.connection': { en: 'Connection', fr: 'Connexion' },
-  'settings.check': { en: 'Check', fr: 'Vérifier' },
-  'settings.checking': { en: 'Checking…', fr: 'Vérification…' },
-  'settings.connected': { en: 'Connected · {ms} ms', fr: 'Connecté · {ms} ms' },
-  'settings.connectionFailed': { en: 'Connection failed', fr: 'Échec de connexion' },
-  'settings.notChecked': { en: 'Not checked', fr: 'Non vérifié' },
-  'settings.checkImpossible': { en: 'Check failed. Start the server, then try again.', fr: 'Vérification impossible. Démarrez le serveur puis réessayez.' },
-  'settings.checkUnsaved': { en: 'Not checked: this change couldn’t be saved (see below).', fr: 'Non vérifié : cette modification n’a pas pu être enregistrée (voir en bas).' },
-  'settings.endpoint': { en: 'Address', fr: 'Adresse' },
-  'settings.model': { en: 'Model', fr: 'Modèle' },
-  'settings.apiKey': { en: 'API key', fr: 'Clé API' },
-  'settings.apiKeyPlaceholder': { en: 'Optional for a local server', fr: 'Facultative pour un serveur local' },
-  'settings.apiKeyProtected': { en: 'Protected by Windows', fr: 'Protégée par Windows' },
   'settings.previewConnection': { en: 'Browser preview · simulated connection', fr: 'Aperçu navigateur · connexion simulée' },
   'settings.saveRetry': { en: 'Not saved — try again', fr: 'Non enregistré — réessayer' },
-  'settings.savedNow': { en: 'Saved just now', fr: 'Enregistré à l’instant' },
   'settings.saving': { en: 'Saving…', fr: 'Enregistrement…' },
   'settings.saved': { en: 'Saved', fr: 'Enregistré' },
-  'settings.quit': { en: 'Quit FlowTranslate', fr: 'Quitter FlowTranslate' },
-  'settings.resize': { en: 'Resize settings', fr: 'Redimensionner les réglages' },
-  'settings.resizeHint': { en: 'Drag to resize', fr: 'Glisser pour redimensionner' },
-  'settings.resizeUnavailable': { en: 'Resizing unavailable. Use the window edges.', fr: 'Redimensionnement indisponible. Utilisez les bords de la fenêtre.' },
+  'settings.quit': { en: 'Quit {app}', fr: 'Quitter {app}' },
   // Actions and shortcuts.
-  'actions.title': { en: 'Actions', fr: 'Actions' },
   'actions.instructions': { en: 'Instructions', fr: 'Consignes' },
   'actions.intro': { en: 'The instruction alone; the selected text is sent after it.', fr: 'La consigne seule ; le texte sélectionné est envoyé après elle.' },
   'actions.add': { en: 'Add an action', fr: 'Ajouter une action' },
@@ -267,28 +246,24 @@ const dictionary = {
   'actions.name': { en: 'Action name', fr: 'Nom de l’action' },
   'actions.instruction': { en: 'Instruction', fr: 'Consigne' },
   'actions.instructionFor': { en: 'Instruction {name}', fr: 'Consigne {name}' },
-  'actions.instructionHelp': { en: 'Write the language you want in the instruction. The output rules at the end keep small models to the text alone.', fr: 'Écrivez la langue voulue dans la consigne. Les règles de sortie à la fin gardent les petits modèles au texte seul.' },
   'actions.promptInvalid': { en: 'The instruction must hold 1 to 8,000 characters, without a null character.', fr: 'La consigne doit contenir de 1 à 8 000 caractères, sans caractère nul.' },
   'actions.restore': { en: 'Restore the instruction', fr: 'Rétablir la consigne' },
   'actions.inUseHint': { en: 'First change the shortcuts and the default action that use it.', fr: 'Changez d’abord les raccourcis et l’action par défaut qui l’utilisent.' },
   'actions.delete': { en: 'Delete action', fr: 'Supprimer l’action' },
   'actions.inUse': { en: ' · in use', fr: ' · utilisée' },
-  'actions.help': { en: 'Hy-MT models can only translate. To fix or rephrase, point a Connection profile to a general model (the “general” profile of the bundled server, or any OpenAI-compatible server).', fr: 'Les modèles Hy-MT ne savent que traduire. Pour corriger ou reformuler, pointez un profil de Connexion vers un modèle généraliste (le profil « general » du serveur livré, ou tout serveur compatible OpenAI).' },
   'shortcuts.title': { en: 'Direct shortcuts', fr: 'Raccourcis directs' },
   'shortcuts.intro': { en: 'One combination runs one action, without the menu.', fr: 'Une combinaison lance une action, sans passer par le menu.' },
   'shortcuts.none': { en: 'No direct shortcut.', fr: 'Aucun raccourci direct.' },
   'shortcuts.opensMenu': { en: 'Opens the menu.', fr: 'Ouvre le menu.' },
   'shortcuts.taken': { en: 'Another app already uses this shortcut, or Windows refused it. Choose another one.', fr: 'Une autre application utilise déjà ce raccourci, ou Windows l’a refusé. Choisissez-en un autre.' },
   // Lot 10: what Windows answered for a saved chord (`shortcut_status`), under its row.
-  'shortcuts.stateTaken': { en: 'Another app is already using {shortcut}, so Windows did not give it to FlowTranslate. Record another combination, or close that app.', fr: 'Une autre application utilise déjà {shortcut} : Windows ne l’a pas donné à FlowTranslate. Enregistrez une autre combinaison, ou fermez cette application.' },
+  'shortcuts.stateTaken': { en: 'Another app is already using {shortcut}, so Windows did not give it to {app}. Record another combination, or close that app.', fr: 'Une autre application utilise déjà {shortcut} : Windows ne l’a pas donné à {app}. Enregistrez une autre combinaison, ou fermez cette application.' },
   'shortcuts.stateFailed': { en: 'Windows refused {shortcut}: it does nothing for now. Record another combination.', fr: 'Windows a refusé {shortcut} : il ne fait rien pour l’instant. Enregistrez une autre combinaison.' },
-  'shortcuts.duplicate': { en: 'Another FlowTranslate shortcut already uses this combination.', fr: 'Un autre raccourci de FlowTranslate utilise déjà cette combinaison.' },
+  'shortcuts.duplicate': { en: 'Another {app} shortcut already uses this combination.', fr: 'Un autre raccourci de {app} utilise déjà cette combinaison.' },
   'shortcuts.unknown': { en: 'This combination is not recognized.', fr: 'Cette combinaison n’est pas reconnue.' },
   'shortcuts.altGrConflict': { en: '{shortcut} is also AltGr+{key} on this keyboard: you could no longer type {character}.', fr: '{shortcut} est aussi AltGr+{key} sur ce clavier : vous ne pourriez plus taper {character}.' },
   'shortcuts.altGrConflictKey': { en: '{shortcut} is also AltGr+{key} on this keyboard: that key would no longer type its character.', fr: '{shortcut} est aussi AltGr+{key} sur ce clavier : cette touche ne taperait plus son caractère.' },
   'shortcuts.add': { en: 'Add a shortcut', fr: 'Ajouter un raccourci' },
-  'shortcuts.enable': { en: 'Enable this shortcut', fr: 'Activer ce raccourci' },
-  'shortcuts.on': { en: 'On', fr: 'Actif' },
   'shortcuts.off': { en: 'Off', fr: 'Désactivé' },
   'shortcuts.delete': { en: 'Delete this shortcut', fr: 'Supprimer ce raccourci' },
   'shortcuts.field': { en: 'Shortcut', fr: 'Raccourci' },
@@ -308,10 +283,11 @@ const dictionary = {
   'shortcuts.f12': { en: 'F12 is reserved by Windows.', fr: 'F12 est réservée par Windows.' },
   'shortcuts.system': { en: 'This combination is reserved by Windows.', fr: 'Cette combinaison est réservée à Windows.' },
   'shortcuts.badKey': { en: 'This key cannot be part of a global shortcut.', fr: 'Cette touche ne peut pas servir de raccourci global.' },
-  'shortcuts.help': { en: 'Ctrl or Alt required; Windows, F12 and system combinations are refused. “Replace the selection” pastes the result over the selected text; if the paste fails, the result stays in the bubble.', fr: 'Ctrl ou Alt requis ; Windows, F12 et les combinaisons système sont refusés. « Remplacer la sélection » colle le résultat à la place du texte sélectionné ; si le collage échoue, le résultat reste dans la bulle.' },
 } satisfies Record<string, Record<Language, string>>;
 
 export type MessageKey = keyof typeof dictionary;
+// A message as it is written, its parameters unfilled (the tests read it).
+export const rawMessage = (language: Language, key: MessageKey): string => dictionary[key][language];
 export const messageKeys = Object.keys(dictionary) as MessageKey[];
 export type Params = Record<string, string | number>;
 export type Translate = (key: MessageKey, params?: Params) => string;
@@ -319,9 +295,11 @@ export type Translate = (key: MessageKey, params?: Params) => string;
 export const languages: readonly Language[] = ['en', 'fr'];
 export const locales: Record<Language, string> = { en: 'en-US', fr: 'fr-FR' };
 
+// The app's name is never written in a message: `{app}` reads it from src/brand.ts.
 export function translate(language: Language, key: MessageKey, params?: Params): string {
   const text = dictionary[key][language] ?? dictionary[key].en;
-  return params ? text.replace(/\{(\w+)\}/g, (whole, name: string) => name in params ? String(params[name]) : whole) : text;
+  if (!params && !text.includes('{')) return text;
+  return text.replace(/\{(\w+)\}/g, (whole, name: string) => params && name in params ? String(params[name]) : name === 'app' ? appName : whole);
 }
 
 // The active language of this window: set by useDocumentPreferences from settings.language;

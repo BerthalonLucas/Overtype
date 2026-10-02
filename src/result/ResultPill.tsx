@@ -7,7 +7,7 @@ import { usePageHidden } from '../loaders/WorkingPill';
 import { ilotMetrics } from '../menu/metrics';
 import { MorphSurface, type ShapeChange, type SurfaceOrigin, type SurfaceSize } from '../menu/MorphSurface';
 import { useReducedMotionSetting } from '../motion/MotionPreferences';
-import type { AfterReplace, ErrorCode, Indicator, Mode } from '../types';
+import type { AfterReplace, ErrorCode, Indicator } from '../types';
 import { Icon, iconStroke } from '../ui';
 import { Countdown, resultTiming } from './countdown';
 import { describeError, errorFamily, type ErrorAction, type ErrorSource } from './errors';
@@ -47,7 +47,7 @@ import './result.css';
  *       pill (done with neither check nor Undo, or a silent error such as cancelled).
  *       The Îlot (src/menu/Ilot.tsx) takes it as is for its pill shape (src/menu/IlotStage.tsx).
  *   Stages: { stage: 'working', indicator, delayMs? } | { stage: 'done', afterReplace, clock?, busy?, drawn? }
- *           | { stage: 'undone' } | { stage: 'error', error, mode?, model?, source? }
+ *           | { stage: 'undone' } | { stage: 'error', error, serverId?, model?, source? }
  *           done: see DoneContent (a shared clock, Undo on its way, the check already drawn);
  *           keyed 'done' with Undo, 'done-check' without.
  *           source 'capture': a capture Rust refused (`capture-notice`), no button at all;
@@ -69,7 +69,7 @@ export type ResultStage =
   | { stage: 'working'; indicator: Indicator; delayMs?: number }
   | { stage: 'done'; afterReplace: AfterReplace; clock?: Countdown; busy?: boolean; drawn?: boolean }
   | { stage: 'undone' }
-  | { stage: 'error'; error: ErrorCode; mode?: Mode; model?: string; source?: ErrorSource };
+  | { stage: 'error'; error: ErrorCode; serverId?: string; model?: string; source?: ErrorSource };
 export type ActionAnswer = void | boolean | Promise<void | boolean>;
 export type ResultHandlers = {
   onUndo?: () => void;
@@ -88,7 +88,10 @@ const circumference = 2 * Math.PI * 5;
 // The work pill's content (lot 8, src/loaders/WorkingPill.tsx) without its own surface: the
 // indicator's box reserved from the start, the orb after `delayMs`, the loops resting while the
 // page is hidden.
-export function WorkingContent({ indicator, delayMs = ORB_DELAY_MS }: { indicator: Indicator; delayMs?: number }) {
+// onCancel (0.6): the pill is a button while it works: a click on it cancels the request and
+// the pill leaves (a click used to do nothing at all, and the pill had no way out but Escape);
+// under the pointer the orb gives way to a ✕. Without it (a preview, the demo) it is a picture.
+export function WorkingContent({ indicator, delayMs = ORB_DELAY_MS, onCancel }: { indicator: Indicator; delayMs?: number; onCancel?: () => void }) {
   const t = useT();
   const hidden = usePageHidden();
   const [orb, setOrb] = useState(delayMs <= 0);
@@ -98,9 +101,12 @@ export function WorkingContent({ indicator, delayMs = ORB_DELAY_MS }: { indicato
     return () => window.clearTimeout(timer);
   }, [orb, delayMs]);
   const box = indicatorBox[indicator];
-  return <span className="result-working" role="img" aria-label={t('pill.working')} data-orb={orb ? 'shown' : 'waiting'} data-paused={hidden || undefined}>
-    <span className="working-slot" style={{ width: box.width, height: box.height }}>{orb && <span className="working-orb"><IndicatorView indicator={indicator} /></span>}</span>
-  </span>;
+  const slot = <span className="working-slot" style={{ width: box.width, height: box.height }}>{orb && <span className="working-orb"><IndicatorView indicator={indicator} /></span>}</span>;
+  if (!onCancel) return <span className="result-working" role="img" aria-label={t('pill.working')} data-orb={orb ? 'shown' : 'waiting'} data-paused={hidden || undefined}>{slot}</span>;
+  return <button type="button" className="result-working result-cancel" aria-label={t('pill.cancel')} title={t('pill.cancel')} data-orb={orb ? 'shown' : 'waiting'} data-paused={hidden || undefined} onClick={() => onCancel()}>
+    {slot}
+    <span className="working-x" aria-hidden="true"><X size={12} strokeWidth={iconStroke} /></span>
+  </button>;
 }
 
 // The check and Undo (Simulator.jsx:279-284). durationMs: resultTiming(afterReplace).durationMs.
@@ -193,9 +199,9 @@ export function UndoneContent({ onExpire }: { onExpire?: () => void }) {
 }
 
 // The compact error pill (Simulator.jsx:286-296, app.css:169-171).
-export function ErrorContent({ error, mode, model, source, onAction, onDismiss }: { error: ErrorCode; mode?: Mode; model?: string; source?: ErrorSource } & Pick<ResultHandlers, 'onAction' | 'onDismiss'>) {
+export function ErrorContent({ error, serverId, model, source, onAction, onDismiss }: { error: ErrorCode; serverId?: string; model?: string; source?: ErrorSource } & Pick<ResultHandlers, 'onAction' | 'onDismiss'>) {
   const t = useT();
-  const description = describeError(error, { mode, model, source });
+  const description = describeError(error, { serverId, model, source });
   const [copied, setCopied] = useState(false);
   const alive = useRef(true);
   const timer = useRef(0);
@@ -233,7 +239,7 @@ export function resultContent(stage: ResultStage, handlers: ResultHandlers = {})
   switch (stage.stage) {
     case 'working': {
       const { width, height } = workingPillShape(stage.indicator);
-      return { key: 'working', size: { width, height }, node: <WorkingContent indicator={stage.indicator} delayMs={stage.delayMs} /> };
+      return { key: 'working', size: { width, height }, node: <WorkingContent indicator={stage.indicator} delayMs={stage.delayMs} onCancel={handlers.onDismiss} /> };
     }
     case 'done': {
       const timing = resultTiming(stage.afterReplace);
@@ -247,7 +253,7 @@ export function resultContent(stage: ResultStage, handlers: ResultHandlers = {})
       return { key: 'undone', node: <UndoneContent onExpire={handlers.onExpire} /> };
     case 'error':
       if (errorFamily(stage.error) === 'silent') return null;
-      return { key: `error-${stage.error}`, node: <ErrorContent error={stage.error} mode={stage.mode} model={stage.model} source={stage.source} onAction={handlers.onAction} onDismiss={handlers.onDismiss} /> };
+      return { key: `error-${stage.error}`, node: <ErrorContent error={stage.error} serverId={stage.serverId} model={stage.model} source={stage.source} onAction={handlers.onAction} onDismiss={handlers.onDismiss} /> };
   }
 }
 

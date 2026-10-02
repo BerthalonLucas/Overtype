@@ -1,11 +1,12 @@
-import type { Capture, ErrorCode, ExecutionInfo, Mode, StreamEvent, ResultDelivery, UndoLoss } from './types';
+import type { Capture, ErrorCode, ExecutionInfo, StreamEvent, ResultDelivery, UndoLoss } from './types';
 import { t } from './i18n';
 import { errorCodeOf } from './result/errors';
 
 export type TranslationState = {
   capture: Capture | null;
   requestId: string | null;
-  mode: Mode;
+  // The server of the running (or last) request; null before the first one.
+  serverId: string | null;
   result: string;
   phase: 'idle' | 'streaming' | 'complete' | 'error' | 'cancelled';
   error: string | null;
@@ -26,14 +27,14 @@ export type TranslationState = {
 };
 
 export const initialTranslationState: TranslationState = {
-  capture: null, requestId: null, mode: 'quality', result: '',
+  capture: null, requestId: null, serverId: null, result: '',
   phase: 'idle', delivery: null, error: null, code: null, replacementValid: false, invalidated: false, comparing: false, undoable: false, undoLost: null,
 };
 
 export type Action =
   | { type: 'CAPTURE'; capture: Capture }
   | { type: 'CHOOSE'; captureId: string; execution: ExecutionInfo }
-  | { type: 'START'; requestId: string; mode: Mode }
+  | { type: 'START'; requestId: string; serverId: string }
   | { type: 'STREAM'; event: StreamEvent }
   | { type: 'TARGET'; captureId: string; canReplace: boolean }
   | { type: 'INVALIDATE'; message: string }
@@ -54,7 +55,7 @@ export function translationReducer(state: TranslationState, action: Action): Tra
       if (action.captureId !== state.capture?.id || state.capture.execution) return state;
       return { ...state, capture: { ...state.capture, execution: action.execution }, delivery: action.execution.outputMode === 'replace' ? 'pending' : null };
     case 'START':
-      return { ...state, requestId: action.requestId, mode: action.mode, undoable: false, undoLost: null,
+      return { ...state, requestId: action.requestId, serverId: action.serverId, undoable: false, undoLost: null,
         result: '', error: null, code: null, phase: 'streaming', replacementValid: false, delivery: state.requestId ? null : state.delivery };
     case 'STREAM':
       if (action.event.requestId !== state.requestId) return state;

@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { SettingsWindow } from '../App';
+import { SettingsWindow } from '../settings/SettingsWindow';
 import { HaloScene } from '../halo/HaloWindow';
 import { GlassOverlay } from '../GlassOverlay';
 import { useTranslation } from '../useTranslation';
@@ -116,7 +116,7 @@ async function mount() {
   if (scenario === 'history') {
     await bridge.saveSettings({ ...await bridge.getSettings(), historyEnabled: true });
     const observer = new MutationObserver(() => {
-      const history = document.querySelector('.history');
+      const history = document.querySelector('.st-history');
       if (!history) return;
       history.scrollIntoView({ block: 'center', behavior: 'instant' });
       document.documentElement.dataset.labReady = 'true';
@@ -124,6 +124,6 @@ async function mount() {
     });
     observer.observe(document.getElementById('root')!, { childList: true, subtree: true });
   }
-  createRoot(document.getElementById('root')!).render(<MotionPreferences motion={motion} preset={preset}>{scenario === 'settings' || scenario === 'history' ? <SettingsWindow/> : scenario === 'halo' ? <HaloFixture/> : <OverlayFixture/>}</MotionPreferences>);
+  createRoot(document.getElementById('root')!).render(<MotionPreferences motion={motion} preset={preset}>{scenario === 'history' ? <SettingsWindow initialPage="data"/> : scenario === 'settings' ? <SettingsWindow initialPage={params.get('ui') === 'v4' ? 'general' : 'after'}/> : scenario === 'halo' ? <HaloFixture/> : <OverlayFixture/>}</MotionPreferences>);
 }
 void mount();

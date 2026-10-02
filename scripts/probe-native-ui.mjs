@@ -1,4 +1,4 @@
-// Tests the web content in an explicitly started FlowTranslate demo process.
+// Tests the web content in an explicitly started Overtype demo process.
 // A WebView screenshot is not evidence of Windows backdrop/focus/hit-testing;
 // the HWND inspection below is evidence of the frameless silhouette only.
 // Two journeys (lot 14): the direct bubble of --demo-selection (the « show the result » mode and
@@ -45,7 +45,7 @@ const poke = (hwnd, quiet = false, save = true) => JSON.parse(execFileSync('powe
 const demoLines = { left: 640, top: 396, right: 1000, bottom: 444 };
 try {
   const overlayTargets = () => browser.contexts().flatMap(context => context.pages()).filter(page => /tauri\.localhost/.test(page.url()) && new URL(page.url()).searchParams.get('window') === 'overlay');
-  await expect.poll(() => overlayTargets().length, { timeout: 10000, message: 'Expected exactly one packaged FlowTranslate overlay' }).toBe(1);
+  await expect.poll(() => overlayTargets().length, { timeout: 10000, message: 'Expected exactly one packaged Overtype overlay' }).toBe(1);
   const targets = overlayTargets();
   const page = targets[0];
   // Refuse to capture an arbitrary live translation: the launcher must start an explicit demo.

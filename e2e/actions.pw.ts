@@ -1,66 +1,56 @@
 import { test, expect, type Page } from '@playwright/test';
 
+// Actions and their shortcuts across the Settings pages of 0.6 (« Actions », « Shortcuts »).
+// The instruction's limits, the grid and the narrow window are in e2e/settings-window.pw.ts.
 async function openSettings(page: Page) {
   await page.route('**/?window=settings&fixture=1', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts') });
   });
   await page.goto('/?window=settings&fixture=1');
-  await expect(page.getByRole('heading', { name: 'Instructions', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Actions', exact: true })).toBeVisible();
 }
+const go = async (page: Page, name: string) => { await page.getByRole('tab', { name, exact: true }).click(); await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible(); };
 const saved = (page: Page) => page.evaluate(() => (window as any).nativeFixture.calls.filter((c: any) => c.command === 'save_settings').at(-1)?.args.settings);
 
 test('a custom instruction and a second shortcut retain their action and destination', async ({ page }) => {
   await openSettings(page);
+  await go(page, 'Actions');
   await page.getByRole('button', { name: 'Add an action', exact: true }).click();
-  const action = page.locator('.action-card').filter({ hasText: 'New action' });
-  await action.locator('summary').click();
-  await action.getByLabel('Action name', { exact: true }).fill('Résumer');
-  const custom = page.locator('.action-card').filter({ hasText: 'Custom' });
-  await custom.getByRole('textbox', { name: 'Instruction Résumer', exact: true }).fill('Résume le texte en une phrase.');
+  const custom = page.locator('.st-instr').last();
+  await expect(custom.locator('.st-chip')).toHaveText('Custom');
+  await custom.getByRole('textbox', { name: 'Action name', exact: true }).fill('Résumer');
+  await custom.locator('textarea').fill('Résume le texte en une phrase.');
   await expect.poll(() => saved(page)).toMatchObject({ actions: expect.arrayContaining([expect.objectContaining({ name: 'Résumer', promptTemplate: 'Résume le texte en une phrase.' })]) });
   const id = (await saved(page)).actions.find((a: any) => a.name === 'Résumer').id;
+  await go(page, 'Shortcuts');
   await page.getByRole('button', { name: 'Add a shortcut', exact: true }).click();
-  // The menu's shortcut has its own row (« Menu »): the new binding is the one direct card.
-  await expect(page.locator('.shortcut-card')).toHaveCount(1);
-  const second = page.locator('.shortcut-card').last();
-  await second.locator('.shortcut-options select').nth(0).selectOption(id);
-  await second.locator('.shortcut-options select').nth(1).selectOption('replace');
+  // The menu's shortcut has its own row: the new binding is the one direct card.
+  const second = page.locator('.st-binding');
+  await expect(second).toHaveCount(1);
+  await second.getByRole('combobox', { name: 'Action', exact: true }).click();
+  await page.getByRole('option', { name: 'Résumer', exact: true }).click();
+  await second.getByRole('radiogroup', { name: 'Result', exact: true }).getByRole('radio', { name: 'Replace the selection', exact: true }).click();
   await second.getByRole('button', { name: 'Change', exact: true }).click();
   await page.keyboard.press('Control+Alt+R');
   await expect.poll(() => saved(page)).toMatchObject({ shortcutBindings: [expect.objectContaining({ kind: 'menu', shortcut: 'Ctrl+Alt+Space', actionId: 'correct' }), expect.objectContaining({ shortcut: 'Ctrl+Alt+R', actionId: id, outputMode: 'replace', enabled: true })] });
-  await expect(custom.getByRole('button', { name: /Delete action/ })).toBeDisabled();
-});
-
-test('an empty instruction is explained and never sent for persistence', async ({ page }) => {
-  await openSettings(page);
-  await page.locator('.action-card').first().locator('summary').click();
-  await page.getByRole('textbox', { name: 'Instruction Fix grammar', exact: true }).fill('   ');
-  await expect(page.locator('.save-status')).toContainText('Not saved');
-  expect(await saved(page)).toBeUndefined();
-  await page.getByRole('textbox', { name: 'Instruction Fix grammar', exact: true }).fill('Corrige seulement les fautes.');
-  await expect.poll(() => saved(page)).toMatchObject({ actions: expect.arrayContaining([expect.objectContaining({ id: 'correct', promptTemplate: 'Corrige seulement les fautes.' })]) });
+  // An action a shortcut runs cannot be deleted.
+  await go(page, 'Actions');
+  const used = page.locator(`[data-action="${id}"].st-instr`);
+  if (await used.locator('textarea').count() === 0) await used.getByRole('button', { name: /Résumer/ }).first().click();
+  await expect(used.getByRole('button', { name: /Delete action/ })).toBeDisabled();
 });
 
 test('reserved chords are refused immediately and AZERTY letters use their label', async ({ page }) => {
   await openSettings(page);
-  await page.getByRole('button', { name: 'Change', exact: true }).click();
+  await go(page, 'Shortcuts');
+  const menu = page.locator('[data-field="menuShortcut"]');
+  await menu.getByRole('button', { name: 'Change', exact: true }).click();
   await page.keyboard.press('Control+F12');
-  await expect(page.getByRole('alert')).toContainText('F12 is reserved');
+  await expect(menu.getByRole('alert')).toContainText('F12 is reserved');
   expect(await saved(page)).toBeUndefined();
-  await page.getByRole('textbox', { name: 'Menu shortcut', exact: true }).dispatchEvent('keydown', { key: 'a', code: 'KeyQ', ctrlKey: true, altKey: true });
+  // AZERTY: the key at the QWERTY « Q » position is labelled A, and A is what is saved and shown.
+  await page.getByRole('textbox', { name: 'Menu shortcut: press the combination', exact: true }).dispatchEvent('keydown', { key: 'a', code: 'KeyQ', ctrlKey: true, altKey: true });
   await expect.poll(() => saved(page)).toMatchObject({ shortcutBindings: [expect.objectContaining({ shortcut: 'Ctrl+Alt+A' })] });
-  await expect(page.locator('.keycaps kbd')).toHaveText(['Ctrl', 'Alt', 'A']);
-});
-
-test('settings scroll inside a fixed frame at the minimum window size', async ({ page }) => {
-  await page.setViewportSize({ width: 460, height: 420 });
-  await openSettings(page);
-  const dimensions = await page.locator('.settings-scroll-viewport').evaluate(el => ({ height: el.clientHeight, content: el.scrollHeight, width: el.clientWidth, scrollWidth: el.scrollWidth }));
-  expect(dimensions.content).toBeGreaterThan(dimensions.height);
-  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width + 1);
-  await page.getByRole('button', { name: 'Add a shortcut', exact: true }).scrollIntoViewIfNeeded();
-  await expect(page.locator('.settings-titlebar')).toBeInViewport();
-  await expect(page.locator('.settings-window footer')).toBeInViewport();
-  await page.screenshot({ path: 'test-results/actions-settings-compact.png' });
+  await expect(menu.locator('kbd')).toHaveText(['Ctrl', 'Alt', 'A']);
 });

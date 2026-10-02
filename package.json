@@ -1,7 +1,7 @@
 {
   "name": "flowtranslate-frontend",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "ui:lab": "vite --host 127.0.0.1 --port 5174 --strictPort --open /lab.html",
@@ -16,13 +16,21 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@radix-ui/react-collapsible": "1.1.20",
+    "@radix-ui/react-dialog": "1.1.23",
     "@radix-ui/react-dropdown-menu": "2.1.24",
+    "@radix-ui/react-popover": "1.1.23",
     "@radix-ui/react-scroll-area": "1.2.18",
+    "@radix-ui/react-select": "2.3.7",
+    "@radix-ui/react-slider": "1.4.7",
     "@radix-ui/react-switch": "1.3.7",
+    "@radix-ui/react-tabs": "1.1.21",
     "@radix-ui/react-toggle-group": "1.1.19",
+    "@radix-ui/react-tooltip": "1.2.16",
     "@tauri-apps/api": "2.11.1",
     "@tauri-apps/cli": "2.11.4",
     "@vitejs/plugin-react": "6.1.1",
+    "cmdk": "1.1.1",
     "lucide-react": "1.43.0",
     "motion": "13.2.0",
     "react": "19.2.8",

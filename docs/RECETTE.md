@@ -15,7 +15,7 @@ l’installation de Lucas (docs/UI-DECISIONS.md, décision 11 du 24 septembre 20
 document, « `settings.json` » désigne `<FLOWTRANSLATE_DATA_DIR>\settings.json` pour un
 exécutable de test, sinon `%APPDATA%\com.flowtranslate.desktop\settings.json` pour
 l’application installée ; `menu-memory.json` et `history.sqlite3` sont dans le même dossier.
-Toujours quitter FlowTranslate avant de modifier ce fichier à la main.
+Toujours quitter Overtype avant de modifier ce fichier à la main.
 
 Consigner les résultats réels dans VALIDATION.md. Une case ne se coche qu’avec une preuve
 consignée ; les listes ci-dessous sont une recette, pas une déclaration de tests réussis.
@@ -280,7 +280,7 @@ replacing › How to undo sur « Ctrl+Z » (défaut, option A), puis sur « Past
 Décision de Lucas attendue sur docs/ACRYLIC-TRIAL.md (recommandation : garder le verre peint).
 Ces lignes ne servent qu’à voir l’essai.
 
-- [ ] Quitter FlowTranslate (icône de notification › Quit). Dans `settings.json`, mettre
+- [ ] Quitter Overtype (icône de notification › Quit). Dans `settings.json`, mettre
   `"glassMaterial": "acrylic"`, puis relancer. Le réglage n’apparaît jamais dans les Réglages.
 - [ ] Menu compact, grille, pilule, coche : le verre peint pendant chaque changement de forme,
   puis le vrai Acrylic environ 0,8 s après que la forme s’est posée, avec des coins de 8 px.
@@ -308,7 +308,7 @@ Ces lignes ne servent qu’à voir l’essai.
 
 ## Parcours 0.4 derrière `uiVersion: "v4"`
 
-Gardé pour dépanner et comparer. Pour y revenir : quitter FlowTranslate, mettre
+Gardé pour dépanner et comparer. Pour y revenir : quitter Overtype, mettre
 `"uiVersion": "v4"` dans `settings.json`, relancer. Pour revenir à l’Îlot : `"ilot"` ou retirer
 la clé. Le réglage n’apparaît jamais dans les Réglages.
 

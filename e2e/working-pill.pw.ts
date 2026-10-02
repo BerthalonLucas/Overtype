@@ -263,16 +263,19 @@ test('the 0.4 journey keeps its spinner pill', async ({ page }) => {
 test('Settings: the indicator row shows in the Îlot journey only and saves the choice', async ({ page }) => {
   // The 0.4 journey, asked for: its spinner has no indicator to choose.
   await page.goto('/lab-frame.html?scenario=settings&theme=light&motion=reduce&ui=v4');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   await expect(page.getByRole('radiogroup', { name: 'Theme', exact: true })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Indicator', exact: true })).toHaveCount(0);
 
   // The Îlot, the lab's default as it is the app's.
   await page.goto('/lab-frame.html?scenario=settings&theme=light&motion=reduce');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   const row = page.getByRole('radiogroup', { name: 'Indicator', exact: true });
   await expect(row).toBeVisible();
-  // In the Appearance section, between Theme and Animations (plan, lot 13).
-  expect(await page.locator('.appearance-settings .segmented').evaluateAll(els => els.map(el => el.getAttribute('aria-label')))).toEqual(['Language', 'Theme', 'Indicator', 'Animations', 'Motion style']);
-  expect(await row.getByRole('radio').allTextContents()).toEqual(['Perle', 'Nebula', 'Ribbon']);
+  // On the Appearance page, between Theme and the motion (0.6: one card per indicator, the app's own).
+  expect(await page.locator('.ft-settings-content [role="radiogroup"]').evaluateAll(els => els.map(el => el.getAttribute('aria-label')))).toEqual(['Theme', 'Indicator', 'Motion style', 'Animations', 'Text size']);
+  await expect(row.locator('.st-ind-pill .ldr')).toHaveCount(3);
+  await expect(row.getByRole('radio').locator('strong')).toHaveText(['Perle', 'Nebula', 'Ribbon']);
   await expect(row.getByRole('radio', { name: 'Perle', exact: true })).toHaveAttribute('aria-checked', 'true');
   await row.getByRole('radio', { name: 'Nebula', exact: true }).click();
   await expect(row.getByRole('radio', { name: 'Nebula', exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -280,7 +283,7 @@ test('Settings: the indicator row shows in the Îlot journey only and saves the 
   // French, at once.
   await page.evaluate(async () => (await import('/src/i18n.ts')).setLanguage('fr'));
   const french = page.getByRole('radiogroup', { name: 'Indicateur', exact: true });
-  expect(await french.getByRole('radio').allTextContents()).toEqual(['Perle', 'Nébuleuse', 'Ruban']);
+  await expect(french.getByRole('radio').locator('strong')).toHaveText(['Perle', 'Nébuleuse', 'Ruban']);
   await expect(french.getByRole('radio', { name: 'Nébuleuse', exact: true })).toHaveAttribute('aria-checked', 'true');
 });
 

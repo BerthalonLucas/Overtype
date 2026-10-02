@@ -1,17 +1,35 @@
-import { defaultActionId, defaultActions, defaultBindings, defaultMenuActionIds, instructionActionId, instructionActionName, instructionError } from './actionDefaults';
+import { defaultActionId, defaultActions, defaultBindings, defaultMenuActionIds, instructionActionId, instructionActionName, instructionError, localizeDefaults } from './actionDefaults';
 import { resetFrom } from './settings/reset';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen } from '@tauri-apps/api/event';
-import type { Capture, ConnectionStatus, ExecutionInfo, HighlightResult, HistoryEntry, Mode, OverlayGeometry, PillTarget, Rect, Refusal, Screen, Settings, SettingsField, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, UndoOutcome } from './types';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { connectionCommand, isConnectionCommand, mockModels, normalizeEndpoint, setConnScenario, type ConnScenario } from './bridge.mock';
+import type { Capture, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
 
 type Unlisten = () => void;
-type EventName = 'capture' | 'translation' | 'settings-changed' | 'target-invalidated' | 'overlay-dismiss-requested' | 'glass-near' | 'capture-target' | 'capture-notice' | 'work-area' | 'result-delivery' | 'system-theme' | 'system-motion' | 'menu-key' | 'menu-repeat' | 'settings-focus-field' | 'halo' | 'shortcut-status' | 'undo-state';
+// 0.6: 'probe-step' (ProbeStepEvent, to the window that started the check), 'diagnostic' (DiagEntry,
+// settings and setup windows), 'demo-ended' (DemoEnded, to the setup window).
+type EventName = 'capture' | 'translation' | 'settings-changed' | 'target-invalidated' | 'overlay-dismiss-requested' | 'glass-near' | 'capture-target' | 'capture-notice' | 'work-area' | 'result-delivery' | 'system-theme' | 'system-motion' | 'menu-key' | 'menu-repeat' | 'settings-focus-field' | 'halo' | 'shortcut-status' | 'undo-state' | 'probe-step' | 'diagnostic' | 'demo-ended';
 type Handler<T> = (payload: T) => void;
 
+// A fresh install, as Rust's Settings::default(): one server, nothing set up, the setup to do.
+const emptyServer: Server = { id: 's1', name: '', endpoint: '', apiKey: '', noKey: false, model: '' };
 const defaultSettings: Settings = {
-  mode: 'quality', defaultActionId, actions: structuredClone(defaultActions), shortcutBindings: structuredClone(defaultBindings), historyEnabled: false, autostart: false, connectionExpanded: false, textSize: 'normal', autoClose: 'normal', uiVersion: 'ilot', language: 'en', theme: 'system', motion: 'system', motionPreset: 'smooth', indicator: 'perle', afterReplace: { check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60 }, undoStrategy: 'keystroke', pillPlacement: 'below', glassMaterial: 'painted', menuActionIds: [...defaultMenuActionIds],
-  profiles: { fast: { endpoint: '', model: 'tencent/Hy-MT2-1.8B', apiKey: '' }, quality: { endpoint: '', model: 'tencent/Hy-MT2-7B-FP8', apiKey: '' } }
+  defaultActionId, actions: structuredClone(defaultActions), shortcutBindings: structuredClone(defaultBindings), historyEnabled: false, autostart: false, textSize: 'normal', autoClose: 'normal', uiVersion: 'ilot', language: 'en', theme: 'system', motion: 'system', motionPreset: 'smooth', indicator: 'perle', afterReplace: { check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60 }, undoStrategy: 'keystroke', pillPlacement: 'below', glassMaterial: 'glass', menuActionIds: [...defaultMenuActionIds],
+  servers: [structuredClone(emptyServer)], defaultServerId: 's1', setupDone: false, changedWordsStyle: 'encre',
 };
+// The servers of the preview. The setup window starts as a fresh install does; every other
+// window as an installation already set up, on the simulated server (src/bridge.mock.ts).
+// `?servers=empty | one | two` chooses; `?window=setup&replay=1` is « Revoir l'accueil ».
+function previewServers(search: string): Pick<Settings, 'servers' | 'defaultServerId' | 'setupDone'> {
+  const params = new URLSearchParams(search);
+  const fresh = params.get('window') === 'setup' && params.get('replay') !== '1' && params.get('stage') !== 'demo';
+  const asked = params.get('servers') ?? (fresh ? 'empty' : 'one');
+  if (asked === 'empty') return { servers: [structuredClone(emptyServer)], defaultServerId: 's1', setupDone: false };
+  const first: Server = { id: 's1', name: '', endpoint: 'https://llm.exemple.com', apiKey: '', noKey: true, model: mockModels[0].id };
+  const second: Server = { id: 's2', name: '', endpoint: 'http://127.0.0.1:8002', apiKey: '', noKey: true, model: mockModels[1].id };
+  return { servers: asked === 'two' ? [first, second] : [first], defaultServerId: 's1', setupDone: true };
+}
 
 const native = '__TAURI_INTERNALS__' in window;
 let demoCapture: Capture = { id: 'demo-selection', text: 'Could you send the updated proposal before Thursday?', source: 'selection', canReplace: true, anchor: { x: 830, y: 410, width: 360, height: 24 } };
@@ -19,10 +37,10 @@ type DemoScenario = 'normal' | 'error' | 'long' | 'very-long' | 'pending' | 'par
 let demoScenario: DemoScenario = 'normal';
 // The preview starts where the app does, in the Îlot (Rust's default since 0.5.0); `?ui=v4` asks
 // for the 0.4 journey, as the tests and the lab's 0.4 states do.
-let demoSettings: Settings = { ...structuredClone(defaultSettings), uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot' };
+let demoSettings: Settings = { ...structuredClone(defaultSettings), ...previewServers(location.search), uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot' };
 let activeTimer: number | undefined;
 let activeDemoRequest: string | undefined;
-let demoHistory: HistoryEntry[] = [{ id: 'demo-history', sourceText: 'Could you send the updated proposal?', translatedText: 'Pourriez-vous envoyer la proposition mise à jour ?', actionName: 'Traduire en français', mode: 'quality', createdAt: '2026-09-08T10:24:00Z' }];
+let demoHistory: HistoryEntry[] = [{ id: 'demo-history', sourceText: 'Could you send the updated proposal?', translatedText: 'Pourriez-vous envoyer la proposition mise à jour ?', actionName: 'Traduire en français', server: 'llm.exemple.com', createdAt: '2026-09-08T10:24:00Z' }];
 const demoListeners = new Map<EventName, Set<(payload: never) => void>>();
 
 function emit<T>(name: EventName, payload: T) { demoListeners.get(name)?.forEach(handler => handler(payload as never)); }
@@ -45,13 +63,26 @@ function refusalMessage(reason: unknown): unknown {
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> {
   if (native) return tauriInvoke<T>(name, args);
   if (name === 'get_settings') return structuredClone(demoSettings) as T;
-  if (name === 'save_settings') { demoSettings = structuredClone(args?.settings as Settings); emit('settings-changed', demoSettings); return undefined as T; }
-  if (name === 'reset_settings') { demoSettings = resetFrom(defaultSettings, demoSettings); emit('settings-changed', demoSettings); return structuredClone(demoSettings) as T; }
+  // What is saved is clean, as Rust's settings::sanitize: addresses normalised, no key for a server
+  // without one, the untouched default actions in the interface's language; a finished setup stays so.
+  if (name === 'save_settings') {
+    const next = structuredClone(args?.settings as Settings);
+    next.actions = localizeDefaults(next.actions, next.language);
+    if (demoSettings.setupDone) next.setupDone = true;
+    next.servers = next.servers.map(server => { const endpoint = normalizeEndpoint(server.endpoint); return { ...server, endpoint: endpoint.ok ? endpoint.base : server.endpoint.trim(), model: server.model.trim(), apiKey: server.noKey ? '' : server.apiKey }; });
+    if (next.servers.some(server => server.endpoint !== '' && !normalizeEndpoint(server.endpoint).ok)) throw 'L’adresse du serveur est invalide.';
+    demoSettings = next; emit('settings-changed', demoSettings); return undefined as T;
+  }
+  if (isConnectionCommand(name)) return connectionCommand(name, args, emit) as Promise<T>;
+  // The setup of the preview: finishing it marks it done; the demo plays in the same page.
+  if (name === 'finish_setup' || name === 'complete_setup') { if (!demoSettings.setupDone) { demoSettings = { ...demoSettings, setupDone: true }; emit('settings-changed', demoSettings); } return undefined as T; }
+  if (name === 'open_demo') return undefined as T;
+  if (name === 'close_demo') { emit<DemoEnded>('demo-ended', { done: args?.done === true }); return undefined as T; }
+  if (name === 'reset_settings') { demoSettings = resetFrom(defaultSettings, demoSettings); demoSettings = { ...demoSettings, actions: localizeDefaults(demoSettings.actions, demoSettings.language) }; emit('settings-changed', demoSettings); return structuredClone(demoSettings) as T; }
   // The preview registers every chord: its proposal is Rust's first.
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
   if (name === 'capture_text') return structuredClone(demoCapture) as T;
   if (name === 'frontend_ready') return null as T;
-  if (name === 'check_connection') { await new Promise(resolve => window.setTimeout(resolve, 38)); return { connected: demoScenario !== 'error', message: demoScenario === 'error' ? 'Démo : serveur indisponible.' : 'Démo : connexion simulée.' } as T; }
   if (name === 'get_history') return structuredClone(demoHistory) as T;
   if (name === 'delete_history') { const id = args?.id as string | null; demoHistory = id === null ? [] : demoHistory.filter(item => item.id !== id); return undefined as T; }
   if (name === 'translate') {
@@ -85,11 +116,11 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     if (instruction !== undefined) {
       const error = actionId === instructionActionId ? instructionError(instruction) : 'La consigne libre ne correspond pas à l’action demandée.';
       if (error) throw error;
-      return { actionId, actionName: instructionActionName, outputMode: 'replace', mode: demoSettings.mode } as T;
+      return { actionId, actionName: instructionActionName, outputMode: 'replace', serverId: demoSettings.defaultServerId } as T;
     }
     const action = demoSettings.actions.find(item => item.id === actionId);
     if (!action) throw 'L’action n’existe plus.';
-    return { actionId, actionName: action.name, outputMode: 'replace', mode: demoSettings.mode } satisfies ExecutionInfo as T;
+    return { actionId, actionName: action.name, outputMode: 'replace', serverId: demoSettings.defaultServerId } satisfies ExecutionInfo as T;
   }
   // The preview has no keyboard layout to ask: it answers for French AZERTY, the layout
   // the AltGr warning matters most for (Ctrl+Alt+E types €, Ctrl+Alt+0 types @).
@@ -110,8 +141,12 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   return undefined as T;
 }
 
+// A window hears what Rust sends to it (`emit_to(<its label>)`) and what Rust sends to everyone
+// (`emit`), nothing else. Tauri's plain `listen` hears every window's events: the overlay would
+// receive the settings with their API keys meant for the Settings window, and the Settings
+// window the keyless copy meant for the overlay (which it could then save back, losing the keys).
 async function event<T>(name: EventName, handler: Handler<T>): Promise<Unlisten> {
-  if (native) return tauriListen<T>(name, e => handler(e.payload));
+  if (native) return tauriListen<T>(name, e => handler(e.payload), { target: { kind: 'WebviewWindow', label: getCurrentWebviewWindow().label } });
   const set = demoListeners.get(name) ?? new Set();
   set.add(handler as (payload: never) => void); demoListeners.set(name, set);
   return () => set.delete(handler as (payload: never) => void);
@@ -135,6 +170,13 @@ export const bridge = {
     if (native) { const { getCurrentWindow } = await import('@tauri-apps/api/window'); await getCurrentWindow().setTitle(title); }
     else document.title = title;
   },
+  // Whether this window is really on screen. The Settings window is created hidden and can hold
+  // the focus while hidden (Windows gives it the foreground at launch): « focused » is not « shown ».
+  // An answer that cannot be had reads as shown, as before 0.6.
+  windowShown: async (): Promise<boolean> => {
+    if (!native) return true;
+    try { const { getCurrentWindow } = await import('@tauri-apps/api/window'); return await getCurrentWindow().isVisible(); } catch { return true; }
+  },
   dragSettings: () => command<void>('drag_settings'),
   quit: () => command<void>('quit_app'),
   translate: (request: TranslationRequest) => command<void>('translate', { request }),
@@ -143,11 +185,54 @@ export const bridge = {
   replace: (requestId: string) => command<void>('replace_result', { requestId }).catch((reason: unknown) => { throw refusalMessage(reason); }),
   dismiss: () => command<void>('dismiss_overlay'),
   completeDismiss: (captureId: string) => command<void>('complete_overlay_dismiss', { captureId }),
-  // field (lot 10): the Settings open on that field (Rust's side comes with lot 10).
-  openSettings: async (field?: SettingsField) => {
-    if (native) return command<void>('open_settings', field ? { field } : undefined);
-    location.assign(`?window=settings&demo=1${field ? `&field=${encodeURIComponent(field)}` : ''}`);
+  // field (lot 10): the Settings open on that field; page (0.6): on that page. Rust ignores an
+  // unknown one and sends `settings-focus-field { field?, page? }` to the open window.
+  openSettings: async (field?: SettingsField, page?: SettingsPage) => {
+    if (native) return command<void>('open_settings', { ...(field ? { field } : {}), ...(page ? { page } : {}) });
+    location.assign(`?window=settings&demo=1${field ? `&field=${encodeURIComponent(field)}` : ''}${page ? `&page=${page}` : ''}`);
   },
+  // ——— 0.6: the connection (docs/PLAN-0.6.md §2). Settings and setup windows only. ———
+  // The check of what is TYPED (not of what is saved). `run`: an id of the caller's making
+  // (letters, digits, - and _, 64 at most); each change of the trace arrives as `probe-step
+  // { run, steps }` before the promise resolves. A new check from the same window cancels the
+  // older one (its result then has problem.cause 'cancelled'): ignore any run that is not yours.
+  probeConnection: (run: string, endpoint: string, apiKey: string, noKey: boolean) => command<ProbeResult>('probe_connection', { run, endpoint, apiKey, noKey }),
+  // Cancels a check or a try by its run id (the field changed, the window closes).
+  cancelProbe: (run: string) => command<void>('cancel_probe', { run }),
+  // « Essayer avec une phrase »: one fixed, synthetic sentence (never the person's text), 30 s
+  // at most. The reply (200 characters at most) is shown, never logged.
+  tryModel: (run: string, endpoint: string, apiKey: string, noKey: boolean, model: string) => command<TryResult>('try_model', { run, endpoint, apiKey, noKey, model }),
+  // The journal: the 500 last entries, the oldest first; new ones arrive as `diagnostic`.
+  getDiagnostics: () => command<DiagEntry[]>('get_diagnostics'),
+  clearDiagnostics: () => command<void>('clear_diagnostics'),
+  // The same rule as Rust's, for a hint while typing (Rust has the last word when saving).
+  normalizeEndpoint,
+  // ——— 0.6: the setup and its demo (docs/PLAN-0.6.md §3) ———
+  // Creates or shows the setup window. replay: « Revoir l'accueil » (setupDone stays as it is).
+  openSetup: async (replay = false) => {
+    if (native) return command<void>('open_setup', { replay });
+    location.assign(`?window=setup${replay ? '&replay=1' : ''}`);
+  },
+  // The end of the setup: setupDone is saved, the setup closes, the Settings open when asked.
+  finishSetup: async (openSettings: boolean) => {
+    await command<void>('finish_setup', { openSettings });
+    if (!native && openSettings) location.assign('?window=settings&demo=1');
+  },
+  // The setup reached « C'est prêt »: setupDone is saved now, whatever closes the window later.
+  completeSetup: () => command<void>('complete_setup'),
+  // The demo: its own window natively (the setup hides, then gets `demo-ended { done }`); in the
+  // preview nothing opens (the setup page plays it in place) and closeDemo emits `demo-ended`.
+  openDemo: () => command<void>('open_demo'),
+  closeDemo: (done: boolean) => command<void>('close_demo', { done }),
+  // The framed windows without decorations (settings, setup): drag by their own title bar, minimise.
+  dragWindow: async () => {
+    if (native) { const { getCurrentWindow } = await import('@tauri-apps/api/window'); await getCurrentWindow().startDragging(); }
+  },
+  minimizeWindow: async () => {
+    if (native) { const { getCurrentWindow } = await import('@tauri-apps/api/window'); await getCurrentWindow().minimize(); }
+  },
+  // Browser preview only: the scenario of the simulated server (also `?conn=<id>`).
+  setConnScenario: (scenario: ConnScenario) => { if (!native) setConnScenario(scenario); },
   // Îlot (lots 3–4): true when the overlay really holds the foreground; false leaves the
   // menu to the native keyboard fallback (`menu-key` events, no free field).
   focusOverlay: () => command<boolean>('focus_overlay'),
@@ -178,9 +263,12 @@ export const bridge = {
   resize: (width: number, height: number, geometry: OverlayGeometry) => command<void>('resize_overlay', { width, height, ...geometry }),
   // The reading budget is spent: Rust frees Escape while the glass dims; an approach re-arms it.
   dimming: (dimming: boolean) => command<void>('overlay_dimming', { dimming }),
-  checkConnection: (mode: Mode) => command<ConnectionStatus>('check_connection', { mode }),
   getHistory: () => command<HistoryEntry[]>('get_history'),
   deleteHistory: (id: string | null) => command<void>('delete_history', { id }),
+  // The real glass (src/glassBackdrop.ts): the glass surfaces this page shows right now, for
+  // Windows' compositor to blur what is behind them. Answers whether the real glass shows;
+  // false outside the native app (the painted material, or the page's own backdrop-filter).
+  glassFrame: (seq: number, scale: number, shapes: { x: number; y: number; width: number; height: number; radius: number; opacity: number }[]) => native ? command<boolean>('glass_frame', { seq, scale, shapes }) : Promise.resolve(false),
   // The Windows app mode read by Rust (null when unknown, or outside the native app).
   systemTheme: () => native ? command<unknown>('system_theme').catch(() => null) : Promise.resolve(null),
   // Whether Windows asks to reduce animations (Rust reads SPI_GETCLIENTAREAANIMATION); null or

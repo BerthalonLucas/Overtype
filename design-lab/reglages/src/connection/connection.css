@@ -1,0 +1,71 @@
+/* Connection form and its live check (src/connection/). Tokens only; the sweep and the drawn check
+   are transform / stroke only; the disclosure animates the height of its small subtree. The page
+   colour (--ft-page…, « serveur ») tints the running step: the setup's question « Votre modèle »
+   carries the same page. */
+.ft-connection { display: grid; gap: 16px; }
+.ft-connection-url { display: grid; gap: 0; }
+.ft-insecure { overflow: hidden; }
+.ft-insecure .ft-notice { margin-top: 10px; }
+.ft-connection .ft-field-hint b { font-weight: 500; color: var(--ft-text-2); }
+.ft-linklike { padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--ft-page-text); text-decoration: none; }
+.ft-linklike:hover { text-decoration: underline; }
+.ft-linklike:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 2px; border-radius: 3px; }
+
+/* ——— The one-line status ——— */
+.ft-check { display: grid; gap: 0; }
+/* Status text is not content to select: a double click on a retry that moves never leaves a selection band. */
+.ft-check, .ft-check-line, .ft-check-trace, .ft-trace { -webkit-user-select: none; user-select: none; }
+.ft-check-line { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 22px; }
+.ft-check-line .ft-status { min-width: 0; font-size: 12.5px; }
+.ft-check-line .ft-status[data-state="running"] i { background: var(--ft-page); }
+.ft-check-line .ft-status > span { display: inline-flex; min-width: 0; overflow: hidden; white-space: nowrap; }
+.ft-check-part { display: inline-flex; min-width: 0; white-space: nowrap; }
+.ft-check-part[data-i="0"] { color: var(--ft-text); font-weight: 500; }
+.ft-check-line[data-state="error"] .ft-check-part[data-i="0"] { color: var(--ft-danger); }
+.ft-check-part[data-i="1"] { overflow: hidden; text-overflow: ellipsis; }
+.ft-check-part[data-i="2"] { font-variant-numeric: tabular-nums; color: var(--ft-text-3); }
+.ft-check-sep { margin: 0 6px; color: var(--ft-text-3); font-weight: 400; }
+.ft-check-toggle {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; height: 22px; margin-left: 2px; padding: 0 6px 0 8px; border: 0; border-radius: 999px;
+  background: transparent; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--ft-page-text);
+  transition: background-color var(--ft-t-fast) ease;
+}
+.ft-check-toggle:hover { background: var(--ft-page-soft); }
+.ft-check-toggle:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: 1px; }
+.ft-check-toggle svg { transition: transform var(--ft-t) var(--ft-ease-out); }
+.ft-check-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.ft-check-trace { overflow: hidden; }
+.ft-check-trace-inner { padding-top: 10px; }
+
+/* ——— The trace, « balayage »: 4 steps from the start, dimmed; a light sweeps the running one ——— */
+.ft-trace { list-style: none; margin: 0; padding: 4px; display: grid; gap: 1px; border-radius: var(--ft-r-control); background: rgb(var(--ft-ink-rgb) / .035); box-shadow: inset 0 0 0 .5px rgb(var(--ft-ink-rgb) / .06); }
+.ft-trace-step { position: relative; display: grid; border-radius: calc(var(--ft-r-control) - 3px); font-size: 12.5px; color: var(--ft-text-2); overflow: hidden; }
+.ft-trace-row { position: relative; display: grid; grid-template-columns: 20px 82px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 30px; padding: 0 8px; }
+.ft-trace-row > * { transition: opacity 260ms ease; }
+.ft-trace-step:is([data-state="waiting"], [data-state="skipped"]) .ft-trace-row > * { opacity: .45; }
+.ft-trace-step[data-state="running"] { background: rgb(var(--ft-page-rgb) / .06); }
+.ft-trace-step[data-state="running"] .ft-trace-row::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 20%, rgb(var(--ft-page-rgb) / .2) 50%, transparent 80%);
+  transform: translateX(-100%); animation: ft-sweep 1.1s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+@keyframes ft-sweep { to { transform: translateX(100%); } }
+[data-ft-reduced="true"] .ft-trace-step[data-state="running"] .ft-trace-row::after { animation: none; transform: none; opacity: .5; }
+.ft-trace-icon { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: var(--ft-text-3); }
+.ft-trace-icon i { display: block; width: 6px; height: 6px; border-radius: 50%; background: rgb(var(--ft-ink-rgb) / .3); }
+.ft-trace-step[data-state="ok"] .ft-trace-icon { color: var(--ft-ok); background: color-mix(in srgb, var(--ft-ok) 14%, transparent); }
+.ft-trace-step[data-state="error"] .ft-trace-icon { color: #fff; background: var(--ft-danger); }
+[data-ft-theme="dark"] .ft-trace-step[data-state="error"] .ft-trace-icon { color: #1a0b0b; }
+.ft-trace-spin { display: block; width: 12px; height: 12px; border-radius: 50%; border: 1.75px solid rgb(var(--ft-page-rgb) / .25); border-top-color: var(--ft-page); animation: ft-spin 800ms linear infinite; }
+.ft-trace-check { display: block; }
+.ft-trace-check path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 11; stroke-dashoffset: 11; animation: ft-draw 320ms cubic-bezier(.23, 1, .32, 1) forwards; }
+@keyframes ft-draw { to { stroke-dashoffset: 0; } }
+.ft-trace-name { font-weight: 500; color: var(--ft-text); }
+.ft-trace-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-trace-step[data-state="running"] .ft-trace-detail { color: var(--ft-page-text); }
+.ft-trace-step[data-state="error"] { background: color-mix(in srgb, var(--ft-danger) 7%, transparent); }
+.ft-trace-step[data-state="error"] .ft-trace-detail { font-weight: 600; color: var(--ft-danger); }
+.ft-trace-ms { font-family: var(--ft-font-mono); font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--ft-text-3); }
+.ft-trace-fix { display: grid; justify-items: start; gap: 8px; padding: 0 10px 10px 36px; line-height: 1.45; color: var(--ft-text); }
+.ft-trace-cause { font-family: var(--ft-font-mono); font-size: 11.5px; color: var(--ft-text-3); }
+.ft-trace-actions { display: flex; flex-wrap: wrap; gap: 6px; }

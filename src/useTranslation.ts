@@ -5,7 +5,7 @@ import { t } from './i18n';
 import { defaultActionId } from './actionDefaults';
 import { ilotJourney } from './menu/outcome';
 import { errorCodeOf } from './result/errors';
-import type { Capture, CaptureNotice, CaptureTarget, ErrorCode, MenuKey, MenuRepeat, Mode, Screen, Settings, StreamEvent, ResultDelivery, UndoState } from './types';
+import type { Capture, CaptureNotice, CaptureTarget, ErrorCode, MenuKey, MenuRepeat, Screen, Settings, StreamEvent, ResultDelivery, UndoState } from './types';
 
 // A notice (nothing to translate, protected field…) shows four seconds, like Rust keeps its window.
 const NOTICE_MS = 4000;
@@ -67,13 +67,13 @@ export function useTranslation(readyOnMount = false) {
     noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS);
   }, []);
 
-  const start = useCallback((capture: Capture, forced?: { mode?: Mode }) => {
-    const mode = forced?.mode ?? capture.execution?.mode ?? settingsRef.current?.mode ?? 'quality';
+  const start = useCallback((capture: Capture, forced?: { serverId?: string }) => {
+    const serverId = forced?.serverId ?? capture.execution?.serverId ?? settingsRef.current?.defaultServerId ?? 's1';
     const id = crypto.randomUUID();
     discardPending();
     requestRef.current = id;
-    dispatch({ type: 'START', requestId: id, mode });
-    void bridge.translate({ id, captureId: capture.id, text: capture.text, mode, actionId: capture.execution?.actionId ?? settingsRef.current?.defaultActionId ?? defaultActionId }).catch((error: unknown) => {
+    dispatch({ type: 'START', requestId: id, serverId });
+    void bridge.translate({ id, captureId: capture.id, text: capture.text, serverId, actionId: capture.execution?.actionId ?? settingsRef.current?.defaultActionId ?? defaultActionId }).catch((error: unknown) => {
       if (requestRef.current === id) dispatch({ type: 'STREAM', event: { requestId: id, kind: 'error', message: typeof error === 'string' ? error : t('error.startFailed') } });
     });
   }, [discardPending]);
@@ -96,9 +96,9 @@ export function useTranslation(readyOnMount = false) {
     dispatch({ type: 'CAPTURE', capture });
     if (capture.replay) {
       // A result shown again from the tray: complete at once, nothing to translate.
-      const { requestId, translatedText, mode } = capture.replay;
+      const { requestId, translatedText, serverId } = capture.replay;
       requestRef.current = requestId;
-      dispatch({ type: 'START', requestId, mode });
+      dispatch({ type: 'START', requestId, serverId });
       dispatch({ type: 'STREAM', event: { requestId, kind: 'delta', text: translatedText } });
       dispatch({ type: 'STREAM', event: { requestId, kind: 'done' } });
       return;

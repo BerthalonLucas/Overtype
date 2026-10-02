@@ -1,0 +1,37 @@
+{
+  "comment": "One rule, written twice: settings::normalize_endpoint (Rust, authoritative) and normalizeEndpoint (src/bridge.mock.ts). Both test suites read this file.",
+  "valid": [
+    { "input": "https://llm.exemple.com", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": false },
+    { "input": "  https://llm.exemple.com/  ", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": false },
+    { "input": "llm.exemple.com", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true },
+    { "input": "https://llm.exemple.com/v1", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/v1" },
+    { "input": "https://llm.exemple.com/v1/", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/v1" },
+    { "input": "https://llm.exemple.com/v1/models", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/v1/models" },
+    { "input": "https://llm.exemple.com/v1/chat/completions", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/v1/chat/completions" },
+    { "input": "https://llm.exemple.com/chat/completions", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/chat/completions" },
+    { "input": "https://LLM.Exemple.com/V1", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/V1" },
+    { "input": "https://llm.exemple.com:8443/openai/v1", "base": "https://llm.exemple.com:8443/openai", "host": "llm.exemple.com:8443", "display": "llm.exemple.com:8443/openai", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/v1" },
+    { "input": "https://llm.exemple.com/v1?api-version=2&x=1#top", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true, "removed": "/v1" },
+    { "input": "http://127.0.0.1:8002/v1", "base": "http://127.0.0.1:8002", "host": "127.0.0.1:8002", "display": "http://127.0.0.1:8002", "secure": false, "local": true, "insecure": false, "changed": true, "removed": "/v1" },
+    { "input": "127.0.0.1:8002", "base": "http://127.0.0.1:8002", "host": "127.0.0.1:8002", "display": "http://127.0.0.1:8002", "secure": false, "local": true, "insecure": false, "changed": true },
+    { "input": "localhost:1234/v1", "base": "http://localhost:1234", "host": "localhost:1234", "display": "http://localhost:1234", "secure": false, "local": true, "insecure": false, "changed": true, "removed": "/v1" },
+    { "input": "http://[::1]:8080", "base": "http://[::1]:8080", "host": "[::1]:8080", "display": "http://[::1]:8080", "secure": false, "local": true, "insecure": false, "changed": false },
+    { "input": "https://localhost:8443", "base": "https://localhost:8443", "host": "localhost:8443", "display": "localhost:8443", "secure": true, "local": true, "insecure": false, "changed": false },
+    { "input": "http://192.168.1.20:8000", "base": "http://192.168.1.20:8000", "host": "192.168.1.20:8000", "display": "http://192.168.1.20:8000", "secure": false, "local": false, "insecure": true, "changed": false },
+    { "input": "http://llm.exemple.com/v1", "base": "http://llm.exemple.com", "host": "llm.exemple.com", "display": "http://llm.exemple.com", "secure": false, "local": false, "insecure": true, "changed": true, "removed": "/v1" },
+    { "input": "https://llm.exemple.com:443/", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true },
+    { "input": "https://llm. exemple .com", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true },
+    { "input": "HTTPS://llm.exemple.com", "base": "https://llm.exemple.com", "host": "llm.exemple.com", "display": "llm.exemple.com", "secure": true, "local": false, "insecure": false, "changed": true }
+  ],
+  "invalid": [
+    { "input": "", "reason": "empty" },
+    { "input": "   ", "reason": "empty" },
+    { "input": "https://", "reason": "malformed" },
+    { "input": "http://:8080", "reason": "malformed" },
+    { "input": "https://exa mple.com:port", "reason": "malformed" },
+    { "input": "ftp://llm.exemple.com", "reason": "scheme" },
+    { "input": "file:///C:/models", "reason": "scheme" },
+    { "input": "https://user:secret@llm.exemple.com", "reason": "credentials" },
+    { "input": "https://user@llm.exemple.com/v1", "reason": "credentials" }
+  ]
+}

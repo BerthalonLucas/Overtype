@@ -5,9 +5,10 @@ test('settings background covers the widened production document', async ({ page
   await page.goto('/lab-frame.html?scenario=settings&surface=production');
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await page.screenshot({ path: `release/ui-evidence/settings-${process.env.FLOWTRANSLATE_EVIDENCE_STAGE ?? 'current'}.png` });
-  // The scenario's dark theme: the settings fill of src/theme.css, edge to edge.
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(28, 30, 34)');
-  await expect(page.locator('.settings-window')).toHaveCSS('background-color', 'rgb(28, 30, 34)');
+  // The scenario's dark theme: the matte window of 0.6 (src/components/tokens.css), edge to edge.
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(19, 18, 25)');
+  const box = await page.locator('.ft-settings-window').boundingBox();
+  expect(box).toMatchObject({ x: 0, y: 0, width: 960, height: 450 });
 });
 
 test('the frame band is documented as native-only with its established cause', async ({ page }) => {

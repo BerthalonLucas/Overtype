@@ -8,7 +8,7 @@ param(
     [switch]$Quiet,
     [string]$Out = ''
 )
-# Lists the top-level HWNDs of FlowTranslate (or of one process) as JSON:
+# Lists the top-level HWNDs of Overtype (or of one process) as JSON:
 # geometry in physical pixels, window region box, caption-producing styles,
 # pass-through ex-styles, no-activate and tool-window bits. Evidence for the frameless silhouette that a WebView
 # screenshot cannot give. Dev switches: -PassThrough <hwnd> [-Enable] sets or
@@ -102,7 +102,7 @@ if ($PassThrough) {
   Write-Output (([ordered]@{ hwnd = ('0x{0:X}' -f [int64]$h); before = ('0x{0:X}' -f $ex); after = ('0x{0:X}' -f [int64][FlowTranslateNativeProbe]::GetWindowLongPtr($h, -20)) }) | ConvertTo-Json -Compress)
   return
 }
-$owners = if ($ProcessId) { @($ProcessId) } else { @(Get-Process -Name FlowTranslate -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) }
+$owners = if ($ProcessId) { @($ProcessId) } else { @(Get-Process -Name Overtype -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id) }
 $foreground = [FlowTranslateNativeProbe]::GetForegroundWindow()
 $cursor = New-Object FlowTranslateNativeProbe+POINT; [void][FlowTranslateNativeProbe]::GetCursorPos([ref]$cursor)
 $rows = New-Object System.Collections.Generic.List[string]

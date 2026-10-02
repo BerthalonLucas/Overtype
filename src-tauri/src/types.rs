@@ -1,14 +1,6 @@
 use crate::actions::{ActionDefinition, ExecutionInfo, ShortcutBinding};
 use crate::error::ErrorKind;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Mode {
-    Fast,
-    Quality,
-}
 
 /// The target language of 0.3.0 (read for the migration only) and, since the « Îlot »
 /// art direction, the language of the interface: English by default, French on request.
@@ -80,13 +72,16 @@ pub enum PillPlacement {
     Margin,
 }
 
-/// Hidden trial (lot 12, phase B): `painted` glass (default) or real Windows Acrylic.
+/// What floats is made of: the real `glass` (Windows blurs what is behind, src/backdrop.rs;
+/// the default, painted by itself wherever Windows cannot) or the `painted` glass always.
+/// `acrylic` was the hidden trial of 0.5: a file that says so asked for the real material.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum GlassMaterial {
-    #[default]
     Painted,
-    Acrylic,
+    #[default]
+    #[serde(alias = "acrylic")]
+    Glass,
 }
 
 /// What follows a replacement: the drawn check, Undo with its countdown, the changed
@@ -330,11 +325,16 @@ pub struct UndoState {
     pub reason: UndoLoss,
 }
 
-/// `settings-focus-field` (lot 13, sent from lot 10): the field of the Settings to show.
+/// `settings-focus-field` (lot 13, sent from lot 10): the field of the Settings to show, and
+/// since 0.6 the page to open (general, shortcuts, actions, after, appearance, server, data,
+/// diagnostic). Either may be absent.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SettingsFocus {
-    pub field: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<String>,
 }
 
 /// Whether a binding's chord works (lot 10): registered, refused because another
@@ -362,7 +362,7 @@ pub struct ShortcutStatus {
 pub struct Replay {
     pub request_id: String,
     pub translated_text: String,
-    pub mode: Mode,
+    pub server_id: String,
 }
 
 /// Whether the capture can still be pasted over: false once a paste was attempted (a
@@ -404,12 +404,34 @@ pub enum CaptureOrigin {
     Demo,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+/// A server of 0.6 (docs/PLAN-0.6.md §1): one OpenAI-compatible address, its key and the model
+/// chosen on it. `endpoint` is the address without `/v1` (empty while nothing is set up);
+/// `no_key` is « Mon serveur n'a pas de clé » (the key is then emptied when saved); `name` stays
+/// empty in 0.6 (the interface shows the host).
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct Profile {
+pub struct Server {
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
     pub endpoint: String,
-    pub model: String,
+    #[serde(default)]
     pub api_key: String,
+    #[serde(default)]
+    pub no_key: bool,
+    #[serde(default)]
+    pub model: String,
+}
+
+/// How the changed words show after a replacement: « Encre irisée » (the text itself glows,
+/// default) or « Éclat » (a thin line and a halo, kinder to colour-vision differences).
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ChangedWordsStyle {
+    #[default]
+    Encre,
+    Eclat,
 }
 
 /// Reading presets (2026-09-14): short glass 16/24 · reader 22/33, 18/27 · 24/36,
@@ -450,14 +472,11 @@ pub enum UiVersion {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
-    pub mode: Mode,
     pub actions: Vec<ActionDefinition>,
     pub shortcut_bindings: Vec<ShortcutBinding>,
     pub default_action_id: String,
     pub history_enabled: bool,
     pub autostart: bool,
-    #[serde(default)]
-    pub connection_expanded: bool,
     #[serde(default)]
     pub text_size: TextSize,
     #[serde(default)]
@@ -486,36 +505,28 @@ pub struct Settings {
     /// emptied the grid, the Îlot offers only the free instruction.
     #[serde(default)]
     pub menu_action_ids: Vec<String>,
-    pub profiles: HashMap<String, Profile>,
+    /// One to eight servers; the interface shows two at most.
+    pub servers: Vec<Server>,
+    /// Always the id of a server of `servers`.
+    pub default_server_id: String,
+    /// The first-run setup was finished (or the settings come from a 0.5 file already set up).
+    #[serde(default)]
+    pub setup_done: bool,
+    #[serde(default)]
+    pub changed_words_style: ChangedWordsStyle,
 }
+
+/// The one server of a fresh install: nothing set up yet.
+pub const FIRST_SERVER_ID: &str = "s1";
 
 impl Default for Settings {
     fn default() -> Self {
-        let mut profiles = HashMap::new();
-        profiles.insert(
-            "fast".into(),
-            Profile {
-                endpoint: "http://127.0.0.1:8001/v1".into(),
-                model: "flowtranslate-fast".into(),
-                api_key: String::new(),
-            },
-        );
-        profiles.insert(
-            "quality".into(),
-            Profile {
-                endpoint: "http://127.0.0.1:8002/v1".into(),
-                model: "flowtranslate-quality".into(),
-                api_key: String::new(),
-            },
-        );
         Self {
-            mode: Mode::Quality,
             actions: crate::actions::defaults(),
             shortcut_bindings: crate::actions::default_bindings(),
             default_action_id: crate::actions::DEFAULT_ACTION_ID.into(),
             history_enabled: false,
             autostart: false,
-            connection_expanded: false,
             text_size: TextSize::Normal,
             auto_close: AutoClose::Normal,
             ui_version: UiVersion::default(),
@@ -529,21 +540,25 @@ impl Default for Settings {
             pill_placement: PillPlacement::default(),
             glass_material: GlassMaterial::default(),
             menu_action_ids: crate::actions::default_menu_action_ids(),
-            profiles,
+            servers: vec![Server { id: FIRST_SERVER_ID.into(), ..Server::default() }],
+            default_server_id: FIRST_SERVER_ID.into(),
+            setup_done: false,
+            changed_words_style: ChangedWordsStyle::default(),
         }
     }
 }
 
 impl Settings {
-    pub fn profile(&self, mode: Mode) -> Result<&Profile, String> {
-        let key = match mode {
-            Mode::Fast => "fast",
-            Mode::Quality => "quality",
-        };
-        self.profiles
-            .get(key)
-            .ok_or_else(|| format!("Le profil {key} est absent."))
+    /// The default server (validation guarantees it exists; the first one otherwise). Read by
+    /// the migration tests only: a request always names its server.
+    #[cfg(test)]
+    pub fn default_server(&self) -> &Server {
+        self.servers.iter().find(|server| server.id == self.default_server_id).unwrap_or(&self.servers[0])
     }
+}
+pub fn find_server<'a>(servers: &'a [Server], id: &str) -> Result<&'a Server, crate::error::AppError> {
+    servers.iter().find(|server| server.id == id)
+        .ok_or_else(|| crate::error::AppError::new(ErrorKind::BadEndpoint, "Ce serveur n’existe plus dans les réglages."))
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -553,7 +568,7 @@ pub struct TranslationRequest {
     pub id: String,
     pub capture_id: String,
     pub text: String,
-    pub mode: Mode,
+    pub server_id: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -586,18 +601,9 @@ pub struct HistoryEntry {
     pub translated_text: String,
     /// The action that produced the entry (« Traduire » for rows older than 0.4.0).
     pub action_name: String,
-    pub mode: Mode,
+    /// The host of the server that answered (empty for rows older than 0.6).
+    pub server: String,
     pub created_at: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectionStatus {
-    pub connected: bool,
-    pub message: String,
-    /// When not connected (lot 10): which field to fix, or Try again.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code: Option<ErrorKind>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -672,7 +678,7 @@ pub struct CompletedResult {
     pub capture_id: String,
     pub source_text: String,
     pub translated_text: String,
-    pub mode: Mode,
+    pub server_id: String,
     pub complete: bool,
 }
 

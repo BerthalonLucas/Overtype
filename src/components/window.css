@@ -1,0 +1,25 @@
+/* The chrome of our own windows (Settings, setup): no native decorations, a 32 px title bar laid
+   over the content (the content pads itself with --ft-titlebar-h), Windows 11 caption buttons.
+   Ported from design-lab/reglages/src/stage/stage.css. */
+.ft-appmark { --s: 16px; display: inline-grid; place-items: center; width: var(--s); height: var(--s); border-radius: calc(var(--s) * .28); background: #16181d; box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .12); flex: none; }
+.ft-appmark i { display: block; width: calc(var(--s) * .5); height: calc(var(--s) * .5); border-radius: 50%; background: conic-gradient(#BC82F3, #8D9FFF, #FF6778, #FFBA71, #BC82F3); box-shadow: 0 0 calc(var(--s) * .3) rgb(188 130 243 / .6); }
+
+.ft-titlebar { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: var(--ft-titlebar-h, 32px); display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
+.ft-titlebar-drag { position: absolute; left: 0; right: 0; top: 0; z-index: 29; height: var(--ft-titlebar-h, 32px); }
+.ft-titlebar-title { display: inline-flex; align-items: center; gap: 10px; padding-left: 14px; font-size: 12px; color: var(--ft-text-2); }
+.ft-caption { display: flex; height: 100%; margin-left: auto; pointer-events: auto; }
+.ft-caption-btn { display: grid; place-items: center; width: 46px; height: 100%; padding: 0; border: 0; background: transparent; color: var(--ft-text); transition: background-color 90ms linear, color 90ms linear; }
+.ft-caption-btn:hover:not(:disabled) { background: rgb(var(--ft-ink-rgb) / .07); }
+.ft-caption-btn:disabled { color: var(--ft-text-3); }
+.ft-caption-close:hover { background: #C42B1C !important; color: #fff; }
+.ft-caption-btn:focus-visible { outline: 2px solid var(--ft-focus); outline-offset: -2px; }
+
+/* The app mark's heartbeat (welcome screen): two soft beats then rest, transform only. */
+.ft-heartbeat { display: grid; place-items: center; animation: ft-heartbeat 2.4s cubic-bezier(.3, 0, .3, 1) infinite; will-change: transform; }
+.ft-heartbeat .ft-appmark { box-shadow: 0 12px 30px rgb(0 0 0 / .18), inset 0 0 0 .5px rgb(255 255 255 / .12); }
+@keyframes ft-heartbeat {
+  0%, 40%, 100% { transform: scale(1); }
+  10% { transform: scale(1.06); }
+  20% { transform: scale(.99); }
+  28% { transform: scale(1.035); }
+}

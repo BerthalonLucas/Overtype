@@ -1,0 +1,55 @@
+/* The app's theme for the objects the demo borrows (the Îlot, the result pill, the Perle, the
+   halo), on `.dm-app` instead of <html>: build.mjs rewrites `:root[` to `.dm-app[` in the app's own
+   CSS, and these are its custom properties, copied with where they come from.
+   Nothing here is invented: to change a value, change the app. */
+.dm-app {
+  /* src/styles.css:1 */
+  font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-synthesis: none;
+  /* src/theme.css:13-39 (light) */
+  --ink-rgb: 29 29 31;
+  --surface-fill: rgb(252 252 254 / .94);
+  --surface-bg: linear-gradient(180deg, rgb(252 252 254 / 1), var(--surface-fill));
+  --surface-hairline: 0 0 0 .5px rgb(0 0 0 / .09);
+  --surface-rim: inset 0 1px 0 rgb(255 255 255 / .9), inset 0 -1px 0 rgb(0 0 0 / .04), var(--surface-hairline);
+  --surface-shadow: 0 8px 26px rgb(0 0 0 / .13), 0 1px 3px rgb(0 0 0 / .078);
+  --surface-sheen: linear-gradient(135deg, rgb(255 255 255 / .25), rgb(255 255 255 / .0375) 30%, transparent 60%);
+  --surface-radius: 16px;
+  --text: rgb(var(--ink-rgb));
+  --focus: #3563e9;
+  --ok: #1f8a5b;
+  --error-icon: #d14343;
+  color: var(--text);
+}
+/* src/theme.css:111-127 (dark) */
+.dm-app[data-theme="dark"] {
+  --ink-rgb: 245 246 248;
+  --surface-fill: rgb(28 30 34 / .86);
+  --surface-bg: var(--surface-fill);
+  --surface-hairline: 0 0 0 .5px rgb(255 255 255 / .14);
+  --surface-rim: inset 0 1px 0 rgb(255 255 255 / .12), var(--surface-hairline);
+  --surface-shadow: 0 10px 30px rgb(0 0 0 / .3), 0 1px 3px rgb(0 0 0 / .18);
+  --surface-sheen: linear-gradient(135deg, rgb(255 255 255 / .08), rgb(255 255 255 / .012) 30%, transparent 60%);
+  --focus: #7db6ff;
+  --ok: #7fd3a3;
+  --error-icon: #ff8a80;
+}
+/* src/glass.css:131-133: the content sits on a layer centred at its natural size. */
+.dm-app .shape-clip { position: absolute; inset: 0; border-radius: inherit; overflow: hidden; }
+.dm-app .shape-layer { position: absolute; left: 50%; top: 50%; width: max-content; transform: translate(-50%, -50%); }
+.dm-app .shape-layer.is-leaving { pointer-events: none; }
+
+/* Pointer states the scene sets (the app's :hover rules, same values):
+   src/menu/ilot.css:14 (.ilot-btn:hover), src/result/result.css:25 (.result-btn:hover). */
+.dm-app .ilot-btn[data-hover] { background: rgb(var(--ink-rgb) / .08); color: rgb(var(--ink-rgb)); }
+.dm-app .result-btn[data-hover] { background: rgb(var(--ink-rgb) / .13); }
+
+/* The app's halo is a window of its own (position: fixed, inset 0): here, a layer of the desktop. */
+.dm-app .halo { position: absolute; }
+
+/* Frame-exact CSS loops: every app animation is seeked to the scene's time instead of running on
+   its own (paused, with a negative delay), so a paused, scrubbed or slowed frame is the frame the
+   app shows at that instant. Durations and curves stay the app's. */
+.dm-app[data-seek] :is(.halo-aurora .ring, .halo-veil, .halo-wave) { animation-delay: calc(var(--dm-el, 0ms) * -1) !important; animation-play-state: paused !important; }
+.dm-app[data-seek] .halo-mark { animation-delay: calc(380ms - var(--dm-el, 0ms)) !important; animation-play-state: paused !important; }
+.dm-app[data-seek] .perle, .dm-app[data-seek] .perle::before, .dm-app[data-seek] .working-orb { animation-delay: calc(var(--dm-orb-el, 0ms) * -1) !important; animation-play-state: paused !important; }
+.dm-app[data-seek] .result-check path { animation-delay: calc(80ms - var(--dm-done-el, 0ms)) !important; animation-play-state: paused !important; }

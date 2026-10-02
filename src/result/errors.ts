@@ -1,5 +1,5 @@
 import type { MessageKey } from '../i18n';
-import { errorCodes, type ErrorCode, type Mode, type ProfileField, type SettingsField } from '../types';
+import { errorCodes, type ErrorCode, type ProfileField, type SettingsField } from '../types';
 
 /*
  * The errors of lot 10 on the front (docs/DA-PLAN.md lot 10, UI-DECISIONS 23/09): for each code
@@ -56,8 +56,13 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //                    perhaps on less text); a partial result is never offered for copy.
 //   internal         anything unexpected on our side, and any code this front does not know.
 //   paste_blocked, target_changed, not_editable, keys_held: the paste did not happen: paste.
-//   too_long, no_selection, protected_field, settings_open, nothing_recent: nothing was read or
-//                    sent: content, ✕ only (the last two are capture notices, no button at all).
+//   read_only        0.6: the paste went out and the field reads exactly as before (a PDF in a
+//                    browser used to end on the check): the result exists, Copy result: paste.
+//   protected_window 0.6: the window in front runs as administrator, Windows lets us neither
+//                    read it nor send it a key: content, ✕ only (a capture notice).
+//   too_long, no_selection, protected_field, settings_open, setup_open, nothing_recent: nothing
+//                    was read or sent: content, ✕ only (the last three are capture notices, no
+//                    button at all; setup_open, 0.6: the same press over the first-run setup).
 //   cancelled        the user's own Escape: silent.
 const table: Record<ErrorCode, Entry> = {
   unreachable: { family: 'config', field: 'endpoint' },
@@ -73,11 +78,14 @@ const table: Record<ErrorCode, Entry> = {
   paste_blocked: { family: 'paste' },
   target_changed: { family: 'paste' },
   not_editable: { family: 'paste' },
+  read_only: { family: 'paste' },
   keys_held: { family: 'paste' },
   too_long: { family: 'content' },
   no_selection: { family: 'content' },
   protected_field: { family: 'content' },
+  protected_window: { family: 'content' },
   settings_open: { family: 'content' },
+  setup_open: { family: 'content' },
   nothing_recent: { family: 'content' },
   cancelled: { family: 'silent' },
 };
@@ -113,10 +121,10 @@ const captureMessage: Partial<Record<ErrorCode, MessageKey>> = { target_changed:
 // the result no longer current). Sent and not read back: the text may not be the original.
 const undoMessage: Partial<Record<ErrorCode, MessageKey>> = { target_changed: 'result.undo.target_changed', keys_held: 'result.undo.keys_held', paste_blocked: 'result.undo.paste_blocked' };
 
-// mode: the profile the failed request used (its field then opens, else the default
-// profile's). model: the model's name from the settings, for « Model not found: … » (the lab's
+// serverId: the server the failed request used (its field then opens, else the default
+// server's). model: the model's name from the settings, for « Model not found: … » (the lab's
 // wording); never anything from the server's answer.
-export function describeError(code: ErrorCode, { mode, model, source = 'request' }: { mode?: Mode; model?: string; source?: ErrorSource } = {}): ErrorDescription {
+export function describeError(code: ErrorCode, { serverId, model, source = 'request' }: { serverId?: string; model?: string; source?: ErrorSource } = {}): ErrorDescription {
   const { family, field } = table[code];
   const named = code === 'model_not_found' && model?.trim();
   const message = (named ? 'result.error.model_not_found_named' : `result.error.${code}`) as MessageKey;
@@ -125,7 +133,7 @@ export function describeError(code: ErrorCode, { mode, model, source = 'request'
   if (source === 'capture') return { ...none, message: captureMessage[code] ?? message };
   if (source === 'undo') return { ...none, message: undoMessage[code] ?? 'result.undo.internal' };
   if (source === 'undo-sent') return { ...none, message: 'result.undo.sent' };
-  if (family === 'config' && field) return { ...none, action: { type: 'settings', field: mode ? `${mode}.${field}` : field }, actionLabel: fieldLabel[field] };
+  if (family === 'config' && field) return { ...none, action: { type: 'settings', field: serverId ? `${serverId}.${field}` : field }, actionLabel: fieldLabel[field] };
   if (family === 'transient') return { ...none, action: { type: 'retry' }, actionLabel: 'common.retry' };
   if (family === 'paste') return { ...none, action: { type: 'copy' }, actionLabel: 'result.action.copy' };
   return none;

@@ -159,6 +159,7 @@ test('animateSurface changes the shape around a centred layer that never scales'
 test('the Settings say when Windows is the one reducing animations', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/?window=settings&demo=1');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   const notice = page.getByText('Windows asks to reduce animations.', { exact: true });
   await expect(page.getByRole('radiogroup', { name: 'Animations', exact: true }).getByRole('radio', { name: 'Follow Windows', exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(notice).toBeVisible();
@@ -181,6 +182,7 @@ test('IPC fixture: « suivre Windows » believes Rust, live, over prefers-reduce
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts') });
   });
   await page.goto('/?window=settings&fixture=1');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   const html = page.locator('html');
   const notice = page.getByText('Windows asks to reduce animations.', { exact: true });
   await expect(page.getByRole('radiogroup', { name: 'Animations', exact: true }).getByRole('radio', { name: 'Follow Windows', exact: true })).toBeVisible();

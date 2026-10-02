@@ -28,7 +28,7 @@ type Fixture = {
 };
 const on = <T>(page: Page, run: (fixture: Fixture) => T | Promise<T>) => page.evaluate(`(${run.toString()})(window.nativeFixture)`) as Promise<T>;
 const calls = (page: Page, command: string) => page.evaluate(name => (window as unknown as { nativeFixture: Fixture }).nativeFixture.calls.filter(call => call.command === name).map(call => call.args ?? {}), command);
-const translations = async (page: Page, captureId: string) => (await calls(page, 'translate')).map(args => args.request as { id: string; captureId: string; actionId: string; mode: string; text: string }).filter(request => request.captureId === captureId);
+const translations = async (page: Page, captureId: string) => (await calls(page, 'translate')).map(args => args.request as { id: string; captureId: string; actionId: string; serverId: string; text: string }).filter(request => request.captureId === captureId);
 const geometries = async (page: Page, captureId: string) => (await calls(page, 'resize_overlay') as Geometry[]).filter(geometry => geometry.captureId === captureId);
 const box = (page: Page) => page.locator('[data-ilot-shape]').evaluate(element => { const r = element.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; });
 const stage = (page: Page) => page.locator('.ilot-stage');
@@ -88,11 +88,11 @@ test.describe.configure({ timeout: 45_000 });
 const inside = (shape: Box, region: Region) => shape.x >= region.x - 1 && shape.y >= region.y - 1 && shape.x + shape.width <= region.x + region.width + 1 && shape.y + shape.height <= region.y + region.height + 1;
 
 test('configuration: the work pill springs into the error pill on the same surface, and its button opens the request’s own field', async ({ page }) => {
-  // The request runs on the fast profile; the default profile changes meanwhile.
-  await openIlot(page, { mode: 'fast' });
+  // The request runs on the second server; the default server changes meanwhile.
+  await openIlot(page, { defaultServerId: 's2' });
   await chooseAndWork(page, 'config');
-  expect((await translations(page, 'config'))[0]).toMatchObject({ mode: 'fast', actionId: 'correct' });
-  await on(page, f => f.settings({ mode: 'quality' }));
+  expect((await translations(page, 'config'))[0]).toMatchObject({ serverId: 's2', actionId: 'correct' });
+  await on(page, f => f.settings({ defaultServerId: 's1' }));
   const reserve = ilotReserve('anchored');
   const right = reserve.frame.x + reserve.frame.width;
 
@@ -128,7 +128,7 @@ test('configuration: the work pill springs into the error pill on the same surfa
   await expect(page.locator('.glass-overlay')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Fix key' }).click();
-  await expect.poll(() => calls(page, 'open_settings')).toEqual([{ field: 'fast.apiKey' }]);
+  await expect.poll(() => calls(page, 'open_settings')).toEqual([{ field: 's2.apiKey' }]);
   // The Settings took over: the pill has said what it had to and leaves.
   await expect.poll(() => calls(page, 'dismiss_overlay')).toHaveLength(1);
   await expect.poll(() => calls(page, 'complete_overlay_dismiss')).toEqual([{ captureId: 'config' }]);
@@ -186,9 +186,9 @@ test('near the work area’s left edge the error pill slides right to stay on th
 
 test('configuration: each code opens its own field, in English and in French', async ({ page }) => {
   await openIlot(page);
-  for (const [code, label, field] of [['unreachable', 'Open endpoint', 'quality.endpoint'], ['bad_endpoint', 'Open endpoint', 'quality.endpoint'], ['model_not_found', 'Choose model', 'quality.model']] as const) {
+  for (const [code, label, field] of [['unreachable', 'Open endpoint', 's1.endpoint'], ['bad_endpoint', 'Open endpoint', 's1.endpoint'], ['model_not_found', 'Choose model', 's1.model']] as const) {
     await chooseAndWork(page, `field-${code}`);
-    await on(page, f => f.settings({ profiles: { fast: { endpoint: '', model: 'test', apiKey: '' }, quality: { endpoint: '', model: 'gemma-4-12b', apiKey: '' } } }));
+    await on(page, f => f.settings({ servers: [{ id: 's1', name: 'Quality', endpoint: '', apiKey: '', noKey: false, model: 'gemma-4-12b' }, { id: 's2', name: 'Fast', endpoint: '', apiKey: '', noKey: false, model: 'test' }] }));
     await page.evaluate(code => (window as unknown as { nativeFixture: Fixture }).nativeFixture.error(code), code);
     await page.getByRole('button', { name: label }).click();
     await expect.poll(async () => (await calls(page, 'open_settings')).at(-1)).toEqual({ field });
@@ -214,10 +214,10 @@ test('transient: Try again runs the same action on the same capture once, back t
   await page.waitForTimeout(300);
   const runs = await translations(page, 'retry');
   expect(runs).toHaveLength(2);
-  expect(runs[1]).toMatchObject({ captureId: 'retry', actionId: 'translate', mode: first.mode, text: first.text });
+  expect(runs[1]).toMatchObject({ captureId: 'retry', actionId: 'translate', serverId: first.serverId, text: first.text });
   expect(runs[1].id).not.toBe(first.id);
   expect(await sameSurface(page)).toBe(true);
-  await expect(page.getByRole('img', { name: 'Working' })).toHaveAttribute('data-orb', 'shown');
+  await expect(page.locator('.result-working')).toHaveAttribute('data-orb', 'shown');
 
   // Rust delivers a capture's first request only: the retried result is pasted through
   // replace_result, once, which revalidates the target (BRIDGE, Îlot).

@@ -31,7 +31,7 @@ test('the overlay speaks English by default and switches to French at once when 
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
   await page.getByRole('button', { name: 'Plus d’options', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Afficher l’original', exact: true })).toBeVisible();
-  await expect(page.getByRole('menuitem', { name: 'Relancer en Rapide', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Relancer avec Fast', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
   await page.evaluate(() => (window as any).nativeFixture.settings({ language: 'en' }));
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled();
@@ -45,28 +45,37 @@ test('the overlay speaks English by default and switches to French at once when 
 test('the settings window switches language and theme the moment they are chosen, and saves them', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await openFixture(page, 'settings');
+  const tab = (name: string) => page.getByRole('tab', { name, exact: true });
+  const pick = async (combobox: string, option: string) => { await page.getByRole('combobox', { name: combobox, exact: true }).click(); await page.getByRole('option', { name: option, exact: true }).click(); };
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'English', exact: true })).toHaveAttribute('data-state', 'on');
-  const actionName = await page.locator('.action-card summary > span').first().textContent();
-  await page.getByRole('radio', { name: 'Français', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Interface language', exact: true })).toHaveText('English');
+  await tab('Actions').click();
+  const actionName = await page.locator('.st-grid-name').first().textContent();
+  await tab('General').click();
+  await pick('Interface language', 'Français');
   await expect(page.getByRole('heading', { name: 'Réglages', exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Consignes', exact: true })).toBeVisible();
-  await expect(page.locator('.save-status')).toHaveText('Enregistré à l’instant');
+  await expect(page.getByRole('tab')).toHaveText(['Général', 'Raccourcis', 'Actions', 'Après remplacement', 'Apparence', 'Serveur', 'Données']);
+  await expect(page.locator('.st-save')).toHaveText('Enregistré');
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
   const saved = () => page.evaluate(() => (window as any).nativeFixture.calls.filter((c: any) => c.command === 'save_settings').at(-1)?.args.settings);
   await expect.poll(saved).toMatchObject({ language: 'fr' });
-  // Action names are user data: the switch never renames an action, built-in ones included.
-  await expect(page.locator('.action-card summary > span').first()).toHaveText(actionName ?? '');
+  // The default actions nobody renamed follow the language (0.6): « Fix grammar » reads « Corriger ».
+  await tab('Actions').click();
+  expect(actionName).toBe('Fix grammar');
+  await expect(page.locator('.st-grid-name').first()).toHaveText('Corriger');
+  await tab('Apparence').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.getByRole('radio', { name: 'Sombre', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Thème', exact: true }).getByRole('radio', { name: 'Sombre', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(28, 30, 34)');
+  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(19, 18, 25)');
   await expect.poll(saved).toMatchObject({ language: 'fr', theme: 'dark' });
-  await page.getByRole('radio', { name: 'English', exact: true }).click();
-  await page.getByRole('radio', { name: 'Light', exact: true }).click();
+  await tab('Général').click();
+  await pick('Langue de l’interface', 'English');
+  await tab('Appearance').click();
+  await page.getByRole('radiogroup', { name: 'Theme', exact: true }).getByRole('radio', { name: 'Light', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(245, 245, 247)');
+  await expect(page.locator('body')).not.toHaveCSS('background-color', 'rgb(19, 18, 25)');
   // « Follow Windows » also names an Animations choice: the Theme group's one.
   await page.getByRole('radiogroup', { name: 'Theme', exact: true }).getByRole('radio', { name: 'Follow Windows', exact: true }).click();
   await expect.poll(saved).toMatchObject({ language: 'en', theme: 'system' });
@@ -75,12 +84,15 @@ test('the settings window switches language and theme the moment they are chosen
 
 test('history dates follow the interface language', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
-  await page.getByRole('switch', { name: 'Keep encrypted history' }).check();
-  const date = page.locator('.history article small').first();
+  await page.getByRole('tab', { name: 'Data', exact: true }).click();
+  const date = page.locator('.st-history-item time').first();
   await expect(date).toContainText('Sep 8');
-  await page.getByRole('radio', { name: 'Français', exact: true }).click();
+  await page.getByRole('tab', { name: 'General', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Interface language', exact: true }).click();
+  await page.getByRole('option', { name: 'Français', exact: true }).click();
+  await page.getByRole('tab', { name: 'Données', exact: true }).click();
   await expect(date).toContainText('8 sept.');
-  await expect(page.locator('.history-foot small')).toHaveText('1 entrée');
+  await expect(page.locator('.st-footnote')).toContainText('1 entrée');
 });
 
 test('the theme follows the system scheme live, and a forced theme wins over it', async ({ page }) => {
@@ -95,7 +107,8 @@ test('the theme follows the system scheme live, and a forced theme wins over it'
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(html).toHaveAttribute('data-theme', 'dark');
   await expect(copy).toHaveCSS('color', 'rgb(245, 246, 248)');
-  await expect(page.locator('.translation-bubble')).toHaveCSS('background-color', 'rgba(28, 30, 34, 0.86)');
+  // The painted material of 0.6 (src/theme.css): an opaque Porcelaine tint, nothing shows through sharp.
+  await expect(page.locator('.translation-bubble')).toHaveCSS('background-color', 'rgb(24, 23, 31)');
   // Forced light while Windows is dark, then forced dark while Windows is light.
   await page.evaluate(() => (window as any).nativeFixture.settings({ theme: 'light' }));
   await expect(html).toHaveAttribute('data-theme', 'light');
@@ -133,8 +146,8 @@ for (const colorScheme of ['light', 'dark'] as const) for (const { name, query, 
     await expect(page.getByRole('menu')).toBeVisible();
     const surfaces = await Promise.all(['.translation-bubble', '.action-pill', '.more-menu'].map(paint));
     for (const surface of surfaces) expect(surface).toEqual(pill);
-    expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.25)' : 'rgba(255, 255, 255, 0.08)');
-    if (colorScheme === 'dark') expect(pill.color).toBe('rgba(28, 30, 34, 0.86)');
+    expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.06)');
+    expect(pill.color).toBe(colorScheme === 'dark' ? 'rgb(24, 23, 31)' : 'rgb(250, 249, 253)');
     // Layout size, not the painted box: a surface still entering on its spring scales from .97.
     const icons = await page.locator('.glass-overlay svg.lucide').evaluateAll(nodes => nodes.map(node => ({ stroke: node.getAttribute('stroke-width'), width: parseFloat(getComputedStyle(node).width), height: parseFloat(getComputedStyle(node).height) })));
     expect(icons.length).toBeGreaterThanOrEqual(4);

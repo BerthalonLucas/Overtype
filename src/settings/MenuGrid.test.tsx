@@ -25,10 +25,14 @@ describe('MenuGrid', () => {
     document.body.append(host);
     root = createRoot(host);
     await act(async () => root!.render(<MenuGrid settings={settings} persist={() => undefined} />));
-    const glyphs = [...host.querySelectorAll('.grid-glyph')];
+    const glyphs = [...host.querySelectorAll('.st-grid-row:not([data-off]) .st-grid-tile')];
     expect(glyphs.map(glyph => glyph.querySelectorAll('svg').length)).toEqual([1, 0, 0, 1]);
     expect(glyphs.map(glyph => glyph.getAttribute('data-icon'))).toEqual(['fix', null, null, 'email']);
     // Each row keeps its slot, drawn or not, so the names stay aligned.
-    expect(host.querySelectorAll('.grid-item > .grid-glyph')).toHaveLength(4);
+    expect(host.querySelectorAll('.st-grid-row:not([data-off]) > .st-grid-tile')).toHaveLength(4);
+    // The actions out of the menu follow, dimmed, without a rank nor a letter to type.
+    const out = [...host.querySelectorAll<HTMLElement>('.st-grid-row[data-off]')];
+    expect(out.map(row => row.dataset.action)).toEqual(['translate', 'professionalize', 'shorten']);
+    expect(out.every(row => row.querySelector('input')!.disabled && row.querySelector('.st-grid-index')!.textContent === '')).toBe(true);
   });
 });

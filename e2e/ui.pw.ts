@@ -186,7 +186,7 @@ test('the reader band is half the viewport wide, 22/33, whole lines within 45 % 
   const menuBox = (await menu.boundingBox())!;
   const pill = (await page.locator('.action-pill').boundingBox())!;
   expect(Math.round(pill.y - (menuBox.y + menuBox.height))).toBe(6);
-  expect(await menu.getByRole('menuitem').count()).toBe(5);
+  expect(await menu.getByRole('menuitem').count()).toBe(4);
   expect(menuBox.height).toBeLessThanOrEqual(menuLayout.reserve);
   await expect(menu.getByRole('menuitem', { name: 'Expand' })).toHaveCount(0);
   // Same painted material as the glass (src/theme.css), light theme here.
@@ -310,15 +310,23 @@ test('explicit replacement is accessible for an editable completed selection', a
 test('settings keep connection details collapsed, offer the reading presets and expose history deletion', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByLabel('API key', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('radio', { name: 'Extra large', exact: true })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Never', exact: true })).toBeVisible();
-  await page.getByRole('switch', { name: 'Keep encrypted history' }).check();
-  await expect(page.locator('.history article')).toHaveCount(1);
+  const tab = (name: string) => page.getByRole('tab', { name, exact: true });
+  // The server's card shows its facts; the address and the key only appear behind « Edit ».
+  await tab('Server').click();
+  await expect(page.getByRole('textbox', { name: 'API key', exact: true })).toHaveCount(0);
+  await page.locator('[data-server]').first().getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'API key', exact: true })).toHaveCount(1);
+  await tab('Appearance').click();
+  await expect(page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Extra large', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Auto close', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Never', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await tab('Data').click();
+  await expect(page.locator('.st-history-item')).toHaveCount(1);
   await page.getByRole('button', { name: 'Delete all', exact: true }).click();
-  await expect(page.locator('.history article')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  await expect(page.getByLabel('API key', { exact: true })).toHaveCount(2);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete all', exact: true }).click();
+  await expect(page.locator('.st-history-item')).toHaveCount(0);
+  await expect(page.getByText('No saved text.')).toBeVisible();
   await page.screenshot({ path: 'test-results/settings.png', fullPage: true });
 });
 
@@ -365,10 +373,12 @@ test('the short glass menu overlays the glass under the pill, in the same materi
   expect(Math.round(before!.x + before!.width - (menuBounds!.x + menuBounds!.width))).toBe(16);
   expect(menuBounds!.width).toBe(196);
   expect(menuBounds!.height).toBeLessThanOrEqual(menuLayout.reserve);
-  // The lab's painted glass (light here): diagonal sheen over the vertical fill, a 0.5 px hairline.
-  // Chromium keeps alpha on 8 bits: the sheen's .0375 (.25 × .15) reads back as 0.04.
+  // The painted material of 0.6, the fallback of the real glass (light here): a soft light from the
+  // top over the lab's grain and an opaque fill, the luminous rim over a 0.5 px edge (src/theme.css).
   const material = await bubble.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, shadow: getComputedStyle(el).boxShadow }));
-  expect(material.image).toBe('linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.04) 30%, rgba(0, 0, 0, 0) 60%), linear-gradient(rgb(252, 252, 254), rgba(252, 252, 254, 0.94))');
+  expect(material.image).toMatch(/^linear-gradient\(rgba\(255, 255, 255, 0\.5\), rgba\(255, 255, 255, 0\) 46%\), url\("data:image\/svg\+xml,.*feTurbulence.*"\), none$/);
+  await expect(bubble).toHaveCSS('background-color', 'rgb(250, 249, 253)');
+  expect(material.shadow).toContain('rgba(255, 255, 255, 0.5) 0px 0px 0px 0.5px inset');
   expect(material.shadow).toContain('0px 0px 0px 0.5px');
   expect(await menu.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, shadow: getComputedStyle(el).boxShadow }))).toEqual(material);
   expect(await menu.evaluate(el => !!el.closest('.glass-overlay'))).toBe(true);
@@ -492,21 +502,21 @@ for (const { name, query, pill } of journeys) test(`a result past the ceiling la
 test('browser settings save automatically, identify simulated checks and close back to preview', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'Slow', exact: true }).click();
-  await expect(page.locator('.save-status')).toHaveText('Saved just now');
-  await page.getByRole('radio', { name: 'Large', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Large', exact: true })).toHaveAttribute('data-state', 'on');
-  await page.getByRole('button', { name: 'Connection', exact: true }).click();
+  const tab = (name: string) => page.getByRole('tab', { name, exact: true });
+  await tab('Appearance').click();
+  await page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.st-save')).toHaveText('Saved');
+  await tab('Server').click();
   await expect(page.getByText('Browser preview · simulated connection')).toBeVisible();
-  const quality = page.locator('.profile').first();
-  await expect(quality.getByRole('status')).toHaveText('Not checked');
-  await quality.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(quality.getByRole('status')).toContainText('Connected ·');
-  await expect(quality.getByRole('status')).toContainText('ms');
-  await page.getByRole('button', { name: 'Change', exact: true }).click();
-  await expect(page.locator('.keycaps')).toContainText('Press the combination…');
+  const card = page.locator('[data-server]').first();
+  await expect(card.locator('.ft-check-line')).toHaveText(/Connected·.+·[\d,]+ msDetails/);
+  await tab('Shortcuts').click();
+  const menu = page.locator('[data-field="menuShortcut"]');
+  await menu.getByRole('button', { name: 'Change', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Menu shortcut: press the combination', exact: true })).toHaveText('Press the combination…');
   await page.keyboard.press('Control+Shift+K');
-  await expect(page.locator('.keycaps kbd')).toHaveText(['Ctrl', 'Shift', 'K']);
+  await expect(menu.locator('kbd')).toHaveText(['Ctrl', 'Shift', 'K']);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Simulate Ctrl + Alt + T', exact: true })).toBeVisible();
 });

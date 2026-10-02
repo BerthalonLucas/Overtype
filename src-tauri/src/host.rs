@@ -119,6 +119,20 @@ pub fn apply_glass(window: &WebviewWindow) {
     }
 }
 
+/// The language Windows shows its own interface in, as far as the app speaks it: French, or
+/// English for any other (a fresh install starts in it; docs/PLAN-0.6.md §1.1).
+pub fn windows_language() -> crate::types::Language {
+    #[link(name = "kernel32")]
+    unsafe extern "system" {
+        fn GetUserDefaultUILanguage() -> u16;
+    }
+    language_of(unsafe { GetUserDefaultUILanguage() })
+}
+/// A Windows LANGID: its ten low bits name the language (0x0C: French, whatever the country).
+pub fn language_of(langid: u16) -> crate::types::Language {
+    if langid & 0x3ff == 0x0c { crate::types::Language::Fr } else { crate::types::Language::En }
+}
+
 pub fn foreground() -> isize {
     unsafe { GetForegroundWindow().0 as isize }
 }
@@ -177,6 +191,85 @@ static UNDO_SOURCE:AtomicIsize=AtomicIsize::new(0);
 static TYPED:OnceLock<std::sync::mpsc::SyncSender<Typed>>=OnceLock::new();
 /// Our own synthetic keys carry this in `dwExtraInfo`: the hook tells them from the user's.
 pub const OUR_KEYS:usize=0x464C_5754;
+
+/// After a choice in the Îlot (0.6): the keys of a hand still hammering (Enter mashed to
+/// choose, a head on the keyboard) must not land in the source, where the selection is still
+/// there to be typed over (02/10: twelve Enters after the shortcut replaced the selected
+/// sentence by line breaks). For a short moment after the choice, slid along by each key and
+/// capped, the plain keys typed in the source are dropped. Never ours (the paste), never a
+/// chord with Ctrl, Alt or Windows, never a modifier, never Escape (it cancels the work).
+static GRACE_UNTIL:AtomicU64=AtomicU64::new(0);
+static GRACE_END:AtomicU64=AtomicU64::new(0);
+static GRACE_SOURCE:AtomicIsize=AtomicIsize::new(0);
+const GRACE_MS:u64=700;
+const GRACE_SLIDE_MS:u64=400;
+const GRACE_MAX_MS:u64=3_000;
+pub fn open_choice_grace(source:isize){
+    let now=now_ms();
+    GRACE_SOURCE.store(source,Ordering::Relaxed);
+    GRACE_END.store(now+GRACE_MAX_MS,Ordering::Relaxed);
+    GRACE_UNTIL.store(if source==0{0}else{now+GRACE_MS},Ordering::Release);
+}
+pub fn close_choice_grace(){GRACE_UNTIL.store(0,Ordering::Release);}
+/// Whether the key `vk` typed at `now` in the window `fg` is dropped by the grace that lasts
+/// until `until` (0: none) and `end` at most. `other`: Ctrl, Alt or Windows is held.
+pub fn grace_takes(now:u64,until:u64,end:u64,fg:isize,source:isize,vk:u32,other:bool,extra:usize)->bool{
+    until!=0&&now<until&&now<end&&fg!=0&&fg==source&&extra!=OUR_KEYS&&!other
+        &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
+}
+
+/// While a request runs (0.6, 02/10): the selection is still live in the source, and an Enter
+/// or a letter typed there by accident replaces it (the text went from 127 to 64 characters
+/// under five stray Enters, then « Texte modifié, rien remplacé »). From the choice until the
+/// request ends, the keys that would WRITE in the source are dropped: never ours (the paste),
+/// never a chord with Ctrl, Alt or Windows, never a modifier, Escape (it cancels the work), an
+/// arrow or a navigation key (leaving the selection is the user's right: the watcher then drops
+/// the target and gives the keys back), never a function key. Capped: a request that lasts
+/// longer gives the keyboard back.
+static WORK_UNTIL:AtomicU64=AtomicU64::new(0);
+static WORK_SOURCE:AtomicIsize=AtomicIsize::new(0);
+const WORK_GRACE_MAX_MS:u64=20_000;
+pub fn open_work_grace(source:isize){
+    WORK_SOURCE.store(source,Ordering::Relaxed);
+    WORK_UNTIL.store(if source==0{0}else{now_ms()+WORK_GRACE_MAX_MS},Ordering::Release);
+}
+pub fn close_work_grace(){WORK_UNTIL.store(0,Ordering::Release);}
+/// Whether the key `vk` typed at `now` in the window `fg` is dropped while the request works
+/// (`until`: 0, none). `other`: Ctrl, Alt or Windows is held.
+pub fn work_takes(now:u64,until:u64,fg:isize,source:isize,vk:u32,other:bool,extra:usize)->bool{
+    until!=0&&now<until&&fg!=0&&fg==source&&extra!=OUR_KEYS&&!other
+        &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x21..=0x28|0x2C|0x5B..=0x5D|0x70..=0x87|0x90|0x91|0xA0..=0xB7|0xE8)
+}
+
+/// The chords registered as global shortcuts (virtual key, and Ctrl 1 | Alt 2 | Shift 4 in the
+/// high word), for the hook: a press of one of them never reaches the application in front
+/// (Windows keeps it), so it is neither « a key typed in the text » for Undo nor for the marks
+/// (02/10: the shortcut hammered after a replacement took Undo away from the pill).
+static HOTKEYS:[AtomicU32;12]=[const{AtomicU32::new(0)};12];
+pub fn set_hotkeys(chords:&[(u32,u32)]){
+    for (slot,chord) in HOTKEYS.iter().zip(chords.iter().map(Some).chain(std::iter::repeat(None))){
+        slot.store(chord.map_or(0,|(vk,mods)|(vk&0xFFFF)|(mods<<16)),Ordering::Release);
+    }
+}
+/// A chord as the hook compares it.
+pub fn hotkey_code(vk:u32,ctrl:bool,alt:bool,shift:bool)->u32{(vk&0xFFFF)|((u32::from(ctrl)|u32::from(alt)<<1|u32::from(shift)<<2)<<16)}
+fn hotkey_pressed(vk:u32)->bool{
+    let code=hotkey_code(vk,held(VK_CONTROL),held(VK_MENU),held(VK_SHIFT));
+    HOTKEYS.iter().any(|chord|chord.load(Ordering::Acquire)==code)
+}
+
+/// A shortcut that holds Alt was just pressed (0.6, 02/10): released with nothing typed between,
+/// Alt opens the menu bar of the application in front (Windows 11 Notepad shows its key tips and
+/// moves the focus to « Fichier »), and the capture then ended in « Texte modifié, rien
+/// remplacé » after a short tap of the shortcut, the user having touched nothing. Windows keeps
+/// the shortcut's own key for itself, so the application saw Alt go down and up alone. One
+/// press of a key that means nothing (0xE8, unassigned: what AutoHotkey sends for the same
+/// reason), while Alt is still down, and the release is no longer a lone Alt.
+pub fn mask_alt_release(){
+    if !held(VK_MENU){return;}
+    let key=|up:bool|INPUT{r#type:INPUT_KEYBOARD,Anonymous:INPUT_0{ki:KEYBDINPUT{wVk:VIRTUAL_KEY(0xE8),wScan:0,dwFlags:if up{KEYEVENTF_KEYUP}else{Default::default()},time:0,dwExtraInfo:OUR_KEYS}}};
+    unsafe{SendInput(&[key(false),key(true)],std::mem::size_of::<INPUT>() as i32);}
+}
 
 /// A key that reached the source while Undo was offered: the user's own Ctrl+Z (the
 /// application undoes the paste itself), or any other key.
@@ -430,15 +523,37 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
         if code>=0&&MARKS_WATCH.load(Ordering::Acquire){
             let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
             let message=wparam.0 as u32;
-            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_marks(key.vkCode,key.dwExtraInfo){marks_action();}
+            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_marks(key.vkCode,key.dwExtraInfo)&&!hotkey_pressed(key.vkCode){marks_action();}
         }
         if code>=0&&UNDO_WATCH.load(Ordering::Acquire){
             let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
             let message=wparam.0 as u32;
-            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_undo(key.vkCode,key.dwExtraInfo)&&foreground()==UNDO_SOURCE.load(Ordering::Relaxed){
+            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_undo(key.vkCode,key.dwExtraInfo)&&!hotkey_pressed(key.vkCode)&&foreground()==UNDO_SOURCE.load(Ordering::Relaxed){
                 UNDO_WATCH.store(false,Ordering::Release);
                 let undo=key.vkCode==0x5A&&held(VK_CONTROL)&&!held(VK_MENU)&&!held(VK_SHIFT)&&!held(VK_LWIN)&&!held(VK_RWIN);
                 if let Some(typed)=TYPED.get(){let _=typed.try_send(if undo{Typed::UndoKey}else{Typed::Other});}
+            }
+        }
+        if code>=0&&GRACE_UNTIL.load(Ordering::Acquire)!=0&&!MENU_OPEN.load(Ordering::Acquire){
+            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
+            let message=wparam.0 as u32;
+            let (now,until)=(now_ms(),GRACE_UNTIL.load(Ordering::Acquire));
+            if now>=until{GRACE_UNTIL.store(0,Ordering::Release);}
+            else{
+                let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
+                if grace_takes(now,until,GRACE_END.load(Ordering::Relaxed),foreground(),GRACE_SOURCE.load(Ordering::Relaxed),key.vkCode,other,key.dwExtraInfo){
+                    if message==WM_KEYDOWN||message==WM_SYSKEYDOWN{GRACE_UNTIL.store(until.max(now+GRACE_SLIDE_MS),Ordering::Release);}
+                    return LRESULT(1);
+                }
+            }
+        }
+        if code>=0&&WORK_UNTIL.load(Ordering::Acquire)!=0&&!MENU_OPEN.load(Ordering::Acquire){
+            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
+            let (now,until)=(now_ms(),WORK_UNTIL.load(Ordering::Acquire));
+            if now>=until{WORK_UNTIL.store(0,Ordering::Release);}
+            else{
+                let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
+                if work_takes(now,until,foreground(),WORK_SOURCE.load(Ordering::Relaxed),key.vkCode,other,key.dwExtraInfo){return LRESULT(1);}
             }
         }
         if code>=0&&OVERLAY_VISIBLE.load(Ordering::Acquire){
@@ -463,6 +578,12 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
             }else if key.vkCode==VK_ESCAPE.0 as u32&&fg!=0&&[SOURCE.load(Ordering::Relaxed),OVERLAY.load(Ordering::Relaxed)].contains(&fg){
                 if [WM_KEYDOWN,WM_SYSKEYDOWN].contains(&message){ESCAPE_PENDING.store(true,Ordering::Release);return LRESULT(1);}
                 if [WM_KEYUP,WM_SYSKEYUP].contains(&message){return LRESULT(1);}
+            }else if key.vkCode==VK_ESCAPE.0 as u32&&[WM_KEYDOWN,WM_SYSKEYDOWN].contains(&message)&&key.dwExtraInfo!=OUR_KEYS{
+                // 0.6: Escape in front of any other window closes the bubble too (02/10: a
+                // working pill over a silent server, a click on the desktop, and Escape did
+                // nothing: the watcher polls the key every 35 ms and a short tap fell between
+                // two looks). Seen here, at its press, and left to the application in front.
+                ESCAPE_PENDING.store(true,Ordering::Release);
             }
         }
         unsafe{CallNextHookEx(None,code,wparam,lparam)}
@@ -795,6 +916,7 @@ pub fn start_hit_tester(app: AppHandle, overlay: isize, on_screen: impl Fn(&AppH
                     let client = cursor_client(hwnd);
                     if handle == overlay {
                         let near = client.is_some_and(|(x, y)| near(&surface.regions, surface.scale, x, y, NEAR_MARGIN));
+                        if near { POINTER_NEAR_AT.store(now_ms(), Ordering::Release); }
                         if was_near != Some(near) {
                             was_near = Some(near);
                             let _ = app.emit_to("overlay", "glass-near", GlassNear { near });
@@ -1134,23 +1256,141 @@ pub fn send_undo_chord() -> Result<(), u32> {
     Ok(())
 }
 
-/// Waits, at most `timeout`, for the clipboard counter to leave `before`.
-pub fn wait_clipboard_change(before: u32, timeout: Duration) -> Option<u32> {
-    let deadline = Instant::now() + timeout;
-    loop {
-        let now = clipboard_sequence();
-        if now != before {
-            return Some(now);
-        }
-        if Instant::now() >= deadline {
-            return None;
-        }
-        std::thread::sleep(Duration::from_millis(10));
+// ---------------------------------------------------------------------------------
+// Robustness (0.6): what the watchdog, the capture and the paste ask Windows without ever
+// going through the main thread. A window getter of Tauri (`hwnd()`, `is_visible()`…) called
+// off the main thread waits for it: called while the state lock is held, it deadlocks the
+// whole application as soon as the main thread waits for that lock (a placement, a sync
+// command). Our two surfaces never change: their handles are kept here once.
+
+static SURFACE_HANDLES: [AtomicIsize; 2] = [AtomicIsize::new(0), AtomicIsize::new(0)];
+/// Remembers the overlay and the halo (once, at startup, from the main thread).
+pub fn remember_surfaces(overlay: isize, halo: isize) {
+    SURFACE_HANDLES[0].store(overlay, Ordering::Release);
+    SURFACE_HANDLES[1].store(halo, Ordering::Release);
+}
+/// The overlay's handle (0 before the startup remembered it).
+pub fn overlay_handle() -> isize { SURFACE_HANDLES[0].load(Ordering::Acquire) }
+/// Whether `handle` is the overlay or the halo. Never waits for any thread.
+pub fn is_surface(handle: isize) -> bool {
+    handle != 0 && SURFACE_HANDLES.iter().any(|known| known.load(Ordering::Acquire) == handle)
+}
+/// Hides a window by its handle, from any thread (`ShowWindowAsync` posts to the window's
+/// thread and never waits for it, nor for our state).
+pub fn hide_handle(handle: isize) {
+    if handle != 0 { unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(HWND(handle as *mut _), SW_HIDE); } }
+}
+/// Whether a window is shown, by its handle, from any thread.
+pub fn handle_visible(handle: isize) -> bool {
+    handle != 0 && unsafe { IsWindowVisible(HWND(handle as *mut _)).as_bool() }
+}
+
+/// Whether a top-level window is one the user can be looking at: shown, not minimized, not
+/// cloaked (a suspended store application), not a tool window, of another process, with a
+/// surface, and neither the desktop nor the taskbar.
+pub fn real_window(shown: bool, minimized: bool, cloaked: bool, tool: bool, own: bool, class: &str, size: (i32, i32)) -> bool {
+    shown && !minimized && !cloaked && !tool && !own && size.0 > 1 && size.1 > 1
+        && !matches!(class, "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
+}
+/// The first real window under ours in the z-order (0: none, only the desktop is there).
+/// 0.6: right after the start, and whenever one of our hidden windows is left holding the
+/// foreground, the shortcut found « our own window » in front and did nothing at all (the
+/// field test of 0.5.1: « raccourci sans aucun effet »). The window the user sees in front
+/// is this one.
+pub fn window_behind_ours() -> isize {
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    use windows::Win32::UI::WindowsAndMessaging::{GetTopWindow, GetWindow, IsIconic, GW_HWNDNEXT, WS_EX_TOOLWINDOW};
+    let own = std::process::id();
+    let mut hwnd = unsafe { GetTopWindow(None) }.unwrap_or_default();
+    for _ in 0..2_000 {
+        if hwnd.0.is_null() { break; }
+        let handle = hwnd.0 as isize;
+        let mut pid = 0u32;
+        let mut rect = RECT::default();
+        let mut cloaked = 0u32;
+        let real = unsafe {
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let _ = GetWindowRect(hwnd, &mut rect);
+            let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut cloaked as *mut u32).cast(), 4);
+            real_window(IsWindowVisible(hwnd).as_bool(), IsIconic(hwnd).as_bool(), cloaked != 0, GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0 != 0, pid == own, &window_class(handle), (rect.right - rect.left, rect.bottom - rect.top))
+        };
+        if real { return handle; }
+        hwnd = unsafe { GetWindow(hwnd, GW_HWNDNEXT) }.unwrap_or_default();
     }
+    0
+}
+
+/// The last time the pointer rested near the overlay's surfaces (`now_ms` time, 0: never):
+/// the watchdog never closes a bubble the user is on.
+static POINTER_NEAR_AT: AtomicU64 = AtomicU64::new(0);
+pub fn pointer_near_at() -> u64 { POINTER_NEAR_AT.load(Ordering::Acquire) }
+
+/// The tick of the session's last input (keyboard or mouse, ours included): two equal values
+/// prove nobody typed or clicked in between.
+pub fn last_input_tick() -> u32 {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+    if unsafe { GetLastInputInfo(&mut info) }.as_bool() { info.dwTime } else { 0 }
+}
+
+/// The integrity level of a process (its token's mandatory label RID: 0x2000 medium, 0x3000
+/// high). `Err(())`: its token could not even be opened.
+fn integrity_of(process: windows::Win32::Foundation::HANDLE) -> Result<u32, ()> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::Security::{GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenIntegrityLevel, TOKEN_MANDATORY_LABEL, TOKEN_QUERY};
+    use windows::Win32::System::Threading::OpenProcessToken;
+    unsafe {
+        let mut token = windows::Win32::Foundation::HANDLE::default();
+        OpenProcessToken(process, TOKEN_QUERY, &mut token).map_err(|_| ())?;
+        let mut size = 0u32;
+        let _ = GetTokenInformation(token, TokenIntegrityLevel, None, 0, &mut size);
+        let mut buffer = vec![0u8; size.max(1) as usize];
+        let read = GetTokenInformation(token, TokenIntegrityLevel, Some(buffer.as_mut_ptr().cast()), size, &mut size);
+        let _ = CloseHandle(token);
+        read.map_err(|_| ())?;
+        let label = &*(buffer.as_ptr() as *const TOKEN_MANDATORY_LABEL);
+        let count = *GetSidSubAuthorityCount(label.Label.Sid);
+        if count == 0 { return Err(()); }
+        Ok(*GetSidSubAuthority(label.Label.Sid, u32::from(count) - 1))
+    }
+}
+/// Whether a window of integrity `theirs` (None: it could not be read) is out of reach of a
+/// process of integrity `ours`: Windows (UIPI) then drops our keys and hides its text.
+pub fn out_of_reach(ours: Option<u32>, theirs: Option<u32>) -> bool {
+    match (ours, theirs) {
+        (Some(ours), Some(theirs)) => theirs > ours,
+        // Its token is closed to us while ours is readable: it runs above us.
+        (Some(_), None) => true,
+        (None, _) => false,
+    }
+}
+/// Whether `handle` belongs to a process that runs above ours (an application started as
+/// administrator while we are not): it can neither be read nor written.
+pub fn window_protected(handle: isize) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+    if handle == 0 { return false; }
+    let mut pid = 0u32;
+    unsafe { GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid)); }
+    if pid == 0 { return false; }
+    let ours = integrity_of(unsafe { GetCurrentProcess() }).ok();
+    let theirs = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok().and_then(|process| {
+        let level = integrity_of(process).ok();
+        unsafe { let _ = CloseHandle(process); }
+        level
+    });
+    out_of_reach(ours, theirs)
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_fresh_install_speaks_french_on_a_french_windows_and_english_elsewhere() {
+        use crate::types::Language;
+        // fr-FR, fr-CA, fr-BE, fr-CH; then en-US, en-GB, de-DE, es-ES, ja-JP.
+        for langid in [0x040c, 0x0c0c, 0x080c, 0x100c] { assert_eq!(super::language_of(langid), Language::Fr, "{langid:#06x}"); }
+        for langid in [0x0409, 0x0809, 0x0407, 0x0c0a, 0x0411, 0] { assert_eq!(super::language_of(langid), Language::En, "{langid:#06x}"); }
+    }
     use super::*;
 
     #[cfg(windows)]
@@ -1226,6 +1466,106 @@ mod tests {
         // Space (the free field needs the real WebView), and any chord, are never taken.
         assert_eq!(menu_key(0x20, false, false, none), None);
         for vk in [0x0D, 0x1B, 0x09, 0x28, 0x31, 0x46] { assert_eq!(menu_key(vk, false, true, || Some('f')), None, "{vk:#x} with Ctrl/Alt/Win"); }
+    }
+
+    #[test]
+    fn the_window_behind_ours_is_one_the_user_can_see() {
+        let ok = |shown, minimized, cloaked, tool, own, class: &str, size| real_window(shown, minimized, cloaked, tool, own, class, size);
+        assert!(ok(true, false, false, false, false, "Chrome_WidgetWin_1", (1300, 820)));
+        assert!(!ok(false, false, false, false, false, "Notepad", (800, 600)), "hidden");
+        assert!(!ok(true, true, false, false, false, "Notepad", (800, 600)), "minimized");
+        assert!(!ok(true, false, true, false, false, "ApplicationFrameWindow", (800, 600)), "cloaked");
+        assert!(!ok(true, false, false, true, false, "tooltips_class32", (136, 39)), "a tool window");
+        assert!(!ok(true, false, false, false, true, "Tauri Window", (876, 609)), "one of ours");
+        assert!(!ok(true, false, false, false, false, "Notepad", (0, 0)), "no surface");
+        for class in ["Progman", "WorkerW", "Shell_TrayWnd"] { assert!(!ok(true, false, false, false, false, class, (1622, 920)), "{class}"); }
+        // Whatever the desktop holds, the answer is never one of our own windows.
+        let behind = window_behind_ours();
+        let mut pid = 0u32;
+        if behind != 0 { unsafe { GetWindowThreadProcessId(HWND(behind as *mut _), Some(&mut pid)); } }
+        assert_ne!(pid, std::process::id());
+    }
+
+    #[test]
+    fn keys_mashed_after_a_choice_never_reach_the_source() {
+        let (source, other_window) = (7, 9);
+        let takes = |now, vk, other, extra| grace_takes(now, 1_700, 4_000, source, source, vk, other, extra);
+        // Enter, a letter, the space bar, Backspace: dropped while the grace lasts.
+        for vk in [0x0D, 0x51, 0x20, 0x08] { assert!(takes(1_100, vk, false, 0), "{vk:#x}"); }
+        // Our own paste, a chord of the user's, a modifier alone, Escape (it cancels the work).
+        assert!(!takes(1_100, 0x56, true, OUR_KEYS) && !takes(1_100, 0x0D, false, OUR_KEYS));
+        assert!(!takes(1_100, 0x5A, true, 0), "Ctrl+Z stays the user's");
+        for vk in [0x10, 0x11, 0x12, 0x5B, 0xA0, 0x1B] { assert!(!takes(1_100, vk, false, 0), "{vk:#x}"); }
+        // Over: after its moment, after its cap however long the mash slid it, in another
+        // window, and when there is none.
+        assert!(!takes(1_700, 0x0D, false, 0));
+        assert!(!grace_takes(4_000, 4_300, 4_000, source, source, 0x0D, false, 0), "three seconds at most");
+        assert!(!grace_takes(1_100, 1_700, 4_000, other_window, source, 0x0D, false, 0));
+        assert!(!grace_takes(1_100, 0, 4_000, source, source, 0x0D, false, 0));
+        assert!(!grace_takes(1_100, 1_700, 4_000, 0, 0, 0x0D, false, 0));
+    }
+    #[test]
+    fn the_keys_that_would_write_never_reach_the_selection_while_the_request_works() {
+        let (source, elsewhere) = (7isize, 9isize);
+        let takes = |vk| work_takes(1_000, 5_000, source, source, vk, false, 0);
+        // Enter, Backspace, Tab, Space, Delete, a letter, a digit, the keypad: dropped.
+        for vk in [0x0D, 0x08, 0x09, 0x20, 0x2E, 0x41, 0x5A, 0x31, 0x60, 0x6B] { assert!(takes(vk), "{vk:#x}"); }
+        // Escape cancels; the arrows, Home, End and the page keys leave the selection (the user's
+        // right); modifiers, function keys, media keys and our own mask key are never taken.
+        for vk in [0x1B, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22, 0x10, 0x11, 0x12, 0x5B, 0x70, 0x7B, 0xA2, 0xAF, 0xE8] { assert!(!takes(vk), "{vk:#x}"); }
+        assert!(!work_takes(1_000, 5_000, source, source, 0x0D, true, 0), "a chord with Ctrl, Alt or Windows is the user's");
+        assert!(!work_takes(1_000, 5_000, source, source, 0x56, false, OUR_KEYS), "our own paste goes through");
+        assert!(!work_takes(1_000, 5_000, elsewhere, source, 0x0D, false, 0), "another window in front");
+        assert!(!work_takes(1_000, 0, source, source, 0x0D, false, 0), "no request running");
+        assert!(!work_takes(5_000, 5_000, source, source, 0x0D, false, 0), "capped");
+        assert!(!work_takes(1_000, 5_000, 0, 0, 0x0D, false, 0));
+    }
+    #[test]
+    fn a_registered_chord_is_told_from_a_key_typed_in_the_text() {
+        // Ctrl+Alt+Space, as the hook reads it while the chord is held.
+        let menu = hotkey_code(0x20, true, true, false);
+        assert_eq!(menu, 0x20 | (3 << 16));
+        assert_ne!(menu, hotkey_code(0x20, false, false, false), "a plain space is typed text");
+        assert_ne!(menu, hotkey_code(0x20, true, true, true));
+        set_hotkeys(&[(0x20, 3), (0x54, 1 | 2 | 4)]);
+        assert_eq!(HOTKEYS[0].load(Ordering::Acquire), menu);
+        assert_eq!(HOTKEYS[1].load(Ordering::Acquire), hotkey_code(0x54, true, true, true));
+        assert_eq!(HOTKEYS[2].load(Ordering::Acquire), 0);
+        // A shorter list empties the slots it no longer uses.
+        set_hotkeys(&[]);
+        assert!(HOTKEYS.iter().all(|slot| slot.load(Ordering::Acquire) == 0));
+    }
+
+    #[test]
+    fn a_window_above_our_integrity_is_out_of_reach_and_our_own_is_not() {
+        // Medium (0x2000) against high (0x3000): the administrator's window.
+        assert!(out_of_reach(Some(0x2000), Some(0x3000)));
+        assert!(out_of_reach(Some(0x2000), Some(0x4000)), "a system process");
+        assert!(!out_of_reach(Some(0x2000), Some(0x2000)));
+        assert!(!out_of_reach(Some(0x3000), Some(0x2000)), "we run as administrator: everything is in reach");
+        assert!(!out_of_reach(Some(0x2000), Some(0x1000)), "a sandboxed (low) window");
+        // Its token is closed to us: it runs above us. Ours unreadable: nothing is claimed.
+        assert!(out_of_reach(Some(0x2000), None));
+        assert!(!out_of_reach(None, Some(0x3000)));
+        assert!(!out_of_reach(None, None));
+        // No window at all is never protected, and our own process reads its own level.
+        assert!(!window_protected(0));
+        assert!(integrity_of(unsafe { windows::Win32::System::Threading::GetCurrentProcess() }).is_ok());
+    }
+
+    #[test]
+    fn the_surfaces_are_known_by_their_handles_without_any_window_call() {
+        assert!(!is_surface(0));
+        remember_surfaces(41, 42);
+        assert!(is_surface(41) && is_surface(42) && !is_surface(43) && !is_surface(0));
+        assert_eq!(overlay_handle(), 41);
+        remember_surfaces(0, 0);
+        assert!(!is_surface(41));
+        assert!(!handle_visible(0));
+        hide_handle(0);
+        // The session's last input is a tick that never goes backwards.
+        let first = last_input_tick();
+        assert!(last_input_tick().wrapping_sub(first) < 60_000);
     }
 
     #[test]

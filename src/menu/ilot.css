@@ -8,20 +8,26 @@
 .ilot-shape { position: relative; border-radius: var(--surface-radius); background: var(--surface-sheen), var(--surface-bg); box-shadow: var(--surface-rim), var(--surface-shadow); }
 .ilot svg { display: block; flex: none; }
 
-/* Compact: the last action · the ✦ pastille (app.css:179-184, 187). */
+/* Compact: the last action · the ✦ pastille (app.css:179-184, 187).
+   Centring (0.6, measured on the painted ink at 100, 125, 150 and 200 %): a lucide glyph keeps
+   2 px of air inside its box, a letter or the ↵ less than 1, so a button that starts with an
+   icon takes one pixel less padding on that side; the small ↵ and the letters of a keycap sit
+   1 px too high in their line (their digits and arrows have no descender to balance), and a
+   tile's icon + label block reads 1 px high for the same reason: each is set 1 px lower. */
 .ilot-row { display: flex; align-items: center; gap: 2px; padding: 3px; }
 .ilot-btn { appearance: none; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border: 0; border-radius: 13px; background: transparent; color: rgb(var(--ink-rgb) / .86); font: inherit; font-size: 12.5px; white-space: nowrap; cursor: pointer; transition: background-color 110ms ease, color 110ms ease; }
 .ilot-btn:hover { background: rgb(var(--ink-rgb) / .08); color: rgb(var(--ink-rgb)); }
 .ilot-btn.is-default { color: rgb(var(--ink-rgb)); font-weight: 560; }
 /* A long action name ends in an ellipsis; the full name is its tooltip. */
 .ilot-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-.ilot-hint { font-size: 10.5px; color: rgb(var(--ink-rgb) / .42); }
+.ilot-btn:has(> svg:first-child) { padding-left: 8px; }
+.ilot-hint { position: relative; top: 1px; font-size: 10.5px; color: rgb(var(--ink-rgb) / .42); }
 .ilot-sep { flex: none; width: 1px; height: 14px; margin: 0 3px; background: rgb(var(--ink-rgb) / .12); }
 .ilot-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(#BC82F3, #8D9FFF, #FF6778, #FFBA71, #BC82F3); box-shadow: 0 0 6px rgba(188, 130, 243, .6); }
 
 /* Grid: 3 × 2 tiles of 66 × 50, 4 apart, 6 from the edge (app.css:188-190). */
 .ilot-grid { display: grid; grid-template-columns: repeat(3, 66px); gap: 4px; padding: 6px; }
-.ilot-tile { appearance: none; min-width: 0; height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; border: 0; border-radius: 12px; background: rgb(var(--ink-rgb) / .04); color: rgb(var(--ink-rgb) / .85); font: inherit; font-size: 11px; cursor: pointer; }
+.ilot-tile { appearance: none; min-width: 0; height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 2px 4px 0; border: 0; border-radius: 12px; background: rgb(var(--ink-rgb) / .04); color: rgb(var(--ink-rgb) / .85); font: inherit; font-size: 11px; cursor: pointer; }
 .ilot-tile:hover, .ilot-tile.is-hot { background: rgb(var(--ink-rgb) / .1); color: rgb(var(--ink-rgb)); }
 .ilot-tile-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -42,7 +48,7 @@
 .ilot-input { width: 230px; height: 26px; min-width: 0; padding: 0 6px; border: 0; background: transparent; color: rgb(var(--ink-rgb)); font: inherit; font-size: 13px; }
 .ilot-input, .ilot-input:focus-visible { outline: none; }
 .ilot-input::placeholder { color: rgb(var(--ink-rgb) / .42); }
-.ilot-keycap { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: rgb(var(--ink-rgb) / .08); box-shadow: inset 0 -1px 0 rgb(var(--ink-rgb) / .12); color: rgb(var(--ink-rgb) / .8); }
+.ilot-keycap { display: inline-grid; place-items: center; min-width: 17px; height: 17px; padding: 1px 4px 0; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: rgb(var(--ink-rgb) / .08); box-shadow: inset 0 -1px 0 rgb(var(--ink-rgb) / .12); color: rgb(var(--ink-rgb) / .8); }
 /* The field's ↵ sends like Enter (a pointer's way to send); it keeps the lab's look. */
 .ilot-field .ilot-keycap { cursor: pointer; }
 

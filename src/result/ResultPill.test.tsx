@@ -156,10 +156,10 @@ describe('UndoneContent', () => {
 describe('ErrorContent', () => {
   it('opens the exact field of a configuration error', async () => {
     const onAction = vi.fn();
-    await mount(<ErrorContent error="unauthorized" mode="fast" onAction={onAction} />);
+    await mount(<ErrorContent error="unauthorized" serverId="s2" onAction={onAction} />);
     expect(host!.querySelector('[role="alert"]')!.textContent).toBe('API key rejected');
     await act(async () => host!.querySelector<HTMLButtonElement>('.result-action')!.click());
-    expect(onAction).toHaveBeenCalledWith({ type: 'settings', field: 'fast.apiKey' });
+    expect(onAction).toHaveBeenCalledWith({ type: 'settings', field: 's2.apiKey' });
   });
 
   it('shows Copied in place of Copy result, then dismisses after 0.9 s', async () => {

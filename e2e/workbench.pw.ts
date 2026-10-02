@@ -49,7 +49,12 @@ for (const { scenario, journey, query, pill } of cases) {
 
 test('history fixture is isolated from the settings fixture', async ({ page }) => {
   await page.goto('/lab-frame.html?scenario=history');
-  await expect(page.locator('.history article')).toHaveCount(1);
+  await expect(page.locator('.st-history-item')).toHaveCount(1);
+  await expect(page.getByRole('switch', { name: 'Keep encrypted history', exact: true })).toBeChecked();
+  // The settings fixture never switched the history on: what was kept before stays listed (and
+  // deletable), and the page says nothing more will be kept.
   await page.goto('/lab-frame.html?scenario=settings');
-  await expect(page.locator('.history')).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Data', exact: true }).click();
+  await expect(page.getByRole('switch', { name: 'Keep encrypted history', exact: true })).not.toBeChecked();
+  await expect(page.getByText('Off: the next texts will not be kept.')).toBeVisible();
 });

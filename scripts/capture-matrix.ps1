@@ -1,5 +1,5 @@
 param(
-    [string]$Executable = "$env:USERPROFILE\Apps\FlowTranslate\FlowTranslate.exe",
+    [string]$Executable = "$env:USERPROFILE\Apps\Overtype\Overtype.exe",
     [int]$Port = 9227,
     [string]$OutputDirectory = '',
     # A fresh data folder per run: the build-target executable would otherwise read and
@@ -12,8 +12,8 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $projectRoot 'release\native-ui-probe' }
 $resolvedExe = (Resolve-Path -LiteralPath $Executable).Path
-if (Get-Process -Name FlowTranslate -ErrorAction SilentlyContinue) {
-    throw 'Fermez FlowTranslate avant ce test : le contrôle ne doit pas rejoindre une session utilisateur existante.'
+if (Get-Process -Name Overtype -ErrorAction SilentlyContinue) {
+    throw 'Fermez Overtype avant ce test : le contrôle ne doit pas rejoindre une session utilisateur existante.'
 }
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
     throw "Le port $Port est occupé. Choisissez un autre port."
@@ -33,6 +33,8 @@ try {
     $env:FLOWTRANSLATE_DATA_DIR = $DataDirectory
     # The notice then names the capture step that gave up (no text is ever included).
     $env:FLOWTRANSLATE_CAPTURE_TRACE = '1'
+    # 0.6: a fresh data folder would open the first-run setup over the applications under test.
+    $env:FLOWTRANSLATE_SKIP_SETUP = '1'
     $testProcess = Start-Process -FilePath $resolvedExe -ArgumentList '--simulate-inference' -WindowStyle Hidden -PassThru
     # The probe inspects the HWNDs of this process only (scripts/inspect-native-windows.ps1).
     $env:FLOWTRANSLATE_TEST_PID = "$($testProcess.Id)"
@@ -44,7 +46,7 @@ try {
     & node (Join-Path $PSScriptRoot 'capture-matrix.mjs') $OutputDirectory
     if ($LASTEXITCODE -ne 0) { throw 'Le test WebView2 a échoué. Voir la sortie précédente.' }
 } finally {
-    # Only stop the process launched by this test, never all FlowTranslate processes.
+    # Only stop the process launched by this test, never all Overtype processes.
     if ($testProcess -and -not $testProcess.HasExited) { $testProcess.Kill(); $testProcess.WaitForExit(5000) | Out-Null }
     $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = $previousArgs
     $env:WEBVIEW2_USER_DATA_FOLDER = $previousData
@@ -52,4 +54,5 @@ try {
     $env:FLOWTRANSLATE_DATA_DIR = $previousDataDir
     Remove-Item Env:FLOWTRANSLATE_TEST_PID -ErrorAction SilentlyContinue
     Remove-Item Env:FLOWTRANSLATE_CAPTURE_TRACE -ErrorAction SilentlyContinue
+    Remove-Item Env:FLOWTRANSLATE_SKIP_SETUP -ErrorAction SilentlyContinue
 }

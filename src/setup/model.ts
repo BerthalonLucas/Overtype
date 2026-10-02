@@ -96,10 +96,11 @@ export function withConnection(settings: Settings, value: ConnectionValue): Sett
   return { ...settings, defaultServerId: current.id, servers: settings.servers.map(server => server.id === current.id ? { ...server, ...patch } : server) };
 }
 // Enter continues and Escape goes back, unless the key belongs to what has the focus: an open
-// popover or dialog, the shortcut recorder, a list; for Enter also a field's own controls.
+// popover or dialog, the shortcut recorder, a list; for Enter also a field's own controls. The
+// setup's own window and its journal sheet are dialogs too, and they do NOT own the key.
 export function ownsKey(target: Element | null, key: string): boolean {
   if (!target) return false;
-  if (target.closest('[data-radix-popper-content-wrapper], [role="listbox"], [role="dialog"], [cmdk-root], [data-recording]')) return true;
+  if (target.closest('[data-radix-popper-content-wrapper], [role="listbox"], [role="dialog"]:not(.su-window):not(.su-log-sheet), [cmdk-root], [data-recording]')) return true;
   if (key !== 'Enter') return false;
   return Boolean(target.closest('button, a[href], textarea, select, [role="combobox"], [role="radio"], [role="button"], [contenteditable="true"]'));
 }

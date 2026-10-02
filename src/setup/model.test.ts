@@ -128,4 +128,11 @@ describe('Enter and Escape', () => {
     expect(ownsKey(element('<h1 id="x"></h1>', '#x'), 'Enter')).toBe(false);
     expect(ownsKey(null, 'Enter')).toBe(false);
   });
+  it('are not taken by the setup window itself, nor by its journal sheet, though both are dialogs', () => {
+    const html = '<div role="dialog" class="ft-window su-window"><h1 id="t" tabindex="-1"></h1><input id="i"><div role="dialog" class="su-log-sheet"><i id="j"></i></div><div role="dialog" class="ft-dialog"><i id="d"></i></div></div>';
+    expect(ownsKey(element(html, '#t'), 'Enter')).toBe(false);
+    expect(ownsKey(element(html, '#i'), 'Escape')).toBe(false);
+    expect(ownsKey(element(html, '#j'), 'Escape')).toBe(false);
+    expect(ownsKey(element(html, '#d'), 'Escape')).toBe(true);
+  });
 });

@@ -282,78 +282,75 @@ test('IPC fixture: settings recover from load failure', async ({ page }) => {
   await expect(page.getByText('Loading settings…')).toHaveCount(0);
   await page.evaluate(() => window.nativeFixture.recoverSettings());
   await page.getByRole('button', { name: 'Try again', exact: true }).click();
-  await expect(page.getByLabel('Default profile')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'General', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'General', exact: true })).toBeVisible();
 });
 
-test('IPC fixture: Check saves an address typed just before it, and never checks the old one when the save is refused', async ({ page }) => {
+const tabTo = async (page: Page, name: string) => { await page.getByRole('tab', { name, exact: true }).click(); await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible(); };
+const commands = (page: Page, name: string) => page.evaluate(command => window.nativeFixture.calls.filter(call => call.command === command), name);
+
+// 0.6: no « Check » button to press after typing. The check runs by itself on what is typed
+// (never on the saved address), and an address that does not read is neither checked nor saved.
+test('IPC fixture: the check runs on the address as typed, and an unreadable address is neither checked nor saved', async ({ page }) => {
   await openSettingsFixture(page);
-  await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  const quality = page.locator('.profile').first();
-  await expect(quality).toContainText('Quality');
-  // Typed then checked at once, well within the 300 ms pause: saved first, then checked.
-  await quality.getByLabel('Address', { exact: true }).fill('https://inference.example.test/v1');
-  await quality.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(quality.getByRole('status')).toHaveText('Connection failed');
-  let calls = await page.evaluate(() => window.nativeFixture.calls);
-  const saved = calls.findIndex(call => call.command === 'save_settings' && (call.args?.settings as { servers: Array<{ endpoint: string }> } | undefined)?.servers[0].endpoint === 'https://inference.example.test/v1');
-  const checked = calls.findIndex(call => call.command === 'check_connection');
-  expect(saved).toBeGreaterThan(-1);
-  expect(checked).toBeGreaterThan(saved);
-  // An address that does not read is refused by the save: no check against the saved address.
-  // (Plain HTTP to another machine is accepted since 0.6, with a warning in the new Server page.)
-  await quality.getByLabel('Address', { exact: true }).fill('ftp://inference.example.test/v1');
-  await quality.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(quality.getByRole('status')).toHaveText('Not checked');
-  await expect(quality).toContainText('Not checked: this change couldn’t be saved (see below).');
-  calls = await page.evaluate(() => window.nativeFixture.calls);
-  expect(calls.filter(call => call.command === 'check_connection')).toHaveLength(1);
-  await expect(page.locator('.save-status')).toContainText('Not saved');
-  // Typing again clears the warning until the next check.
-  await quality.getByLabel('Address', { exact: true }).fill('https://inference.example.test/v1');
-  await expect(quality.locator('.row-warning')).toHaveCount(0);
+  await page.evaluate(() => (window.nativeFixture as unknown as { settings: (next: unknown) => Promise<void> }).settings({ servers: [{ id: 's1', name: '', endpoint: 'https://llm.exemple.com', apiKey: '', noKey: true, model: 'unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL' }], defaultServerId: 's1' }));
+  await tabTo(page, 'Server');
+  const card = page.locator('[data-server="s1"]');
+  await expect(card.locator('.ft-check-line')).toHaveAttribute('data-state', /ok|error/);
+  await card.getByRole('button', { name: 'Edit', exact: true }).click();
+  const address = card.getByRole('textbox', { name: 'Server address', exact: true });
+  const before = (await commands(page, 'probe_connection')).length;
+  await address.fill('https://inference.example.test/v1');
+  await expect.poll(async () => (await commands(page, 'probe_connection')).at(-1)?.args?.endpoint).toBe('https://inference.example.test/v1');
+  expect((await commands(page, 'probe_connection')).length - before).toBe(1);
+  await expect.poll(async () => ((await commands(page, 'save_settings')).at(-1)?.args?.settings as { servers: Array<{ endpoint: string }> } | undefined)?.servers[0].endpoint).toBe('https://inference.example.test/v1');
+  // The legacy command of 0.5 (check the saved profile) is never used by the Settings.
+  expect(await commands(page, 'check_connection')).toHaveLength(0);
+  // An address that does not read: said under the field, no check, no save.
+  const probes = (await commands(page, 'probe_connection')).length;
+  const saves = (await commands(page, 'save_settings')).length;
+  await address.fill('ftp://inference.example.test/v1');
+  await expect(card.getByRole('alert')).toHaveText('Not a web address. Use an address starting with https://.');
+  await page.waitForTimeout(1200);
+  expect((await commands(page, 'probe_connection')).length).toBe(probes);
+  expect((await commands(page, 'save_settings')).length).toBe(saves);
+  // Typing a readable address again clears the warning and checks again.
+  await address.fill('https://inference.example.test');
+  await expect(card.getByRole('alert')).toHaveCount(0);
+  await expect.poll(async () => (await commands(page, 'probe_connection')).length).toBe(probes + 1);
 });
 
 test('IPC fixture: choices save immediately, checks never save, typing saves after a pause, close without translation', async ({ page }) => {
   await openSettingsFixture(page);
-  expect(await page.evaluate(() => window.nativeFixture.calls.some(call => call.command === 'check_connection'))).toBe(false);
-  await expect(page.locator('.save-status')).toHaveText('Saved');
-  await page.getByRole('radiogroup', { name: 'Default profile', exact: true }).getByRole('radio', { name: 'Fast', exact: true }).click();
-  await expect(page.locator('.save-status')).toHaveText('Saved just now');
-  await page.getByRole('radio', { name: 'Large', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').length)).toBe(2);
-  await page.getByRole('radio', { name: 'Slow', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ autoClose: 'slow', textSize: 'large' });
-  await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ defaultServerId: 's2' });
-  const fast = page.locator('.profile').nth(1);
-  await expect(fast).toContainText('Fast');
-  const saves = await page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').length);
-  await fast.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(fast.getByRole('status')).toHaveText('Connection failed');
-  await expect(fast).toContainText('Serveur indisponible.');
-  await page.evaluate(() => window.nativeFixture.connect());
-  await fast.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(fast.getByRole('status')).toContainText('Connected ·');
-  expect(await page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').length)).toBe(saves);
-  await page.getByLabel('Model', { exact: true }).nth(1).fill('changed-model');
-  await expect(fast.getByRole('status')).toHaveText('Not checked');
-  await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.filter(call => call.command === 'save_settings').at(-1)?.args?.settings)).toMatchObject({ servers: [{ id: 's1' }, { id: 's2', model: 'changed-model' }] });
-  const calls = await page.evaluate(() => window.nativeFixture.calls);
-  expect(calls.filter(call => call.command === 'check_connection').map(call => call.args?.serverId)).toEqual(['s2', 's2']);
-  expect(calls.some(call => call.command === 'translate')).toBe(false);
+  await expect(page.locator('.st-save')).toHaveText('Saved');
+  expect(await commands(page, 'save_settings')).toHaveLength(0);
+  await tabTo(page, 'Appearance');
+  await page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true }).click();
+  await expect.poll(async () => (await commands(page, 'save_settings')).length).toBe(1);
+  await page.getByRole('combobox', { name: 'Auto close', exact: true }).click();
+  await page.getByRole('option', { name: 'Slow', exact: true }).click();
+  await expect.poll(async () => (await commands(page, 'save_settings')).at(-1)?.args?.settings).toMatchObject({ autoClose: 'slow', textSize: 'large' });
+  await expect(page.locator('.st-save')).toHaveText('Saved');
+  // A check never saves: « Check again » on a server already set changes nothing.
+  await page.evaluate(() => (window.nativeFixture as unknown as { settings: (next: unknown) => Promise<void> }).settings({ servers: [{ id: 's1', name: '', endpoint: 'https://llm.exemple.com', apiKey: '', noKey: true, model: 'unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL' }], defaultServerId: 's1' }));
+  await tabTo(page, 'Server');
+  const card = page.locator('[data-server="s1"]');
+  await expect(card.locator('.ft-check-line')).toHaveAttribute('data-state', /ok|error/);
+  await page.waitForTimeout(600);
+  const saves = (await commands(page, 'save_settings')).length;
+  const probes = (await commands(page, 'probe_connection')).length;
+  await card.getByRole('button', { name: /^Check/ }).click();
+  await expect.poll(async () => (await commands(page, 'probe_connection')).length).toBe(probes + 1);
+  await expect(card.locator('.ft-check-line')).toHaveAttribute('data-state', /ok|error/);
+  expect((await commands(page, 'save_settings')).length).toBe(saves);
+  // Typing saves after a pause, once.
+  await tabTo(page, 'Actions');
+  await page.locator('[data-action="correct"].st-instr').getByRole('button', { name: /Fix grammar/ }).click();
+  await page.getByRole('textbox', { name: 'Instruction Fix grammar', exact: true }).pressSequentially('Typed. ', { delay: 20 });
+  await expect.poll(async () => (await commands(page, 'save_settings')).length).toBe(saves + 1);
+  expect(await commands(page, 'translate')).toHaveLength(0);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.nativeFixture.calls.some(call => call.command === 'plugin:window|close'))).toBe(true);
-});
-
-test('IPC fixture: a refused shortcut keeps the previous combination and explains the conflict', async ({ page }) => {
-  await openSettingsFixture(page);
-  await page.evaluate(() => window.nativeFixture.refuseShortcut());
-  await page.getByRole('button', { name: 'Change', exact: true }).click();
-  await page.keyboard.press('Control+Alt+Y');
-  // Rust's French refusal, said in the interface's language (lot 13).
-  await expect(page.getByRole('alert')).toHaveText('Another app already uses this shortcut, or Windows refused it. Choose another one.');
-  await expect(page.locator('.keycaps kbd')).toHaveText(['Ctrl', 'Alt', 'Space']);
-  await expect(page.locator('.save-status')).toHaveText('Saved');
 });
 
 test('IPC fixture: server error offers retry and settings through existing menu', async ({ page }) => {

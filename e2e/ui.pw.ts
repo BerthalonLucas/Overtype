@@ -310,15 +310,23 @@ test('explicit replacement is accessible for an editable completed selection', a
 test('settings keep connection details collapsed, offer the reading presets and expose history deletion', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await expect(page.getByLabel('API key', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('radio', { name: 'Extra large', exact: true })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Never', exact: true })).toBeVisible();
-  await page.getByRole('switch', { name: 'Keep encrypted history' }).check();
-  await expect(page.locator('.history article')).toHaveCount(1);
+  const tab = (name: string) => page.getByRole('tab', { name, exact: true });
+  // The server's card shows its facts; the address and the key only appear behind « Edit ».
+  await tab('Server').click();
+  await expect(page.getByRole('textbox', { name: 'API key', exact: true })).toHaveCount(0);
+  await page.locator('[data-server]').first().getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'API key', exact: true })).toHaveCount(1);
+  await tab('Appearance').click();
+  await expect(page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Extra large', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Auto close', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Never', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await tab('Data').click();
+  await expect(page.locator('.st-history-item')).toHaveCount(1);
   await page.getByRole('button', { name: 'Delete all', exact: true }).click();
-  await expect(page.locator('.history article')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Connection', exact: true }).click();
-  await expect(page.getByLabel('API key', { exact: true })).toHaveCount(1);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete all', exact: true }).click();
+  await expect(page.locator('.st-history-item')).toHaveCount(0);
+  await expect(page.getByText('No saved text.')).toBeVisible();
   await page.screenshot({ path: 'test-results/settings.png', fullPage: true });
 });
 
@@ -494,21 +502,21 @@ for (const { name, query, pill } of journeys) test(`a result past the ceiling la
 test('browser settings save automatically, identify simulated checks and close back to preview', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
-  await page.getByRole('radio', { name: 'Slow', exact: true }).click();
-  await expect(page.locator('.save-status')).toHaveText('Saved just now');
-  await page.getByRole('radio', { name: 'Large', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Large', exact: true })).toHaveAttribute('data-state', 'on');
-  await page.getByRole('button', { name: 'Connection', exact: true }).click();
+  const tab = (name: string) => page.getByRole('tab', { name, exact: true });
+  await tab('Appearance').click();
+  await page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true }).click();
+  await expect(page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator('.st-save')).toHaveText('Saved');
+  await tab('Server').click();
   await expect(page.getByText('Browser preview · simulated connection')).toBeVisible();
-  const quality = page.locator('.profile').first();
-  await expect(quality.getByRole('status')).toHaveText('Not checked');
-  await quality.getByRole('button', { name: 'Check', exact: true }).click();
-  await expect(quality.getByRole('status')).toContainText('Connected ·');
-  await expect(quality.getByRole('status')).toContainText('ms');
-  await page.getByRole('button', { name: 'Change', exact: true }).click();
-  await expect(page.locator('.keycaps')).toContainText('Press the combination…');
+  const card = page.locator('[data-server]').first();
+  await expect(card.locator('.ft-check-line')).toHaveText(/Connected·.+·[\d,]+ msDetails/);
+  await tab('Shortcuts').click();
+  const menu = page.locator('[data-field="menuShortcut"]');
+  await menu.getByRole('button', { name: 'Change', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Menu shortcut: press the combination', exact: true })).toHaveText('Press the combination…');
   await page.keyboard.press('Control+Shift+K');
-  await expect(page.locator('.keycaps kbd')).toHaveText(['Ctrl', 'Shift', 'K']);
+  await expect(menu.locator('kbd')).toHaveText(['Ctrl', 'Shift', 'K']);
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Simulate Ctrl + Alt + T', exact: true })).toBeVisible();
 });

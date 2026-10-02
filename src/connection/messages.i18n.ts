@@ -28,6 +28,7 @@ export const connectionMessages = {
   'conn.modelUnavailable': { en: 'The list is unavailable while the connection fails.', fr: 'Liste indisponible tant que la connexion échoue.' },
   'conn.modelCountOne': { en: '{count} model read from the server.', fr: '{count} modèle lu sur le serveur.' },
   'conn.modelCountOther': { en: '{count} models read from the server.', fr: '{count} modèles lus sur le serveur.' },
+  'conn.modelHidden': { en: 'Those that cannot rewrite a text (embeddings) are left out.', fr: 'Ceux qui ne réécrivent pas de texte (embeddings) sont écartés.' },
   'conn.modelAuto': { en: 'The list fills in by itself from the server.', fr: 'La liste se remplit toute seule depuis le serveur.' },
   'conn.modelAbsent': { en: 'The server does not list “{model}”. Choose one from the list.', fr: 'Le serveur ne propose pas « {model} ». Choisissez-en un dans la liste.' },
   'conn.insecureTitle': { en: 'Unencrypted connection', fr: 'Connexion non chiffrée' },

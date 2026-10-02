@@ -27,6 +27,15 @@ export function shortModel(id: string): string {
   const short = (id.split('/').pop() ?? id).replace(/-GGUF:.*/i, '').replace(/:.*/, '');
   return short || id;
 }
+// A server also lists models that cannot rewrite a text (embeddings, rerankers): they are kept out
+// of the picker. Read from the id alone, /v1/models says nothing else. When nothing else is listed
+// the whole list is kept: a wrong guess must never leave the picker empty.
+const notText = /(^|[^a-z])(embed(ding)?s?|rerank(er)?|bge|gte|e5)([^a-z]|$)/i;
+export const isTextModel = (id: string) => !notText.test(id);
+export function textModels<T extends { id: string }>(models: T[]): { models: T[]; hidden: number } {
+  const kept = models.filter(model => isTextModel(model.id));
+  return kept.length ? { models: kept, hidden: models.length - kept.length } : { models, hidden: 0 };
+}
 // What a key field may hold: no line break, no control character, bounded.
 export const cleanKey = (typed: string) => typed.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, apiKeyMaxLength);
 export const cleanEndpoint = (typed: string) => typed.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, endpointMaxLength);

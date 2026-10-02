@@ -7,7 +7,7 @@ import { Button, ICON, Notice, StatusDot, cx, type StatusState } from '../compon
 import { useReduced, useTx } from '../components/motion';
 import type { ModelInfo, NormalizedEndpoint, ProbeProblem, ProbeResult, ProbeStep, ProbeStepEvent } from '../types';
 import { describeProblem, stepName, stepText } from './causes';
-import { normalizeEndpoint, shortModel } from './endpoint';
+import { normalizeEndpoint, shortModel, textModels } from './endpoint';
 import './connection.css';
 
 /*
@@ -30,7 +30,7 @@ import './connection.css';
  */
 
 export type ProbeStatus = 'idle' | 'running' | 'ok' | 'error';
-type ProbeState = { status: ProbeStatus; steps: ProbeStep[]; models: ModelInfo[]; problem: ProbeProblem | null; run: string | null; at: number; totalMs: number };
+type ProbeState = { status: ProbeStatus; steps: ProbeStep[]; models: ModelInfo[]; hidden: number; problem: ProbeProblem | null; run: string | null; at: number; totalMs: number };
 export type Probe = ProbeState & {
   // What was typed, read: ok false while the address is empty or unreadable.
   endpoint: NormalizedEndpoint;
@@ -39,7 +39,7 @@ export type Probe = ProbeState & {
   // Check now (« Vérifier à nouveau »); a check already running is replaced, never doubled.
   start: () => void;
 };
-const idle: ProbeState = { status: 'idle', steps: [], models: [], problem: null, run: null, at: 0, totalMs: 0 };
+const idle: ProbeState = { status: 'idle', steps: [], models: [], hidden: 0, problem: null, run: null, at: 0, totalMs: 0 };
 export const checkDelayMs = 600;
 // Rust gives up after 10 s; if even that answer never comes (a bridge fault), the row fails here.
 export const watchdogMs = 15_000;
@@ -79,7 +79,7 @@ export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: s
       current.current = null;
       // Cancelled from elsewhere (never by us: a newer check of ours is no longer « mine »).
       if (!result.ok && result.problem?.cause === 'cancelled') { setState({ ...idle, at: Date.now() }); return; }
-      setState({ status: result.ok ? 'ok' : 'error', steps: result.steps, models: result.models, problem: result.problem ?? null, run, at: Date.now(), totalMs: result.totalMs });
+      setState({ status: result.ok ? 'ok' : 'error', steps: result.steps, ...textModels(result.models), problem: result.problem ?? null, run, at: Date.now(), totalMs: result.totalMs });
     };
     const fail = (cause: ProbeProblem['cause']) => {
       if (!mine()) return;
@@ -89,7 +89,7 @@ export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: s
         const running = previous.steps.find(step => step.state === 'running')?.id ?? previous.steps.find(step => step.state === 'waiting')?.id ?? 'reach';
         const steps: ProbeStep[] = (previous.steps.length ? previous.steps : (['address', 'reach', 'key', 'models'] as const).map(id => ({ id, state: 'waiting' as const })))
           .map(step => step.id === running ? { id: step.id, state: 'error' } : step.state === 'ok' ? step : { id: step.id, state: 'skipped' });
-        return { status: 'error', steps, models: [], problem: { step: running, cause }, run, at: Date.now(), totalMs: 0 };
+        return { status: 'error', steps, models: [], hidden: 0, problem: { step: running, cause }, run, at: Date.now(), totalMs: 0 };
       });
     };
     const job = turn.then(async () => {

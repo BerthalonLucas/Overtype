@@ -88,7 +88,8 @@ const toastMs = 2600;
 const flashMs = 1600;
 const emptyConnection = { endpoint: '', apiKey: '', noKey: false };
 
-export function SettingsWindow() {
+// initialPage: the page to open on when the URL names none (the lab's fixtures).
+export function SettingsWindow({ initialPage = 'general' }: { initialPage?: PageId } = {}) {
   const t = useT();
   const tx = useTx();
   const reduced = useReduced();
@@ -96,7 +97,7 @@ export function SettingsWindow() {
   const { settings } = store;
   const registrations = useRegistrations();
   const opened = useOpened();
-  const [page, setPage] = useState<PageId>(() => pageFromLocation(location.search) ?? 'general');
+  const [page, setPage] = useState<PageId>(() => pageFromLocation(location.search) ?? initialPage);
   const [showDiag, setShowDiag] = useState(() => loadDiagnosticsShown() || pageFromLocation(location.search) === 'diagnostic');
   const [landing, setLanding] = useState<DiagnosticsLanding | null>(null);
   const [toast, setToast] = useState<{ text: string; keys?: boolean } | null>(null);
@@ -303,7 +304,7 @@ export function SettingsWindow() {
       <Tabs value={current} onValueChange={id => go(id as PageId)}>
         <div className="ft-settings">
           <aside className="ft-settings-sidebar">
-            <div className="ft-settings-app"><AppMark size={24} /><span><strong>{appName}</strong><small>{t('settings.title')}</small></span></div>
+            <div className="ft-settings-app"><AppMark size={24} /><span><strong>{appName}</strong><h1>{t('settings.title')}</h1></span></div>
             <div className="st-search">
               <Search {...ICON} size={15} aria-hidden="true" />
               <input type="search" value={query} maxLength={queryMaxLength} onChange={event => setQuery(event.target.value)} placeholder={t('nav.search')} aria-label={t('nav.search')}

@@ -71,7 +71,7 @@ export function ConnectionForm({ value, onChange, variant, onOpenLog, onReady, p
   const modelHint = keyMissing ? t('conn.modelNeedsKeyHint')
     : probe.status === 'running' ? t('conn.modelReading')
     : probe.status === 'error' ? t('conn.modelUnavailable')
-    : probe.status === 'ok' ? (model && !listed ? null : t(count === 1 ? 'conn.modelCountOne' : 'conn.modelCountOther', { count }))
+    : probe.status === 'ok' ? (model && !listed ? null : t(count === 1 ? 'conn.modelCountOne' : 'conn.modelCountOther', { count }) + (probe.hidden ? ` ${t('conn.modelHidden')}` : ''))
     : t('conn.modelAuto');
   const modelProblem = probe.status === 'ok' && model && !listed ? t('conn.modelAbsent', { model }) : null;
 

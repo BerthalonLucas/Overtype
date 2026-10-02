@@ -3,7 +3,7 @@ import { translate, type Translate } from '../i18n';
 import type { DiagEntry } from '../types';
 import { entryMessage, describeProblem, stepText } from './causes';
 import { addEntry, clockTime, journalLimit, journalText, redact } from './diagnostics';
-import { cleanEndpoint, cleanKey, hostOf, maskedKey, shortModel } from './endpoint';
+import { cleanEndpoint, cleanKey, hostOf, isTextModel, maskedKey, shortModel, textModels } from './endpoint';
 
 const fr: Translate = (key, params) => translate('fr', key, params);
 const key = 'sk-live-0123456789abcdefSECRET';
@@ -78,5 +78,21 @@ describe('what a connection field may hold', () => {
     expect(cleanKey('k'.repeat(5000))).toHaveLength(4096);
     expect(cleanEndpoint('https://llm.exemple.com\n')).toBe('https://llm.exemple.com');
     expect(cleanEndpoint('h'.repeat(3000))).toHaveLength(2048);
+  });
+});
+
+describe('the models offered for rewriting', () => {
+  const ids = (list: string[]) => list.map(id => ({ id }));
+  it('leaves embedding and reranking models out of the picker and counts them', () => {
+    const listed = ids(['unsloth/gemma-4-12B-it-qat-GGUF', 'unsloth/Qwen3.5-4B-MTP-GGUF', 'sft-agent-001/sft-agent-001.Q8_0', 'nomic-ai/nomic-embed-text-v2-moe-GGUF', 'BAAI/bge-m3', 'text-embedding-3-small', 'jina-reranker-v2']);
+    expect(textModels(listed)).toEqual({ models: listed.slice(0, 3), hidden: 4 });
+  });
+  it('keeps a model whose name only contains the letters', () => {
+    for (const id of ['gemma-4-12B-it', 'embedded-systems-tutor', 'mistral-large', 'page5-chat', 'google/gemma', 'bgem-chat']) expect(isTextModel(id), id).toBe(true);
+  });
+  it('never empties the list: a server that lists nothing else keeps everything', () => {
+    const only = ids(['nomic-embed-text']);
+    expect(textModels(only)).toEqual({ models: only, hidden: 0 });
+    expect(textModels([])).toEqual({ models: [], hidden: 0 });
   });
 });

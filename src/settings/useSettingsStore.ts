@@ -24,6 +24,8 @@ export type SettingsStore = {
   settings: Settings | null;
   loadError: boolean;
   reload: () => void;
+  // The settings as this window holds them right now, a change not yet rendered included.
+  current: () => Settings | null;
   // immediate: false while typing (saved after a pause), true for a switch or a choice.
   persist: (next: Settings, immediate: boolean) => void;
   // A chord is saved at once and enables its binding; refused, the previous one comes back.
@@ -177,12 +179,12 @@ export function useSettingsStore(): SettingsStore {
     try { await bridge.deleteHistory(id); setHistory(await bridge.getHistory()); setHistoryError(false); return true; }
     catch { setHistoryError(true); return false; }
   };
-  return { settings, loadError, reload, persist, recordShortcut, recording, resetToDefaults, flush, saveStatus, saveError, retry, history, historyError, removeHistory, reloadHistory };
+  return { settings, loadError, reload, current: () => latest.current, persist, recordShortcut, recording, resetToDefaults, flush, saveStatus, saveError, retry, history, historyError, removeHistory, reloadHistory };
 }
 
 // What the pages share (design-lab: SettingsContext).
 export type ToastExtra = { keys?: boolean };
-export type SettingsContextValue = Omit<SettingsStore, 'settings' | 'loadError' | 'reload'> & {
+export type SettingsContextValue = Omit<SettingsStore, 'settings' | 'loadError' | 'reload' | 'current'> & {
   settings: Settings;
   // Opens a page; with a field, scrolls to its row and flashes it once.
   go: (page: PageId, field?: string) => void;

@@ -3,7 +3,7 @@ import * as Collapsible from '@radix-ui/react-collapsible';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronRight, Plus, RotateCcw, Trash2, WandSparkles } from 'lucide-react';
 import { isCurrentDefault, newActionTemplate, promptError, shippedInstruction } from '../../actionDefaults';
-import { locales, t as tNow, useLanguage, useT } from '../../i18n';
+import { locales, t as tNow, translate, useLanguage, useT } from '../../i18n';
 import { Icon, iconFromLucide } from '../../ui';
 import { Button, Group, ICON, Input, Keycap } from '../../components/controls';
 import { useTx } from '../../components/motion';
@@ -112,8 +112,11 @@ export function ActionsPage() {
   const ilot = settings.uiVersion === 'ilot';
   const full = settings.actions.length >= actionLimit;
   const edit = (id: string, patch: (action: ActionDefinition) => ActionDefinition, immediate: boolean) => persist({ ...settings, actions: settings.actions.map(action => action.id === id ? patch(action) : action) }, immediate);
+  // One action still as it was created (its name and its instruction untouched) is the one to
+  // fill in first: twelve quick clicks used to add twelve « Nouvelle action ».
+  const blank = settings.actions.find(action => action.promptTemplate === newActionTemplate && (['en', 'fr'] as const).some(language => action.name === translate(language, 'actions.newName')));
   const add = () => {
-    if (full) return;
+    if (full || blank) return;
     const id = crypto.randomUUID();
     setFresh(id);
     persist({ ...settings, actions: [...settings.actions, { id, name: tNow('actions.newName'), promptTemplate: newActionTemplate }] }, true);
@@ -129,7 +132,7 @@ export function ActionsPage() {
     </>}
 
     <Group title={t('actions.instructions')} description={t('actions.intro')}
-      action={<Button size="sm" variant="ghost" icon={<Plus {...ICON} size={15} />} disabled={full} title={full ? t('page.actions.limit') : undefined} onClick={add}>{t('actions.add')}</Button>}>
+      action={<Button size="sm" variant="ghost" icon={<Plus {...ICON} size={15} />} disabled={full || Boolean(blank)} title={full ? t('page.actions.limit') : blank ? t('page.actions.fillFirst') : undefined} onClick={add}>{t('actions.add')}</Button>}>
       <div data-field="instructions" className="st-instr-list">
         {settings.actions.map(action => <InstructionEditor key={action.id} action={action} settings={settings} defaultOpen={fresh === action.id}
           onChange={(patch, immediate) => edit(action.id, patch, immediate)} onDelete={() => persist(deleteAction(settings, action.id), true)} />)}

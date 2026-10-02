@@ -134,4 +134,81 @@ describe('the live check of a connection', () => {
     expect(spy).not.toHaveBeenCalled();
     expect(probe).toMatchObject({ status: 'idle', ready: true });
   });
+
+  it('never sends a key to an address being edited until the person asks', async () => {
+    const spy = vi.spyOn(bridge, 'probeConnection');
+    const key = 'sk-synthetique-0123456789';
+    // The saved connection, as the window opens on it: checked with its key.
+    await render({ endpoint: 'https://llm.exemple.com', apiKey: key, noKey: false });
+    await settle();
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(probe).toMatchObject({ status: 'ok', held: false });
+    // The address is edited: every pause on the way is another host. Nothing leaves.
+    for (const typed of ['https://llm.exemple.co', 'http://llm.exemple.com', 'https://llm.exemple.com:8443']) {
+      await render({ endpoint: typed, apiKey: key, noKey: false });
+      await settle();
+      expect(probe).toMatchObject({ status: 'idle', held: true, ready: true, steps: [], models: [] });
+    }
+    expect(spy).toHaveBeenCalledTimes(1);
+    // Back on the host the key was typed for (a path changes nothing to who receives it): checked.
+    await render({ endpoint: 'https://llm.exemple.com/v1', apiKey: key, noKey: false });
+    await settle();
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(probe.held).toBe(false);
+    // Another host, then the person asks (Enter, leaving the field, « Check »): the key may go there.
+    await render({ endpoint: 'https://autre.exemple.com', apiKey: key, noKey: false });
+    await settle();
+    expect(spy).toHaveBeenCalledTimes(2);
+    await act(async () => { probe.start(); });
+    await settle(1);
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(spy.mock.calls[2].slice(1)).toEqual(['https://autre.exemple.com', key, false]);
+    expect(probe).toMatchObject({ status: 'ok', held: false });
+    // A key typed for the address shown goes there by itself; without a key nothing is held.
+    await render({ endpoint: 'https://tiers.exemple.com', apiKey: key, noKey: false });
+    await settle();
+    expect(probe.held).toBe(true);
+    await render({ endpoint: 'https://tiers.exemple.com', apiKey: `${key}-b`, noKey: false });
+    await settle();
+    expect(spy).toHaveBeenCalledTimes(4);
+    await render({ endpoint: 'https://encore.exemple.com', apiKey: '', noKey: true });
+    await settle();
+    expect(spy).toHaveBeenCalledTimes(5);
+    expect(probe.held).toBe(false);
+  });
+
+  it('a key typed before any address waits for the person too', async () => {
+    const spy = vi.spyOn(bridge, 'probeConnection');
+    await render({ endpoint: '', apiKey: 'sk-synthetique-0123456789', noKey: false });
+    for (const typed of ['llm', 'llm.exemple', 'llm.exemple.com']) { await render({ endpoint: typed, apiKey: 'sk-synthetique-0123456789', noKey: false }); await settle(); }
+    expect(spy).not.toHaveBeenCalled();
+    expect(probe.held).toBe(true);
+    await act(async () => { probe.start(); });
+    await settle(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('forgets what it showed when it stops checking: a server removed, then another in its place', async () => {
+    await render({ endpoint: 'llm.exemple.com' });
+    await settle();
+    expect(probe).toMatchObject({ status: 'ok' });
+    expect(probe.models.length).toBeGreaterThan(0);
+    await render({ endpoint: '', auto: false });
+    expect(probe).toMatchObject({ status: 'idle', steps: [], models: [] });
+    await render({ endpoint: '', auto: true });
+    expect(probe).toMatchObject({ status: 'idle', steps: [], models: [] });
+  });
+
+  it('a check dropped while its listener was being set never reaches Rust', async () => {
+    const spy = vi.spyOn(bridge, 'probeConnection');
+    let release: (off: () => void) => void = () => undefined;
+    vi.spyOn(bridge, 'on').mockImplementation(() => new Promise<() => void>(resolve => { release = resolve; }));
+    await render({ endpoint: 'llm.exemple.com' });
+    await act(async () => { await vi.advanceTimersByTimeAsync(checkDelayMs + 5); });
+    // The field changes right then: the run is dropped while `bridge.on` has not answered yet.
+    await render({ endpoint: '' });
+    await act(async () => { release(() => undefined); await vi.advanceTimersByTimeAsync(5); });
+    expect(spy).not.toHaveBeenCalled();
+    expect(probe.status).toBe('idle');
+  });
 });

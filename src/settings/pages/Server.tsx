@@ -10,7 +10,8 @@ import { ConnectionForm } from '../../connection/ConnectionForm';
 import { describeProblem } from '../../connection/causes';
 import { hostOf, maskedKey, normalizeEndpoint } from '../../connection/endpoint';
 import type { ProbeProblem, Server, TryResult } from '../../types';
-import { addServer, canAddServer, removeServer, setDefaultServer, updateServer } from '../servers';
+import { addServer, canAddServer, removeServer, setDefaultServer, updateServer, usable } from '../servers';
+import { InlineConfirm } from './InlineConfirm';
 import { useSettingsContext } from '../useSettingsStore';
 
 // « Essayer avec une phrase »: one fixed, synthetic sentence (never the person's text), on what
@@ -58,14 +59,19 @@ function TryLine({ server, ready }: { server: Server; ready: boolean }) {
 type CardProps = {
   server: Server; probe: Probe; isDefault: boolean; showDefault: boolean; expanded: boolean;
   onToggle: () => void; onChange: (patch: Partial<Omit<Server, 'id'>>, immediate: boolean) => void; onRemove?: () => void; onOpenLog: (problem: ProbeProblem | null, run: string | null) => void;
+  // What the removal's confirmation says (which server becomes the default one, when it changes).
+  removeText?: string;
 };
 // One card per server. Its header says whether it is connected in ONE line (« ● Connecté · model
 // · 162 ms   Détails ▾ »); while it checks, the trace unfolds under the header with the sweep,
 // then folds back; on an error it stays open on the failing step (cause, gesture, « Voir le
 // journal »). « Modifier » unfolds the connection form.
-function ServerCard({ server, probe, isDefault, showDefault, expanded, onToggle, onChange, onRemove, onOpenLog }: CardProps) {
+function ServerCard({ server, probe, isDefault, showDefault, expanded, onToggle, onChange, onRemove, onOpenLog, removeText }: CardProps) {
   const t = useT();
   const tx = useTx();
+  // One click used to remove the server and its key at once, without a word (02/10).
+  const [confirming, setConfirming] = useState(false);
+  useEffect(() => { if (!expanded) setConfirming(false); }, [expanded]);
   const check = useCheck(probe);
   const state = probe.status === 'idle' ? (probe.ready ? 'idle' : 'warn') : probe.status;
   return <motion.section layout="position" className="st-server" data-expanded={expanded ? '' : undefined} data-state={state} data-server={server.id}
@@ -107,8 +113,10 @@ function ServerCard({ server, probe, isDefault, showDefault, expanded, onToggle,
             probe={probe} onOpenLog={onOpenLog} variant="settings" check={false} fieldPrefix={server.id} />
           <div className="st-server-foot">
             <TryLine server={server} ready={probe.status === 'ok'} />
-            {onRemove && <Button size="sm" variant="danger" icon={<Trash2 {...ICON} size={14} />} onClick={onRemove}>{t('page.server.remove')}</Button>}
+            {onRemove && <Button size="sm" variant="danger" icon={<Trash2 {...ICON} size={14} />} onClick={() => setConfirming(true)} disabled={confirming}>{t('page.server.remove')}</Button>}
           </div>
+          {onRemove && <InlineConfirm open={confirming} text={removeText ?? t('page.server.removeConfirm')} confirm={t('page.server.removeAction')} keep={t('page.server.removeKeep')}
+            onKeep={() => setConfirming(false)} onConfirm={() => { setConfirming(false); onRemove(); }} />}
         </div>
       </motion.div>}
     </AnimatePresence>
@@ -132,6 +140,13 @@ export function ServerPage() {
   };
   const servers = settings.servers.slice(0, 2);
   const two = servers.length > 1;
+  const name = (server: Server) => hostOf(addressDrafts[server.id] ?? server.endpoint) || t('page.server.new');
+  // Removing the default server hands the default to the one that stays: said before it happens.
+  const removeText = (server: Server) => {
+    const stays = servers.find(item => item.id !== server.id);
+    return settings.defaultServerId === server.id && stays ? t('page.server.removeConfirmDefault', { server: name(stays) }) : t('page.server.removeConfirm');
+  };
+  const pending = servers.find(server => !usable(server));
   const add = () => {
     const next = addServer(settings);
     if (!next.id) return;
@@ -144,7 +159,8 @@ export function ServerPage() {
         {servers.map((server, index) => probes[server.id] && <ServerCard key={server.id} server={{ ...server, endpoint: addressDrafts[server.id] ?? server.endpoint }} probe={probes[server.id]} isDefault={settings.defaultServerId === server.id} showDefault={two}
           expanded={expanded.has(server.id)} onToggle={() => setExpanded(server.id, !expanded.has(server.id))}
           onChange={(patch, immediate) => change(server, patch, immediate)}
-          onRemove={index > 0 ? () => { setExpanded(server.id, false); setAddressDraft(server.id, null); persist(removeServer(settings, server.id), true); } : undefined} onOpenLog={openLog} />)}
+          removeText={removeText(server)}
+          onRemove={two ? () => { setExpanded(server.id, false); setAddressDraft(server.id, null); persist(removeServer(settings, server.id), true); } : undefined} onOpenLog={openLog} />)}
       </AnimatePresence>
     </div>
 
@@ -154,7 +170,8 @@ export function ServerPage() {
             <Group title={t('page.server.defaultTitle')} description={t('page.server.defaultHelp')}>
               <div className="st-group-pad">
                 <Segmented label={t('page.server.defaultTitle')} block value={settings.defaultServerId} onChange={id => persist(setDefaultServer(settings, id), true)}
-                  options={servers.map(server => ({ value: server.id, label: hostOf(server.endpoint) || t('page.server.new') }))} />
+                  options={servers.map(server => ({ value: server.id, label: name(server), disabled: !usable(server) && settings.defaultServerId !== server.id }))} />
+                {pending && settings.defaultServerId !== pending.id && <p className="st-footnote st-footnote-tight">{t('page.server.defaultPending', { server: name(pending) })}</p>}
               </div>
             </Group>
           </motion.div>

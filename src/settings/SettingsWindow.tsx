@@ -70,23 +70,29 @@ function SaveState({ status, onRetry }: { status: SaveStatus; onRetry: () => voi
   </span>;
 }
 
-// Whether the window has been shown in front at least once. It is created hidden when the app
-// starts and stays alive: nothing is checked on the network before the person actually opens it.
-// A hidden window can be focused (Windows hands it the foreground at launch), so a focus only
-// counts once the window is really on screen; a click in it always does.
+// Whether the window is on screen. It is created hidden when the app starts and stays alive
+// (closing it hides it): nothing is checked on the network while nobody looks at it. A hidden
+// window can be focused (Windows hands it the foreground at launch), so a focus only counts once
+// the window is really on screen; a click in it always does. And it goes back to false when the
+// window leaves (0.6 review: once opened, it kept checking for ever, and every change the setup
+// made was probed by both windows, each line of the journal twice).
 function useOpened(): boolean {
   const [opened, setOpened] = useState(false);
   useEffect(() => {
     let live = true;
     let retry = 0;
     const open = () => setOpened(true);
-    const check = () => { void bridge.windowShown().then(shown => { if (live && shown) open(); }); };
+    const check = () => { void bridge.windowShown().then(shown => { if (live) setOpened(shown); }); };
     // Shown and focused arrive in either order: asked at once, and once more a moment later.
     const focused = () => { check(); window.clearTimeout(retry); retry = window.setTimeout(check, 400); };
+    // Hidden (its cross, Escape, Alt+F4), or behind another window: asked again.
+    const left = () => { if (document.hidden) setOpened(false); else focused(); };
     window.addEventListener('focus', focused);
+    window.addEventListener('blur', focused);
     window.addEventListener('pointerdown', open);
+    document.addEventListener('visibilitychange', left);
     if (document.hasFocus()) focused();
-    return () => { live = false; window.clearTimeout(retry); window.removeEventListener('focus', focused); window.removeEventListener('pointerdown', open); };
+    return () => { live = false; window.clearTimeout(retry); window.removeEventListener('focus', focused); window.removeEventListener('blur', focused); window.removeEventListener('pointerdown', open); document.removeEventListener('visibilitychange', left); };
   }, []);
   return opened;
 }
@@ -103,7 +109,12 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
   const store = useSettingsStore();
   const { settings } = store;
   const registrations = useRegistrations();
-  const opened = useOpened();
+  // Closed by its own cross or Escape: the page is told nothing by Windows, so it notes it itself.
+  const [hiddenAt, setHiddenAt] = useState(0);
+  const openedNow = useOpened();
+  const [seenAt, setSeenAt] = useState(0);
+  useEffect(() => { if (openedNow) setSeenAt(Date.now()); }, [openedNow]);
+  const opened = openedNow && seenAt >= hiddenAt;
   const [page, setPage] = useState<PageId>(() => pageFromLocation(location.search) ?? initialPage);
   const [showDiag, setShowDiag] = useState(() => loadDiagnosticsShown() || pageFromLocation(location.search) === 'diagnostic');
   const [landing, setLanding] = useState<DiagnosticsLanding | null>(null);
@@ -142,15 +153,16 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
   }, [settings?.servers[0]?.id, settings?.servers[1]?.id, probeA, probeB]); // eslint-disable-line react-hooks/exhaustive-deps
   // A server that answered and has no model yet takes the first of its list, card folded or not
   // (the form does the same while open). A model already chosen is never replaced.
-  const latestSettings = useRef(settings);
-  latestSettings.current = settings;
+  // Read from the store, not from the last render: a server added a moment ago (its render still
+  // to come) must not be written away by this save.
   useEffect(() => {
-    const now = latestSettings.current;
+    const now = store.current();
     if (!now) return;
     let next = now;
     for (const server of now.servers.slice(0, 2)) {
       const probe = probes[server.id];
-      if (probe?.status === 'ok' && probe.models.length && !server.model.trim()) next = { ...next, servers: next.servers.map(item => item.id === server.id ? { ...item, model: probe.models[0].id } : item) };
+      // Only a server with an address of its own: a card just added never inherits a model.
+      if (probe?.status === 'ok' && probe.models.length && !server.model.trim() && server.endpoint.trim()) next = { ...next, servers: next.servers.map(item => item.id === server.id ? { ...item, model: probe.models[0].id } : item) };
     }
     if (next !== now) store.persist(next, true);
   }, [probeA.status, probeA.models, probeB.status, probeB.models]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -226,6 +238,8 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
       if (!saved && !closeRefused.current) { closeRefused.current = true; showToast(t('nav.closeAnyway')); return; }
       closeRefused.current = false;
       await bridge.closeSettings();
+      // Hidden now: its checks stop (asked rather than assumed: the preview has no window to hide).
+      void bridge.windowShown().then(shown => { if (!shown) setHiddenAt(Date.now()); });
     } finally { closing.current = false; }
   }, [store.flush, showToast, t]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (store.saveStatus !== 'error') closeRefused.current = false; }, [store.saveStatus]);
@@ -304,7 +318,7 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
   const serverBadge = defaultProbe.status === 'error' ? 'error' : defaultProbe.status === 'running' ? 'running' : null;
   const serverAside = serverBadge ? <span className="st-tab-badge"><StatusDot state={serverBadge} /><span className="st-sr">{t(serverBadge === 'error' ? 'nav.serverFailing' : 'nav.serverChecking')}</span></span> : null;
   const onScroll = (event: UIEvent<HTMLDivElement>) => { const on = event.currentTarget.scrollTop > 56; if (on !== scrolled) setScrolled(on); };
-  const { settings: _settings, loadError: _loadError, reload: _reload, ...actions } = store;
+  const { settings: _settings, loadError: _loadError, reload: _reload, current: _current, ...actions } = store;
   const context: SettingsContextValue = { ...actions, settings, go, openLog, landing, showToast, registrations, probes, addressDrafts, setAddressDraft, expanded, setExpanded };
 
   return <main className="ft-scope ft-settings-window">

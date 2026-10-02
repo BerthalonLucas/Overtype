@@ -25,6 +25,9 @@ const READ_ONLY_CONFIRM: Duration = Duration::from_millis(400);
 /// How far the last rectangle of a selection may drift without being a change (a sub-pixel
 /// layout pass, our own window showing beside it); a scroll or a reflow moves it by a line.
 const ANCHOR_DRIFT: f64 = 2.;
+/// How much of a document UI Automation is asked for (UTF-16 units). A text that fills it was
+/// cut there: what lies beyond was not read.
+const FIELD_CAP: usize = 200_000;
 
 thread_local! {
     // uiautomation::UIAutomation::new initializes COM every time without balancing
@@ -82,11 +85,50 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
 /// The visible runs of a range, physical, as `GetBoundingRectangles` gives them (none when
 /// the provider answers nothing usable).
 pub(crate) fn range_rects(range: &uiautomation::patterns::UITextRange) -> Vec<Rect> {
-    unsafe { range.as_ref().GetBoundingRectangles() }
+    let mut rects = unsafe { range.as_ref().GetBoundingRectangles() }
         .ok()
         .and_then(|raw| <SafeArray as TryInto<Vec<f64>>>::try_into(SafeArray::from(raw)).ok())
         .map(|values| selection_lines::from_flat(&values))
-        .unwrap_or_default()
+        .unwrap_or_default();
+    trim_top_inset(range, &mut rects);
+    rects
+}
+
+/// The first line of a document in Windows 11 Notepad (RichEdit) answers a rectangle that
+/// starts at the top edge of the control, its inner margin included: 34 px for an 18 px line
+/// (measured on 02/10). The halo's band and the marks of the changed words then sat a line
+/// above the text. Such a rectangle (it touches the control's top and is far taller than its
+/// text) is cut back to the height of a line, its bottom kept: the height of the other lines of
+/// the same range when there are some, else what the font size says. Nothing else is touched.
+fn trim_top_inset(range: &UITextRange, rects: &mut [Rect]) {
+    let Some(top) = rects.iter().filter(|r| selection_lines::drawable(r)).map(|r| r.y).reduce(f64::min) else { return };
+    let others: Vec<f64> = rects.iter().filter(|r| selection_lines::drawable(r) && r.y > top + 1.).map(|r| r.height).collect();
+    let tallest = rects.iter().filter(|r| r.y <= top + 1.).map(|r| r.height).fold(0., f64::max);
+    // Cheap test first: nothing is asked of the provider for an ordinary line.
+    let line = match others.iter().copied().reduce(f64::min) {
+        Some(line) => line,
+        None => {
+            let Some(points) = range.get_attribute_value(TextAttribute::FontSize).ok().and_then(|v| <uiautomation::variants::Variant as TryInto<f64>>::try_into(v).ok()).filter(|p| p.is_finite() && *p > 0.) else { return };
+            let first = rects.iter().find(|r| r.y <= top + 1.).copied();
+            let (_, scale, _) = crate::host::monitor_at(first);
+            (points * 96. / 72. * scale * 1.25).round()
+        }
+    };
+    if !inset_line(tallest, line) { return; }
+    let box_top = range.get_enclosing_element().ok().and_then(|element| element.get_bounding_rectangle().ok()).map(|b| f64::from(b.get_top()));
+    if box_top.is_none_or(|edge| (edge - top).abs() > 1.) { return; }
+    trim_rows(rects, top, line);
+}
+/// Whether a first row `height` tall holds more than its line (`line`: the height of a line).
+fn inset_line(height: f64, line: f64) -> bool {
+    line >= 4. && height > line * 1.5
+}
+/// The rows that start at `top` keep their bottom and take the height of a line.
+fn trim_rows(rects: &mut [Rect], top: f64, line: f64) {
+    for rect in rects.iter_mut().filter(|r| r.y <= top + 1. && r.height > line * 1.5) {
+        rect.y += rect.height - line;
+        rect.height = line;
+    }
 }
 
 /// The halo's other two levels (Lucas, 25/09), physical: the text box (the focused element's
@@ -489,7 +531,7 @@ pub(crate) fn field_text(window: isize) -> Option<String> {
         if let Ok(value) = element.get_pattern::<UIValuePattern>().and_then(|p| p.get_value()) {
             return Some(value);
         }
-        if let Ok(document) = element.get_pattern::<UITextPattern>().and_then(|p| p.get_document_range()).and_then(|r| r.get_text(200_000)) {
+        if let Ok(document) = element.get_pattern::<UITextPattern>().and_then(|p| p.get_document_range()).and_then(|r| r.get_text(FIELD_CAP as i32)) {
             return Some(document);
         }
     }
@@ -592,12 +634,18 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
 
 /// Whether a paste left the field as it was: it could be read before and after, reads exactly
 /// the same, and the result is not the text it replaced (pasting a text over itself changes
-/// nothing either). A field nothing can read is never called read-only.
+/// nothing either). A field nothing can read is never called read-only; nor is a document read
+/// up to the cap only (the replaced selection may lie beyond what was read: a paste that went
+/// through there used to be called « read-only », and the pill invited to paste a second time).
 pub fn unwritten(before: Option<&str>, after: Option<&str>, replaced: &str, value: &str) -> bool {
     match (before, after) {
-        (Some(before), Some(after)) => before == after && canonical(replaced) != canonical(value),
+        (Some(before), Some(after)) => before == after && read_whole(before) && canonical(replaced) != canonical(value),
         _ => false,
     }
+}
+/// Whether a field's text is all of it: shorter than what was asked for.
+fn read_whole(text: &str) -> bool {
+    text.len() < FIELD_CAP || text.encode_utf16().count() < FIELD_CAP
 }
 
 /// Whether the copy made after a paste gives the captured text again, to the letter, while the
@@ -641,6 +689,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_first_line_of_a_document_loses_the_margin_its_rectangle_included() {
+        let r = |x: f64, y: f64, w: f64, h: f64| Rect { x, y, width: w, height: h };
+        // Notepad, 02/10: line 1 answers 34 px from the top of the control, an 18 px line.
+        assert!(inset_line(34., 18.));
+        assert!(!inset_line(18., 18.) && !inset_line(24., 18.), "a taller run (an emoji, a bigger word) is a line");
+        assert!(!inset_line(34., 0.));
+        let mut rows = [r(350., 95., 544., 34.), r(46., 129., 80., 18.)];
+        trim_rows(&mut rows, 95., 18.);
+        assert_eq!(rows, [r(350., 111., 544., 18.), r(46., 129., 80., 18.)], "bottom kept, the second line untouched");
+        // Two runs of the first line are both cut back; a run of ordinary height stays.
+        let mut rows = [r(100., 95., 40., 34.), r(140., 95., 30., 34.), r(170., 95.5, 20., 18.)];
+        trim_rows(&mut rows, 95., 18.);
+        assert_eq!(rows, [r(100., 111., 40., 18.), r(140., 111., 30., 18.), r(170., 95.5, 20., 18.)]);
+    }
+    #[test]
     fn an_anchorless_target_is_checked_by_its_text_and_a_copy_target_by_a_second_copy() {
         // Review n°1: a UIA selection without a drawable rectangle still compares its text.
         let target = TargetIdentity { runtime_id: Some(vec![1]), native_window: 1, control: 0, selected_text: "mot A".into(), anchor: None, selection_len: 5, editable: true, check: TargetCheck::Uia };
@@ -680,6 +743,12 @@ mod tests {
         // The result is the text it replaced (nothing to correct): the same field is a success.
         assert!(!unwritten(Some("Bonjour à tous."), Some("Bonjour à tous."), "Bonjour", "Bonjour"));
         assert!(!unwritten(Some("a\r\nb"), Some("a\r\nb"), "a\r\nb", "a\nb"), "line endings aside");
+        // (see below for the rectangles of a first line)
+        // A document read up to the cap: the selection may lie beyond, nothing is concluded.
+        let head = "a".repeat(FIELD_CAP);
+        assert!(!unwritten(Some(&head), Some(&head), "avant", "after"));
+        let short = "a".repeat(FIELD_CAP - 1);
+        assert!(unwritten(Some(&short), Some(&short), "avant", "after"));
         // A field nothing can read, reached by copy (pdf.js): the copy after the paste decides.
         assert!(still_selected(Some("ligne choisie"), "ligne choisie", "chosen line"), "still selected: not replaced");
         assert!(!still_selected(None, "ligne choisie", "chosen line"), "a caret copies nothing: pasted");

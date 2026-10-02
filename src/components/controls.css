@@ -176,6 +176,8 @@
 }
 .ft-slider-thumb:hover, .ft-slider-thumb:focus-visible { box-shadow: 0 1px 2px rgb(0 0 0 / .12), 0 0 0 4px rgb(var(--ft-accent-rgb) / .22); }
 .ft-slider-thumb:focus-visible { outline: none; }
+/* Told apart from the hover: a ring of the page's colour around the thumb. */
+.ft-slider-thumb:focus-visible { box-shadow: 0 1px 2px rgb(0 0 0 / .12), 0 0 0 2px var(--ft-win-bg-solid, var(--ft-bg)), 0 0 0 4px var(--ft-focus); }
 .ft-slider-control output { min-width: 44px; font-size: 13px; font-variant-numeric: tabular-nums; text-align: right; color: var(--ft-text-2); }
 
 /* ——— Segmented ——— */

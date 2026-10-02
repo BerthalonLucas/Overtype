@@ -7,7 +7,7 @@ import { Button, Dialog, ICON, Segmented } from '../components/controls';
 import { useTx } from '../components/motion';
 import type { DiagEntry } from '../types';
 import { useDuration } from './Check';
-import { entryMessage, stepName } from './causes';
+import { causeText, entryMessage, stepName } from './causes';
 import { clearJournal, clockTime, journalText, levelGlyph, redact, useJournal } from './diagnostics';
 import './connection.css';
 import '../settings/settings.css';
@@ -36,7 +36,8 @@ function Entry({ entry, open, onOpenChange }: { entry: DiagEntry; open: boolean;
     entry.method && [t('diag.request'), redact(`${entry.method} ${entry.url ?? ''}`)],
     entry.status != null && [t('diag.status'), String(entry.status)],
     entry.ms != null && [t('diag.colDuration'), duration(entry.ms)],
-    entry.cause && [t('diag.cause'), redact(entry.cause)],
+    // Every error says why: Rust's cause, else the status the server answered with.
+    entry.cause ? [t('diag.cause'), redact(causeText(entry.cause, t))] : entry.level === 'error' && entry.status != null && [t('diag.cause'), `HTTP ${entry.status}`],
     entry.detail && [t('diag.detail'), redact(entry.detail)],
     entry.key && [t('diag.key'), entry.key],
     entry.proxy && [t('diag.proxy'), redact(entry.proxy)],

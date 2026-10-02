@@ -1,10 +1,10 @@
-import { defaultActionId, defaultActions, defaultBindings, defaultMenuActionIds, instructionActionId, instructionActionName, instructionError } from './actionDefaults';
+import { defaultActionId, defaultActions, defaultBindings, defaultMenuActionIds, instructionActionId, instructionActionName, instructionError, localizeDefaults } from './actionDefaults';
 import { resetFrom } from './settings/reset';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { connectionCommand, isConnectionCommand, mockModels, normalizeEndpoint, setConnScenario, type ConnScenario } from './bridge.mock';
-import type { Capture, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, ModelInfo, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
+import type { Capture, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
 
 type Unlisten = () => void;
 // 0.6: 'probe-step' (ProbeStepEvent, to the window that started the check), 'diagnostic' (DiagEntry,
@@ -63,19 +63,22 @@ function refusalMessage(reason: unknown): unknown {
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> {
   if (native) return tauriInvoke<T>(name, args);
   if (name === 'get_settings') return structuredClone(demoSettings) as T;
-  // What is saved is clean, as Rust's settings::sanitize: addresses normalised, no key for a server without one.
+  // What is saved is clean, as Rust's settings::sanitize: addresses normalised, no key for a server
+  // without one, the untouched default actions in the interface's language; a finished setup stays so.
   if (name === 'save_settings') {
     const next = structuredClone(args?.settings as Settings);
+    next.actions = localizeDefaults(next.actions, next.language);
+    if (demoSettings.setupDone) next.setupDone = true;
     next.servers = next.servers.map(server => { const endpoint = normalizeEndpoint(server.endpoint); return { ...server, endpoint: endpoint.ok ? endpoint.base : server.endpoint.trim(), model: server.model.trim(), apiKey: server.noKey ? '' : server.apiKey }; });
     if (next.servers.some(server => server.endpoint !== '' && !normalizeEndpoint(server.endpoint).ok)) throw 'L’adresse du serveur est invalide.';
     demoSettings = next; emit('settings-changed', demoSettings); return undefined as T;
   }
-  if (isConnectionCommand(name)) return connectionCommand(name, args, emit, id => demoSettings.servers.find(server => server.id === id)) as Promise<T>;
+  if (isConnectionCommand(name)) return connectionCommand(name, args, emit) as Promise<T>;
   // The setup of the preview: finishing it marks it done; the demo plays in the same page.
-  if (name === 'finish_setup') { demoSettings = { ...demoSettings, setupDone: true }; emit('settings-changed', demoSettings); return undefined as T; }
+  if (name === 'finish_setup' || name === 'complete_setup') { if (!demoSettings.setupDone) { demoSettings = { ...demoSettings, setupDone: true }; emit('settings-changed', demoSettings); } return undefined as T; }
   if (name === 'open_demo') return undefined as T;
   if (name === 'close_demo') { emit<DemoEnded>('demo-ended', { done: args?.done === true }); return undefined as T; }
-  if (name === 'reset_settings') { demoSettings = resetFrom(defaultSettings, demoSettings); emit('settings-changed', demoSettings); return structuredClone(demoSettings) as T; }
+  if (name === 'reset_settings') { demoSettings = resetFrom(defaultSettings, demoSettings); demoSettings = { ...demoSettings, actions: localizeDefaults(demoSettings.actions, demoSettings.language) }; emit('settings-changed', demoSettings); return structuredClone(demoSettings) as T; }
   // The preview registers every chord: its proposal is Rust's first.
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
   if (name === 'capture_text') return structuredClone(demoCapture) as T;
@@ -196,9 +199,6 @@ export const bridge = {
   probeConnection: (run: string, endpoint: string, apiKey: string, noKey: boolean) => command<ProbeResult>('probe_connection', { run, endpoint, apiKey, noKey }),
   // Cancels a check or a try by its run id (the field changed, the window closes).
   cancelProbe: (run: string) => command<void>('cancel_probe', { run }),
-  // The models of a SAVED server (its saved key), without a trace: for the picker when it
-  // opens. Rejects with a ProbeProblem ({ step, cause, status?, technical?, logId? }).
-  listModels: (serverId: string) => command<ModelInfo[]>('list_models', { serverId }),
   // « Essayer avec une phrase »: one fixed, synthetic sentence (never the person's text), 30 s
   // at most. The reply (200 characters at most) is shown, never logged.
   tryModel: (run: string, endpoint: string, apiKey: string, noKey: boolean, model: string) => command<TryResult>('try_model', { run, endpoint, apiKey, noKey, model }),
@@ -218,6 +218,8 @@ export const bridge = {
     await command<void>('finish_setup', { openSettings });
     if (!native && openSettings) location.assign('?window=settings&demo=1');
   },
+  // The setup reached « C'est prêt »: setupDone is saved now, whatever closes the window later.
+  completeSetup: () => command<void>('complete_setup'),
   // The demo: its own window natively (the setup hides, then gets `demo-ended { done }`); in the
   // preview nothing opens (the setup page plays it in place) and closeDemo emits `demo-ended`.
   openDemo: () => command<void>('open_demo'),

@@ -1,5 +1,5 @@
 import { normalizeEndpoint } from '../bridge.mock';
-import type { NormalizedEndpoint, Server } from '../types';
+import type { NormalizedEndpoint } from '../types';
 
 // The address as it is read while typing: one rule, written in Rust (settings::normalize_endpoint,
 // which has the last word when saving) and in src/bridge.mock.ts, tested on the same vectors
@@ -10,7 +10,6 @@ export type { NormalizedEndpoint };
 // Limits Rust enforces (settings::validate): the fields refuse to grow past them.
 export const endpointMaxLength = 2048;
 export const apiKeyMaxLength = 4096;
-export const modelMaxLength = 200;
 
 // How a server is named in the interface: its host (and port), « https:// » left out.
 export function hostOf(endpoint: string): string {
@@ -39,4 +38,3 @@ export function textModels<T extends { id: string }>(models: T[]): { models: T[]
 // What a key field may hold: no line break, no control character, bounded.
 export const cleanKey = (typed: string) => typed.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, apiKeyMaxLength);
 export const cleanEndpoint = (typed: string) => typed.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, endpointMaxLength);
-export const sameConnection = (a: Pick<Server, 'endpoint' | 'apiKey' | 'noKey'>, b: Pick<Server, 'endpoint' | 'apiKey' | 'noKey'>) => a.endpoint === b.endpoint && a.apiKey === b.apiKey && a.noKey === b.noKey;

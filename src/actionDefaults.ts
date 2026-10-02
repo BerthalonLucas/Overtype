@@ -1,4 +1,4 @@
-import type { ActionDefinition, ShortcutBinding } from './types';
+import type { ActionDefinition, Language, Settings, ShortcutBinding } from './types';
 
 // The output rules every default instruction ends with (mirrors actions.rs): written for
 // small instruct models without thinking, which answer the text instead of transforming
@@ -17,6 +17,40 @@ export const defaultActions: ActionDefinition[] = [
   { id: 'shorten', name: 'Shorten', key: 'S', shortName: 'Shorten', icon: 'FoldVertical', promptTemplate: instruction('You are an editor. Shorten the text to about half its length, in the same language: keep the key information, names, numbers and facts, drop repetitions and filler. Keep its tone.') },
   { id: 'email', name: 'Write email', key: 'E', shortName: 'Email', icon: 'Mail', promptTemplate: instruction('You are an assistant who writes emails. Turn the text (notes, a draft or a request) into a clear, courteous email in the same language, with a greeting, a short body and a closing. Do not add a subject line. Do not invent facts, names, dates or commitments that are not in the text.') },
 ];
+// The default actions in French (mirrors DEFAULTS_FR in actions.rs; the lab's words): name and
+// tile label. Letters, icons and instructions are the same in both languages.
+const frenchNames: Record<string, { name: string; shortName: string }> = {
+  correct: { name: 'Corriger', shortName: 'Corriger' },
+  translate: { name: 'Traduire', shortName: 'Traduire' },
+  professionalize: { name: 'Professionnel', shortName: 'Pro' },
+  shorten: { name: 'Raccourcir', shortName: 'Raccourcir' },
+  email: { name: 'E-mail', shortName: 'E-mail' },
+};
+function defaultNames(id: string, language: Language): { name: string; shortName: string } | undefined {
+  if (language === 'fr') return frenchNames[id];
+  const action = defaultActions.find(item => item.id === id);
+  return action ? { name: action.name, shortName: action.shortName ?? action.name } : undefined;
+}
+// The default actions nobody renamed read in the interface's language (mirrors
+// actions::localize_defaults, which has the last word at every save): untouched means the name
+// AND the tile label are exactly the shipped ones of either language. Whatever the person typed
+// stays. The same array comes back when nothing changes.
+export function localizeDefaults(actions: ActionDefinition[], language: Language): ActionDefinition[] {
+  let changed = false;
+  const next = actions.map(action => {
+    const wanted = defaultNames(action.id, language);
+    if (!wanted) return action;
+    const shipped = (['en', 'fr'] as const).some(known => { const names = defaultNames(action.id, known); return names?.name === action.name && names.shortName === action.shortName; });
+    if (!shipped || (action.name === wanted.name && action.shortName === wanted.shortName)) return action;
+    changed = true;
+    return { ...action, ...wanted };
+  });
+  return changed ? next : actions;
+}
+// A change of the interface's language, with the default actions' names following it at once.
+export function withLanguage(settings: Settings, language: Language): Settings {
+  return { ...settings, language, actions: localizeDefaults(settings.actions, language) };
+}
 // The actions 0.3 and 0.4 shipped and a migrated file keeps (mirrors legacy_defaults in
 // actions.rs; correct and professionalize share the current instructions there). They are no
 // longer created, but they remain built-in: « Restore » brings back the instruction they were

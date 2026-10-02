@@ -126,15 +126,6 @@ impl ProbeCause {
             Cause::Network | Cause::Reset | Cause::Other => Self::ReachNetwork,
         }
     }
-    fn step(self) -> StepId {
-        match self {
-            Self::AddressEmpty | Self::AddressMalformed | Self::AddressScheme | Self::AddressCredentials | Self::AddressDns => StepId::Address,
-            Self::ReachRefused | Self::ReachTimeout | Self::ReachTls | Self::ReachCertificate | Self::ReachNetwork => StepId::Reach,
-            Self::KeyRequired | Self::KeyRejected => StepId::Key,
-            Self::ModelsNotFound | Self::ModelsEmpty | Self::ModelsInvalid | Self::ModelsServer => StepId::Models,
-            Self::TryModel | Self::TryRejected | Self::TryServer | Self::TryTimeout | Self::TryEmpty | Self::Cancelled => StepId::Try,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -417,6 +408,35 @@ enum Listing {
 
 const MAX_BODY: usize = 2 * 1024 * 1024;
 
+/// How the reading of a response body ended.
+enum Body {
+    Read(Vec<u8>),
+    /// Past `MAX_BODY`: the reading stopped there, the rest was never received.
+    TooLarge,
+    Failed(reqwest::Error),
+    Cancelled,
+}
+/// A body counted as it arrives and never read past `MAX_BODY` (a server that streams without
+/// end costs 2 MB, not the memory of the machine).
+async fn bounded_body(response: reqwest::Response, cancel: &CancellationToken) -> Body {
+    let mut body: Vec<u8> = Vec::new();
+    let mut stream = response.bytes_stream();
+    loop {
+        let next = tokio::select! {
+            _ = cancel.cancelled() => return Body::Cancelled,
+            next = futures_util::StreamExt::next(&mut stream) => next,
+        };
+        match next {
+            Some(Ok(chunk)) => {
+                if body.len() + chunk.len() > MAX_BODY { return Body::TooLarge; }
+                body.extend_from_slice(&chunk);
+            }
+            Some(Err(error)) => return Body::Failed(error),
+            None => return Body::Read(body),
+        }
+    }
+}
+
 async fn fetch_models(endpoint: &Endpoint, key: &str, route: &Route, limits: Limits, cancel: &CancellationToken) -> Listing {
     let started = Instant::now();
     let url = format!("{}/v1/models", endpoint.base);
@@ -441,22 +461,12 @@ async fn fetch_models(endpoint: &Endpoint, key: &str, route: &Route, limits: Lim
     if !response.status().is_success() { return Listing::Status { status, ms: header_ms }; }
     let body_started = Instant::now();
     // The body is read up to 2 MB and never kept: only the model ids leave this function.
-    let mut body: Vec<u8> = Vec::new();
-    let mut stream = response.bytes_stream();
-    loop {
-        let next = tokio::select! {
-            _ = cancel.cancelled() => return Listing::Cancelled,
-            next = futures_util::StreamExt::next(&mut stream) => next,
-        };
-        match next {
-            Some(Ok(chunk)) => {
-                if body.len() + chunk.len() > MAX_BODY { return Listing::Invalid { status, header_ms, body_ms: elapsed_ms(body_started) }; }
-                body.extend_from_slice(&chunk);
-            }
-            Some(Err(error)) => return transport(error, started),
-            None => break,
-        }
-    }
+    let body = match bounded_body(response, cancel).await {
+        Body::Read(body) => body,
+        Body::TooLarge => return Listing::Invalid { status, header_ms, body_ms: elapsed_ms(body_started) },
+        Body::Failed(error) => return transport(error, started),
+        Body::Cancelled => return Listing::Cancelled,
+    };
     let body_ms = elapsed_ms(body_started);
     match serde_json::from_slice::<Value>(&body).ok().as_ref().and_then(parse_models) {
         Some(models) => Listing::Models { models, header_ms, body_ms },
@@ -467,7 +477,7 @@ async fn fetch_models(endpoint: &Endpoint, key: &str, route: &Route, limits: Lim
 /// TCP to one of the resolved addresses, within the connect limit.
 async fn open(addresses: &[std::net::SocketAddr], limit: Duration) -> Result<tokio::net::TcpStream, (Cause, String)> {
     let deadline = Instant::now() + limit;
-    let mut last = (Cause::Other, String::from("aucune adresse"));
+    let mut last = (Cause::Other, String::from("no address"));
     for address in addresses.iter().take(4) {
         let left = deadline.saturating_duration_since(Instant::now());
         if left.is_zero() { return Err((Cause::Silent, "connect timed out".into())); }
@@ -540,7 +550,7 @@ pub async fn probe(input: ProbeInput, limits: Limits, forced_route: Option<Route
             match lookup {
                 Ok(Ok(found_addresses)) => addresses = found_addresses.collect(),
                 Ok(Err(error)) => return trace.fail(StepId::Address, ProbeCause::AddressDns, Some(ms), None, Some(error.to_string()), Diag::default().detail(endpoint.host.clone())),
-                Err(_) => return trace.fail(StepId::Address, ProbeCause::AddressDns, Some(ms), None, Some("la résolution du nom n’a pas répondu à temps".into()), Diag::default().detail(endpoint.host.clone())),
+                Err(_) => return trace.fail(StepId::Address, ProbeCause::AddressDns, Some(ms), None, Some("dns lookup timed out".into()), Diag::default().detail(endpoint.host.clone())),
             }
             if addresses.is_empty() {
                 return trace.fail(StepId::Address, ProbeCause::AddressDns, Some(ms), None, None, Diag::default().detail(endpoint.host.clone()));
@@ -548,7 +558,7 @@ pub async fn probe(input: ProbeInput, limits: Limits, forced_route: Option<Route
             trace.ok(StepId::Address, ms, found);
             let mut resolved = Diag::new(DiagStep::Address, DiagLevel::Ok, if endpoint.local { "local" } else { "resolved" }).ms(ms).detail(format!("{} → {}", endpoint.host, addresses[0].ip()));
             // Windows has a proxy this build does not follow: said once per check, for whoever reads.
-            if !endpoint.local { if let Some(unused) = windows_proxy() { resolved = resolved.cause(format!("proxy Windows {unused} non utilisé (connexion directe)")); } }
+            if !endpoint.local { if let Some(unused) = windows_proxy() { resolved = resolved.cause(format!("system proxy {unused} not used (direct connection)")); } }
             trace.log(resolved);
         }
     }
@@ -628,38 +638,6 @@ pub async fn probe(input: ProbeInput, limits: Limits, forced_route: Option<Route
 
 fn key_detail(key: &str, no_key: bool) -> StepDetail {
     if !key.is_empty() { StepDetail::KeyAccepted { tail: key_tail(key) } } else if no_key { StepDetail::KeyNone } else { StepDetail::KeyNotAsked }
-}
-
-/// The list of a server's models, without a trace: the picker refreshes it when it opens.
-pub async fn list_models(endpoint: &str, key: &str, limits: Limits, cancel: CancellationToken, hooks: &Hooks<'_>) -> Result<Vec<ModelInfo>, ProbeProblem> {
-    let problem = |cause: ProbeCause, status: Option<u16>, technical: Option<String>, ms: Option<u64>, url: Option<&str>| {
-        let technical = technical.map(|text| (hooks.redact)(&text)).filter(|text| !text.is_empty());
-        let mut diag = Diag::new(cause.step().diag(), DiagLevel::Error, cause.code()).key(key);
-        if let Some(url) = url { diag = diag.request("GET", url); }
-        diag.status = status;
-        diag.ms = ms;
-        diag.cause = technical.clone();
-        let log_id = (hooks.log)(diag);
-        ProbeProblem { step: cause.step(), cause, status, technical, log_id: Some(log_id) }
-    };
-    let endpoint = normalize_endpoint(endpoint).map_err(|reason| problem(ProbeCause::of_address(reason), None, None, None, None))?;
-    let url = format!("{}/v1/models", endpoint.base);
-    match fetch_models(&endpoint, key, &route(&endpoint), limits, &cancel).await {
-        Listing::Cancelled => Err(ProbeProblem { step: StepId::Models, cause: ProbeCause::Cancelled, status: None, technical: None, log_id: None }),
-        Listing::Transport { cause, technical, ms } => Err(problem(cause, None, Some(technical), Some(ms), Some(&url))),
-        Listing::Status { status, ms } => Err(problem(match status {
-            401 | 403 => if key.is_empty() { ProbeCause::KeyRequired } else { ProbeCause::KeyRejected },
-            300..=399 | 404 | 405 => ProbeCause::ModelsNotFound,
-            500..=599 => ProbeCause::ModelsServer,
-            _ => ProbeCause::ModelsInvalid,
-        }, Some(status), None, Some(ms), Some(&url))),
-        Listing::Invalid { status, header_ms, body_ms } => Err(problem(ProbeCause::ModelsInvalid, Some(status), None, Some(header_ms + body_ms), Some(&url))),
-        Listing::Models { models, header_ms, body_ms } => {
-            if models.is_empty() { return Err(problem(ProbeCause::ModelsEmpty, Some(200), None, Some(header_ms + body_ms), Some(&url))); }
-            (hooks.log)(Diag::new(DiagStep::Models, DiagLevel::Ok, "models").request("GET", &url).status(200).ms(header_ms + body_ms).detail(models.len().to_string()).key(key).proxy(route(&endpoint).label()));
-            Ok(models)
-        }
-    }
 }
 
 /// The only text « Essayer avec une phrase » ever sends: fixed and synthetic, never the person's.
@@ -742,9 +720,10 @@ pub async fn try_model(input: TryInput, limits: Limits, cancel: CancellationToke
         if !response.status().is_success() {
             let ms = elapsed_ms(started);
             if thinking_switch && (400..500).contains(&status) && !matches!(status, 401 | 403 | 404) {
-                let refusal = tokio::select! {
-                    _ = cancel.cancelled() => return failed(ProbeCause::Cancelled, None, None, None, None),
-                    refusal = response.text() => refusal.unwrap_or_default(),
+                let refusal = match bounded_body(response, &cancel).await {
+                    Body::Cancelled => return failed(ProbeCause::Cancelled, None, None, None, None),
+                    Body::Read(refusal) => String::from_utf8_lossy(&refusal).into_owned(),
+                    Body::TooLarge | Body::Failed(_) => String::new(),
                 };
                 if refusal.contains("chat_template_kwargs") { thinking_switch = false; continue; }
             }
@@ -758,15 +737,13 @@ pub async fn try_model(input: TryInput, limits: Limits, cancel: CancellationToke
         }
         break (response, started, status);
     };
-    let body = tokio::select! {
-        _ = cancel.cancelled() => return failed(ProbeCause::Cancelled, None, None, None, None),
-        body = response.bytes() => body,
-    };
+    let body = bounded_body(response, &cancel).await;
     let ms = elapsed_ms(started);
     let body = match body {
-        Ok(body) if body.len() <= MAX_BODY => body,
-        Ok(_) => return failed(ProbeCause::TryEmpty, Some(status), None, Some(ms), Some(&url)),
-        Err(error) => {
+        Body::Read(body) => body,
+        Body::Cancelled => return failed(ProbeCause::Cancelled, None, None, None, None),
+        Body::TooLarge => return failed(ProbeCause::TryEmpty, Some(status), None, Some(ms), Some(&url)),
+        Body::Failed(error) => {
             let error = error.without_url();
             return failed(if error.is_timeout() { ProbeCause::TryTimeout } else { ProbeCause::ReachNetwork }, Some(status), Some(technical(&error)), Some(ms), Some(&url));
         }
@@ -774,7 +751,7 @@ pub async fn try_model(input: TryInput, limits: Limits, cancel: CancellationToke
     match serde_json::from_slice::<Value>(&body).ok().as_ref().and_then(parse_reply) {
         Some(reply) => {
             // The reply itself goes to the interface only: the journal keeps its length.
-            (hooks.log)(Diag::new(DiagStep::Try, DiagLevel::Ok, "reply").run(&run).request("POST", &url).status(status).ms(ms).key(&key).proxy(route.label()).detail(format!("{model} · {} caractères", reply.chars().count())));
+            (hooks.log)(Diag::new(DiagStep::Try, DiagLevel::Ok, "reply").run(&run).request("POST", &url).status(status).ms(ms).key(&key).proxy(route.label()).detail(format!("{model} · {} chars", reply.chars().count())));
             TryResult { run, ok: true, reply: Some(reply), ms: Some(ms), problem: None }
         }
         None => failed(ProbeCause::TryEmpty, Some(status), None, Some(ms), Some(&url)),
@@ -849,12 +826,6 @@ mod tests {
             let redact = |text: &str| self.journal.redact(text);
             let hooks = Hooks { on_step: &on_step, log: &log, redact: &redact };
             try_model(TryInput { run: "try-1".into(), endpoint: endpoint.into(), api_key: key.into(), no_key: false, model: model.into() }, short(), CancellationToken::new(), &hooks).await
-        }
-        async fn list(&self, endpoint: &str, key: &str) -> Result<Vec<ModelInfo>, ProbeProblem> {
-            let on_step = |_: &[ProbeStep]| {};
-            let log = |diag: Diag| self.journal.add(diag).id;
-            let redact = |text: &str| self.journal.redact(text);
-            list_models(endpoint, key, short(), CancellationToken::new(), &Hooks { on_step: &on_step, log: &log, redact: &redact }).await
         }
         fn entries(&self) -> Vec<DiagEntry> { self.journal.list() }
     }
@@ -1083,15 +1054,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn the_model_list_refreshes_without_a_trace_and_says_why_it_cannot() {
+    async fn a_reply_larger_than_two_megabytes_is_never_read_whole() {
         let recorder = Recorder::new();
-        let server = serve(|_, authorization| Some(if authorization.is_some() { status(200, MODELS) } else { status(401, "{}") }));
-        let models = recorder.list(&format!("{server}/v1"), KEY).await.unwrap();
-        assert_eq!(models.iter().map(|model| model.id.as_str()).collect::<Vec<_>>(), ["gemma-4-12b", "qwen3-8b"]);
-        assert_eq!(recorder.list(&server, "").await.unwrap_err().cause, ProbeCause::KeyRequired);
-        assert_eq!(recorder.list("", "").await.unwrap_err().cause, ProbeCause::AddressEmpty);
-        assert_eq!(recorder.list(&serve(|_, _| Some(status(200, r#"{"data":[]}"#))), "").await.unwrap_err().cause, ProbeCause::ModelsEmpty);
-        assert!(recorder.traces.lock().unwrap().is_empty());
+        let big = format!(r#"{{"choices":[{{"message":{{"content":"{}"}}}}]}}"#, "a".repeat(MAX_BODY + 4096));
+        let server = serve(move |_, _| Some(status(200, &big)));
+        let done = recorder.attempt(&server, KEY, "gemma-4-12b").await;
+        assert_eq!(done.problem.map(|problem| problem.cause), Some(ProbeCause::TryEmpty));
+        // The same body as a refusal: read up to the cap, then the refusal stands as it is.
+        let refusal = "x".repeat(MAX_BODY + 4096);
+        let server = serve(move |_, _| Some(status(400, &refusal)));
+        let done = recorder.attempt(&server, KEY, "gemma-4-12b").await;
+        assert_eq!(done.problem.map(|problem| (problem.cause, problem.status)), Some((ProbeCause::TryRejected, Some(400))));
     }
 
     #[tokio::test]
@@ -1132,7 +1105,7 @@ mod tests {
     }
 
     #[test]
-    fn every_cause_has_its_code_and_its_step() {
+    fn every_cause_has_its_code() {
         let all = [
             (ProbeCause::AddressEmpty, "address.empty"), (ProbeCause::AddressMalformed, "address.malformed"), (ProbeCause::AddressScheme, "address.scheme"), (ProbeCause::AddressCredentials, "address.credentials"), (ProbeCause::AddressDns, "address.dns"),
             (ProbeCause::ReachRefused, "reach.refused"), (ProbeCause::ReachTimeout, "reach.timeout"), (ProbeCause::ReachTls, "reach.tls"), (ProbeCause::ReachCertificate, "reach.certificate"), (ProbeCause::ReachNetwork, "reach.network"),
@@ -1142,8 +1115,6 @@ mod tests {
         ];
         for (cause, code) in all {
             assert_eq!(cause.code(), code);
-            let step = serde_json::to_value(cause.step()).unwrap();
-            assert_eq!(step.as_str().unwrap(), code.split('.').next().unwrap(), "{code}");
         }
         assert_eq!(ProbeCause::Cancelled.code(), "cancelled");
         assert_eq!(ProbeCause::of_transport(Cause::Certificate), ProbeCause::ReachCertificate);

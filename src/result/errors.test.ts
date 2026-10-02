@@ -17,13 +17,13 @@ const wordCount = (text: string) => text.replace(/(\d)[\s,.](?=\d{3}\b)/g, '$1')
 
 describe('error codes', () => {
   it('lists the codes of lot 10 and those the audit added, each in one family', () => {
-    expect(errorCodes).toEqual(['unreachable', 'timeout', 'unauthorized', 'model_not_found', 'bad_endpoint', 'busy', 'length', 'stream_broken', 'paste_blocked', 'target_changed', 'not_editable', 'too_long', 'cancelled', 'server_error', 'no_selection', 'protected_field', 'keys_held', 'settings_open', 'nothing_recent', 'internal', 'read_only', 'protected_window']);
+    expect(errorCodes).toEqual(['unreachable', 'timeout', 'unauthorized', 'model_not_found', 'bad_endpoint', 'busy', 'length', 'stream_broken', 'paste_blocked', 'target_changed', 'not_editable', 'too_long', 'cancelled', 'server_error', 'no_selection', 'protected_field', 'keys_held', 'settings_open', 'nothing_recent', 'internal', 'read_only', 'protected_window', 'setup_open']);
     const families = Object.fromEntries(errorCodes.map(kind => [kind, errorFamily(kind)]));
     expect(families).toEqual({
       unreachable: 'config', bad_endpoint: 'config', unauthorized: 'config', model_not_found: 'config',
       timeout: 'transient', busy: 'transient', server_error: 'transient', stream_broken: 'transient', length: 'transient', internal: 'transient',
       paste_blocked: 'paste', target_changed: 'paste', not_editable: 'paste', keys_held: 'paste', read_only: 'paste',
-      too_long: 'content', no_selection: 'content', protected_field: 'content', settings_open: 'content', nothing_recent: 'content', protected_window: 'content',
+      too_long: 'content', no_selection: 'content', protected_field: 'content', settings_open: 'content', nothing_recent: 'content', protected_window: 'content', setup_open: 'content',
       cancelled: 'silent',
     });
   });
@@ -91,6 +91,7 @@ describe('error codes', () => {
     const text = (code: ErrorCode) => languages.map(language => translate(language, describeError(code, { source: 'capture' }).message));
     expect(text('no_selection')).toEqual(['Select some text first', 'Sélectionnez d’abord du texte']);
     expect(text('settings_open')).toEqual(['Close Settings first', 'Fermez d’abord les Réglages']);
+    expect(text('setup_open')).toEqual(['Finish the setup first', 'Terminez d’abord l’accueil']);
     expect(text('nothing_recent')).toEqual(['No recent translation', 'Aucune traduction récente']);
   });
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ArrowRight, Inbox, ShieldCheck, X } from 'lucide-react';
 import { locales, useLanguage, useT } from '../../i18n';
@@ -14,7 +14,14 @@ export function DataPage() {
   const t = useT();
   const tx = useTx();
   const language = useLanguage();
-  const { settings, persist, history, historyError, removeHistory, showToast } = useSettingsContext();
+  const { settings, persist, history, historyError, removeHistory, reloadHistory, showToast } = useSettingsContext();
+  // The window is created hidden at startup and read the history then: read again each time the
+  // page opens and each time the window comes back in front.
+  useEffect(() => {
+    reloadHistory();
+    window.addEventListener('focus', reloadHistory);
+    return () => window.removeEventListener('focus', reloadHistory);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [confirming, setConfirming] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);

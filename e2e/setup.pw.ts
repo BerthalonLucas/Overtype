@@ -78,7 +78,8 @@ test.describe('the first-run setup', () => {
     await expect(page.locator('.su-recap')).toContainText('ouvre le menu');
     await expect(page.locator('.su-recap')).toContainText('gemma-4-12B-it-qat');
     await expect(page.locator('.su-recap')).toContainText('sur llm.exemple.com');
-    expect((await saved(page)).setupDone).toBe(false);
+    // « C'est prêt » is the end: the setup is done from here, however the window is closed.
+    await expect.poll(async () => (await saved(page)).setupDone).toBe(true);
     await page.waitForTimeout(350);
     await primary(page).click();
     await expect(page).toHaveURL(/window=settings/);

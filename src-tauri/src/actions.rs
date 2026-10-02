@@ -126,6 +126,40 @@ const DEFAULTS: [(&str, &str, &str, &str, &str, &str); 5] = [
     ("shorten", "Shorten", "S", "Shorten", "FoldVertical", "You are an editor. Shorten the text to about half its length, in the same language: keep the key information, names, numbers and facts, drop repetitions and filler. Keep its tone."),
     ("email", "Write email", "E", "Email", "Mail", "You are an assistant who writes emails. Turn the text (notes, a draft or a request) into a clear, courteous email in the same language, with a greeting, a short body and a closing. Do not add a subject line. Do not invent facts, names, dates or commitments that are not in the text."),
 ];
+/// The default actions in French: id, name, tile label (the lab's words, Lucas 30/09). Their
+/// letters, icons and instructions are the same in both languages.
+const DEFAULTS_FR: [(&str, &str, &str); 5] = [
+    ("correct", "Corriger", "Corriger"),
+    ("translate", "Traduire", "Traduire"),
+    ("professionalize", "Professionnel", "Pro"),
+    ("shorten", "Raccourcir", "Raccourcir"),
+    ("email", "E-mail", "E-mail"),
+];
+/// The name and the tile label of a default action in `language`.
+fn default_names(id: &str, language: Language) -> Option<(&'static str, &'static str)> {
+    match language {
+        Language::En => DEFAULTS.iter().find(|(default, ..)| *default == id).map(|(_, name, _, short, ..)| (*name, *short)),
+        Language::Fr => DEFAULTS_FR.iter().find(|(default, ..)| *default == id).map(|(_, name, short)| (*name, *short)),
+    }
+}
+/// The default actions nobody renamed take the names of the interface's language (0.6: a French
+/// interface showed « Fix / Translate / Shorten » beside « Consigne », and the demo played a
+/// French mail with a « Fix » tile). An action counts as untouched while its name AND its tile
+/// label are exactly the shipped ones of either language; anything the user typed stays. The
+/// letters and the instructions never change. Answers whether anything changed.
+pub fn localize_defaults(actions: &mut [ActionDefinition], language: Language) -> bool {
+    let mut changed = false;
+    for action in actions.iter_mut() {
+        let Some((name, short)) = default_names(&action.id, language) else { continue };
+        let shipped = [Language::En, Language::Fr].iter().filter_map(|known| default_names(&action.id, *known))
+            .any(|(known_name, known_short)| action.name == known_name && action.short_name.as_deref() == Some(known_short));
+        if !shipped || (action.name == name && action.short_name.as_deref() == Some(short)) { continue; }
+        action.name = name.to_string();
+        action.short_name = Some(short.to_string());
+        changed = true;
+    }
+    changed
+}
 /// The action a fresh install runs by default, and the shortcut of its menu.
 pub const DEFAULT_ACTION_ID: &str = "correct";
 pub const MENU_SHORTCUT: &str = "Ctrl+Alt+Space";
@@ -308,6 +342,24 @@ pub fn altgr_key(shortcut: &Shortcut) -> Option<(u32, bool)> {
         };
     Some((vk, shortcut.mods.contains(Modifiers::SHIFT)))
 }
+/// The virtual key of a shortcut's own key (the keys the recorder accepts) and its modifiers
+/// (Ctrl 1, Alt 2, Shift 4), as the keyboard hook compares them (`host::set_hotkeys`). None for
+/// a key outside that list: such a chord is then simply not recognised by the hook.
+pub fn hotkey_vk(shortcut: &Shortcut) -> Option<(u32, u32)> {
+    let mods = u32::from(shortcut.mods.contains(Modifiers::CONTROL)) | u32::from(shortcut.mods.contains(Modifiers::ALT)) << 1 | u32::from(shortcut.mods.contains(Modifiers::SHIFT)) << 2;
+    let plain = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), shortcut.key);
+    if let Some((vk, _)) = altgr_key(&plain) { return Some((vk, mods)); }
+    let functions = [Code::F1, Code::F2, Code::F3, Code::F4, Code::F5, Code::F6, Code::F7, Code::F8, Code::F9, Code::F10, Code::F11, Code::F12,
+        Code::F13, Code::F14, Code::F15, Code::F16, Code::F17, Code::F18, Code::F19, Code::F20, Code::F21, Code::F22, Code::F23, Code::F24];
+    if let Some(n) = functions.iter().position(|c| *c == shortcut.key) { return Some((0x70 + n as u32, mods)); }
+    let vk = match shortcut.key {
+        Code::Enter => 0x0D, Code::Tab => 0x09, Code::Backspace => 0x08, Code::Delete => 0x2E, Code::Insert => 0x2D,
+        Code::Home => 0x24, Code::End => 0x23, Code::PageUp => 0x21, Code::PageDown => 0x22,
+        Code::ArrowLeft => 0x25, Code::ArrowUp => 0x26, Code::ArrowRight => 0x27, Code::ArrowDown => 0x28,
+        _ => return None,
+    };
+    Some((vk, mods))
+}
 pub fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
     if value.len() > 80 { return Err("Le raccourci est trop long.".into()); }
     let parts = value.split('+').map(|v| v.trim().to_ascii_lowercase()).collect::<Vec<_>>();
@@ -361,6 +413,42 @@ pub fn validate(settings: &Settings) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn the_untouched_default_actions_follow_the_interface_language_and_nothing_else_moves() {
+        let mut actions = defaults();
+        assert!(!localize_defaults(&mut actions, Language::En), "a fresh install is already in English");
+        assert!(localize_defaults(&mut actions, Language::Fr));
+        let names: Vec<(&str, Option<&str>)> = actions.iter().map(|action| (action.name.as_str(), action.short_name.as_deref())).collect();
+        assert_eq!(names, [("Corriger", Some("Corriger")), ("Traduire", Some("Traduire")), ("Professionnel", Some("Pro")), ("Raccourcir", Some("Raccourcir")), ("E-mail", Some("E-mail"))]);
+        // Letters, icons, ids and instructions are the same in both languages.
+        for (action, fresh) in actions.iter().zip(defaults()) {
+            assert_eq!((&action.id, &action.key, &action.icon, &action.prompt_template), (&fresh.id, &fresh.key, &fresh.icon, &fresh.prompt_template));
+        }
+        assert!(!localize_defaults(&mut actions, Language::Fr), "idempotent");
+        // What the user renamed stays, in either field; a custom action is never touched.
+        actions[0].name = "Relire".into();
+        actions[1].short_name = Some("Trad".into());
+        actions.push(ActionDefinition { id: "mine".into(), name: "Fix grammar".into(), prompt_template: "x".into(), key: None, short_name: Some("Fix".into()), icon: None });
+        assert!(localize_defaults(&mut actions, Language::En));
+        assert_eq!(actions[0].name, "Relire");
+        assert_eq!((actions[1].name.as_str(), actions[1].short_name.as_deref()), ("Traduire", Some("Trad")));
+        assert_eq!((actions[2].name.as_str(), actions[2].short_name.as_deref()), ("Make professional", Some("Pro")));
+        assert_eq!(actions[5].name, "Fix grammar");
+        // An action of 0.4 kept under its French name without a tile label is the user's.
+        let mut kept = vec![ActionDefinition { id: "correct".into(), name: "Corriger".into(), prompt_template: "x".into(), key: None, short_name: None, icon: None }];
+        assert!(!localize_defaults(&mut kept, Language::En));
+    }
+    #[test]
+    fn a_shortcut_gives_the_hook_its_virtual_key_and_modifiers() {
+        let of = |value: &str| hotkey_vk(&parse_shortcut(value).unwrap());
+        assert_eq!(of("Ctrl+Alt+Space"), Some((0x20, 3)));
+        assert_eq!(of("Ctrl+Alt+Shift+T"), Some((0x54, 7)));
+        assert_eq!(of("Alt+Shift+Space"), Some((0x20, 6)));
+        assert_eq!(of("Ctrl+F9"), Some((0x78, 1)));
+        assert_eq!(of("Ctrl+Alt+Home"), Some((0x24, 3)));
+        assert_eq!(of("Ctrl+5"), Some((0x35, 1)));
+        assert_eq!(of("Alt+Enter"), Some((0x0D, 2)));
+    }
     #[test]
     fn instructions_have_no_variables_and_only_a_length_rule() {
         for action in defaults().into_iter().chain(legacy_defaults()) { assert!(validate_template(&action.prompt_template).is_ok()); assert!(action.prompt_template.ends_with(OUTPUT_RULES)); }

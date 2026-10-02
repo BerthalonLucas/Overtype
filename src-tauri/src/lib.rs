@@ -65,8 +65,18 @@ struct MenuPress {
     capture_id: Option<String>,
     /// A double press that arrived while the capture was still being taken.
     repeat: bool,
+    /// When the second press came (the first repeat), and how many presses repeated this one.
+    repeat_at: Option<std::time::Instant>,
+    repeats: u32,
 }
 const REPEAT_WINDOW: std::time::Duration = std::time::Duration::from_millis(400);
+/// A double press runs its action only once this long passed without a third press (0.6,
+/// Lucas 01/10 and the recette of 02/10: the shortcut hammered four or twenty times counted as
+/// a double press, ran the default action and rewrote the text without any choice). Two
+/// presses, then nothing: the action. Three or more in a row: the menu, and nothing else. As
+/// long as the window of the double press itself: a train of presses at any steady pace never
+/// runs anything (under 400 ms apart the next press cancels; over, it is not a double press).
+const REPEAT_HOLD: std::time::Duration = REPEAT_WINDOW;
 fn is_repeat(previous: Option<&MenuPress>, binding_id: &str, at: std::time::Instant) -> bool {
     previous.is_some_and(|press| press.binding_id == binding_id && at >= press.at && at.duration_since(press.at) < REPEAT_WINDOW)
 }
@@ -75,6 +85,7 @@ fn is_repeat(previous: Option<&MenuPress>, binding_id: &str, at: std::time::Inst
 /// already chosen or closed).
 #[derive(Debug, PartialEq, Eq)]
 enum Repeat {
+    /// The second press: its action runs after `REPEAT_HOLD`, unless another press follows.
     Emit(String),
     Swallow,
 }
@@ -328,6 +339,10 @@ impl Inner {
     fn in_burst(&self, at: std::time::Instant) -> bool {
         self.visible && self.pending_dismiss.is_none() && self.guard_until.is_some_and(|until| at < until)
     }
+    /// The pill on screen offers Undo for the replacement it stands under.
+    fn undo_offered(&self) -> bool {
+        self.visible && self.pending_dismiss.is_none() && self.applied.as_ref().is_some_and(|applied| applied.undo)
+    }
     /// What the watchdog watches now; None when nothing is on screen (or it is leaving).
     fn watched(&self) -> Option<Watched> {
         if !self.visible || self.pending_dismiss.is_some() { return None; }
@@ -394,6 +409,7 @@ impl Inner {
         {
             if let Some(a) = self.active.take() {
                 a.cancel.cancel();
+                host::close_work_grace();
             }
         }
     }
@@ -424,12 +440,24 @@ impl Inner {
     fn repeat_press(&mut self, binding_id: &str, at: std::time::Instant) -> Option<Repeat> {
         if !is_repeat(self.menu_press.as_ref(), binding_id, at) { return None; }
         let press = self.menu_press.as_mut()?;
+        press.repeats += 1;
+        // A third press (or more): a hand hammering the shortcut, never a double press.
+        if press.repeats > 1 { return Some(Repeat::Swallow); }
+        press.repeat_at = Some(at);
         let Some(capture_id) = press.capture_id.clone() else {
             press.repeat = true;
             return Some(Repeat::Swallow);
         };
         let waiting = self.visible && self.pending_dismiss.is_none() && self.menu.as_ref().is_some_and(|menu| menu.capture_id == capture_id && !menu.chosen);
         Some(if waiting { Repeat::Emit(capture_id) } else { Repeat::Swallow })
+    }
+    /// Whether the double press of the menu `capture_id` may run its action now, `REPEAT_HOLD`
+    /// after its second press: that press was the only repeat, no other press of any shortcut
+    /// followed it, and the menu still waits.
+    fn repeat_stands(&self, capture_id: &str) -> bool {
+        let Some(press) = self.menu_press.as_ref().filter(|press| press.capture_id.as_deref() == Some(capture_id)) else { return false };
+        press.repeats == 1 && press.repeat_at.is_some() && self.last_press == press.repeat_at
+            && self.visible && self.pending_dismiss.is_none() && self.menu_waits(capture_id)
     }
     /// The press at `at` got its capture stored (Some) or none (None): returns the capture
     /// to repeat when a double press arrived meanwhile.
@@ -440,7 +468,7 @@ impl Inner {
             return None;
         };
         press.capture_id = Some(capture_id.to_string());
-        press.repeat.then(|| capture_id.to_string())
+        (press.repeat && press.repeats == 1).then(|| capture_id.to_string())
     }
     /// A menu key the hook took from the source: for the menu that waits, or held while a menu
     /// capture is still being taken (review n°4 and n°7: its id is not known yet).
@@ -487,6 +515,8 @@ impl Inner {
         capture.public.can_replace = false;
         capture.target = None;
         capture.invalidated = true;
+        // Nothing left to protect: the user went elsewhere in his text, his keys are his.
+        host::close_work_grace();
         if let Some(menu) = self.menu.as_mut().filter(|m| m.capture_id == capture_id && !m.chosen) {
             menu.invalidated = true;
             return Invalidated::CloseMenu;
@@ -610,6 +640,9 @@ fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingS
     app.global_shortcut()
         .on_shortcut(shortcut, move |app, _, event| {
             if event.state == ShortcutState::Pressed {
+                // First of all, while the chord is still held: Alt released alone would open
+                // the menu bar of the application in front (see `host::mask_alt_release`).
+                host::mask_alt_release();
                 // Dated here, before the capture's own delay: the double press (lot 4)
                 // compares the presses, not the ends of their captures.
                 let pressed_at = std::time::Instant::now();
@@ -633,16 +666,35 @@ fn save_settings(
     settings: Settings,
 ) -> Result<(), String> {
     let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
-    // What is saved is clean: addresses normalised, no key for a server without one.
-    let mut settings = settings;
-    settings::sanitize(&mut settings);
-    settings::validate(&settings)?;
+    apply_settings(&app, &state, settings)
+}
+/// One field of the settings as they are now, changed under the save lock: nothing a window
+/// saved meanwhile is lost (a window sends its whole copy; Rust changes one thing). `change`
+/// answers false when there is nothing to change.
+fn change_settings(app: &AppHandle, state: &AppState, change: impl FnOnce(&mut Settings) -> bool) -> Result<(), String> {
+    let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
+    let mut settings = state.inner.lock().map_err(|_| lock_error())?.settings.clone();
+    if !change(&mut settings) { return Ok(()); }
+    apply_settings(app, state, settings)
+}
+/// Saves `settings` (the save lock is held by the caller): validated, its shortcuts registered,
+/// written, then told to every window.
+fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Result<(), String> {
+    let app = app.clone();
     let old = state
         .inner
         .lock()
         .map_err(|_| lock_error())?
         .settings
         .clone();
+    // What is saved is clean: addresses normalised, no key for a server without one, the
+    // untouched default actions named in the interface's language.
+    let mut settings = settings;
+    // The setup, once finished, stays finished: a window that loaded the settings before
+    // « C'est prêt » sends its whole copy, and must not bring the first run back.
+    if old.setup_done { settings.setup_done = true; }
+    settings::sanitize(&mut settings);
+    settings::validate(&settings)?;
     let old_keys = old.shortcut_bindings.iter().filter(|b| b.enabled).map(|b| actions::parse_shortcut(&b.shortcut)).collect::<Result<Vec<_>, _>>()?;
     let new_keys = settings.shortcut_bindings.iter().filter(|b| b.enabled).map(|b| actions::parse_shortcut(&b.shortcut)).collect::<Result<Vec<_>, _>>()?;
     // A chord Windows refused at startup, still wanted: tried again (the other application
@@ -682,6 +734,8 @@ fn save_settings(
     }
 
     state.inner.lock().map_err(|_| lock_error())?.settings = settings.clone();
+    remember_glass(settings.glass_material);
+    remember_hotkeys(&settings);
     if settings.language != old.language { tray_text::apply(&app, settings.language, state.simulated); }
     for key in old_keys { if !new_keys.iter().any(|new| new.id() == key.id()) { let _ = app.global_shortcut().unregister(key); } }
     {
@@ -713,14 +767,15 @@ fn save_settings(
 fn reset_settings(window: tauri::WebviewWindow, app: AppHandle, state: State<'_, AppState>) -> Result<Settings, String> {
     let current = state.inner.lock().map_err(|_| lock_error())?.settings.clone();
     let fresh = settings::reset(&current);
-    let answer = match save_settings(app.clone(), state, fresh.clone()) {
-        Ok(()) => fresh,
+    match save_settings(app.clone(), state, fresh.clone()) {
+        Ok(()) => {}
         Err(error) => {
             let kept = settings::keep_menu_chord(&fresh, &current).ok_or(error)?;
-            save_settings(app.clone(), app.state::<AppState>(), kept.clone())?;
-            kept
+            save_settings(app.clone(), app.state::<AppState>(), kept)?;
         }
     };
+    // What is now saved (the save cleans it: the default actions in the interface's language).
+    let answer = app.state::<AppState>().inner.lock().map_err(|_| lock_error())?.settings.clone();
     if let Ok(mut memory) = app.state::<AppState>().menu_memory.lock() {
         if memory.clear() { let _ = memory.save(); }
     }
@@ -842,7 +897,11 @@ fn show_notice(app: &AppHandle, message: &str, code: Option<ErrorKind>) {
     // notice of the next press (« Protected field » never showed over a « Read-only text »
     // pill). It leaves, and the notice shows once it has left. A dismissal already under way
     // is waited for too: its end would otherwise hide the notice with the window.
-    let replaces = state.inner.lock().is_ok_and(|i| i.watched() == Some(Watched::Pill));
+    let (replaces, undo_offered) = state.inner.lock().map(|i| (i.watched() == Some(Watched::Pill), i.undo_offered())).unwrap_or((false, false));
+    // The pill that offers Undo keeps its place and its time (02/10: one more press without a
+    // selection replaced « Sélection remplacée · Annuler » by « Sélectionnez d'abord du
+    // texte », and the Undo was lost before its time). The journal still says the press.
+    if undo_offered { return; }
     if replaces { let _ = dismiss(app, &state); }
     let patience = std::time::Instant::now() + std::time::Duration::from_millis(900);
     while state.inner.lock().is_ok_and(|i| i.pending_dismiss.is_some()) && std::time::Instant::now() < patience {
@@ -987,7 +1046,10 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
         // (the demo capture of the probe met it): only the shown one refuses a capture.
         // Nothing of another application is selected then: nothing to act on. The setup and
         // its demo refuse the same way (0.6): a shortcut never opens anything over them.
-        if window.is_visible().unwrap_or(false) && host::belongs_to(&window, host::foreground()) { return Err(AppError::new(ErrorKind::SettingsOpen, "Fermez les réglages avant d’utiliser un raccourci.")); }
+        if window.is_visible().unwrap_or(false) && host::belongs_to(&window, host::foreground()) {
+            return Err(if label == "settings" { AppError::new(ErrorKind::SettingsOpen, "Fermez les réglages avant d’utiliser un raccourci.") }
+                else { AppError::new(ErrorKind::SetupOpen, "Terminez d’abord l’accueil.") });
+        }
     }
     let started = std::time::Instant::now();
     let opening = {
@@ -1013,7 +1075,7 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
                 None => Err(Press::Ignored("capturing")),
                 Some(flight) => match binding {
                     Some(binding) if menu => {
-                        i.menu_press = Some(MenuPress { binding_id: binding.id.clone(), at, capture_id: None, repeat: false });
+                        i.menu_press = Some(MenuPress { binding_id: binding.id.clone(), at, capture_id: None, repeat: false, repeat_at: None, repeats: 0 });
                         Ok((Opening::Menu(Box::new(i.settings.clone())), Some(at), flight))
                     }
                     _ => Ok((Opening::Direct(Execution::snapshot(&i.settings, binding.as_ref())?), None, flight)),
@@ -1024,8 +1086,7 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
     let (opening, pressed_at, flight) = match opening {
         Ok(opening) => opening,
         Err(Press::Repeat(Repeat::Emit(capture_id))) => {
-            let _ = app.emit_to("overlay", "menu-repeat", MenuRepeatEvent { capture_id });
-            trace_press(&app, Pressed::Repeat);
+            hold_repeat(&app, capture_id);
             return Ok(None);
         }
         Err(Press::Repeat(Repeat::Swallow)) => return Ok(None),
@@ -1077,9 +1138,7 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
     if let Some(at) = pressed_at {
         let stored = result.as_ref().ok().and_then(|capture| capture.as_ref()).map(|capture| capture.id.clone());
         let repeat = state.inner.lock().map_err(|_| AppError::internal(lock_error()))?.settle_press(at, stored.as_deref());
-        if let Some(capture_id) = repeat {
-            let _ = app.emit_to("overlay", "menu-repeat", MenuRepeatEvent { capture_id });
-        }
+        if let Some(capture_id) = repeat { hold_repeat(&app, capture_id); }
     }
     // The journal (0.6): what each press did, as states only (never a text, never a title).
     let ms = started.elapsed().as_millis() as u64;
@@ -1089,6 +1148,24 @@ fn capture_with_binding(app: AppHandle, state: &AppState, shortcut: Option<(u32,
         Err(error) => Pressed::Refused { kind: error.kind, reason: error.reason, ms },
     });
     result
+}
+/// The double press of the menu `capture_id` waits `REPEAT_HOLD` from its second press, then
+/// runs its action (`menu-repeat`) if nothing was pressed meanwhile: a burst opens the menu and
+/// runs nothing.
+fn hold_repeat(app: &AppHandle, capture_id: String) {
+    let app = app.clone();
+    let since = app.state::<AppState>().inner.lock().ok().and_then(|i| i.menu_press.as_ref().and_then(|press| press.repeat_at));
+    let wait = since.map_or(REPEAT_HOLD, |at| (at + REPEAT_HOLD).saturating_duration_since(std::time::Instant::now()));
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        let stands = app.state::<AppState>().inner.lock().is_ok_and(|i| i.repeat_stands(&capture_id));
+        if stands {
+            let _ = app.emit_to("overlay", "menu-repeat", MenuRepeatEvent { capture_id });
+            trace_press(&app, Pressed::Repeat);
+        } else {
+            trace_press(&app, Pressed::Ignored("burst"));
+        }
+    });
 }
 /// A press that opens nothing: the double press of lot 4, or one more press of a gesture
 /// already under way.
@@ -1282,6 +1359,7 @@ fn translate(
         let instruction = run.action.prompt_template.clone();
         let execution_info = run.info.clone();
         let halo_scene = halo_scene(&i.settings, captured);
+        let captured_replaceable = captured.public.can_replace && !captured.invalidated && run.info.output_mode == OutputMode::Replace;
         i.cancel(None);
         i.execution.as_mut().expect("validated execution").begin(&request.id);
         i.completed = None;
@@ -1291,6 +1369,9 @@ fn translate(
             id: request.id.clone(),
             cancel: cancel.clone(),
         });
+        // While it works, a key typed by accident never writes over the selection (only a
+        // capture that can still be replaced has one to protect).
+        if captured_replaceable { host::open_work_grace(i.source_window); }
         (
             profile,
             instruction,
@@ -1398,11 +1479,18 @@ fn translate(
             return;
         }
         i.touch();
+        // The request ended: the keys of the source are the user's again (our own paste is
+        // never taken by the hook). After an error, a hand still hammering gets the short
+        // grace of a choice, so its keys do not land on the selection the error left there.
+        host::close_work_grace();
+        if result.is_err() { host::open_choice_grace(i.source_window); }
         if !demo {
             let mut line = match &result {
                 Ok(_) => diagnostics::Diag::new(diagnostics::DiagStep::Request, diagnostics::DiagLevel::Ok, "done").status(200),
                 Err(error) => {
-                    let mut line = diagnostics::Diag::new(diagnostics::DiagStep::Request, diagnostics::DiagLevel::Error, error_code(error.kind)).cause(error.message.clone());
+                    // The line's code says what failed; its cause, which check (a fixed word).
+                    let mut line = diagnostics::Diag::new(diagnostics::DiagStep::Request, diagnostics::DiagLevel::Error, error_code(error.kind));
+                    if !error.reason.is_empty() { line = line.cause(error.reason); }
                     line.status = status_in(&error.message);
                     line
                 }
@@ -1482,7 +1570,9 @@ fn halo_scene(settings: &Settings, captured: &StoredCapture) -> Option<halo::Sce
         ground: captured.levels.ground,
     })
 }
-#[tauri::command]
+// Off the main thread (`async`), as the two dismissals below: what the user does to get out
+// (Escape, ✕, a click on the working pill) never waits on the main thread for the state lock.
+#[tauri::command(async)]
 fn cancel_translation(app: AppHandle, state: State<'_, AppState>, request_id: String) -> Result<(), String> {
     let mut i = state.inner.lock().map_err(|_| lock_error())?;
     let working = i.current(&request_id);
@@ -1874,6 +1964,7 @@ fn force_close(app: &AppHandle, why: &'static str) {
         if CAPTURE_STARTED.load(std::sync::atomic::Ordering::Acquire) == 0 { host::set_menu_open(false, 0, 0); }
         host::disarm_undo_watch();
         host::close_choice_grace();
+        host::close_work_grace();
         host::hide_handle(overlay);
     };
     silence();
@@ -1933,7 +2024,7 @@ fn watch_overlay(app: AppHandle) {
                     let verdict = watchdog_verdict(&i, now, near, shown, &mut closing, &mut orphan);
                     if verdict == Some(Verdict::TimeOut) {
                         // Cancelled here, under the same lock: the request can no longer commit.
-                        timed_out = i.active.take().map(|active| { active.cancel.cancel(); active.id });
+                        timed_out = i.active.take().map(|active| { active.cancel.cancel(); host::close_work_grace(); active.id });
                         i.touch();
                     }
                     verdict
@@ -1963,7 +2054,7 @@ fn watch_overlay(app: AppHandle) {
     });
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn complete_overlay_dismiss(app: AppHandle, state: State<'_, AppState>, capture_id: String) -> Result<(), String> {
     let generation = {
         let i = state.inner.lock().map_err(|_| lock_error())?;
@@ -1973,7 +2064,7 @@ fn complete_overlay_dismiss(app: AppHandle, state: State<'_, AppState>, capture_
     };
     schedule_finish_dismiss(app, capture_id, generation)
 }
-#[tauri::command]
+#[tauri::command(async)]
 fn dismiss_overlay(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     dismiss(&app, &state)
 }
@@ -2008,6 +2099,7 @@ fn show_settings(app: &AppHandle, field: Option<String>, page: Option<String>) -
     let w = app
         .get_webview_window("settings")
         .ok_or_else(|| "Réglages indisponibles.".to_string())?;
+    leave_bubble(app);
     let _ = w.unminimize();
     w.show()
         .and_then(|_| w.set_focus())
@@ -2025,6 +2117,22 @@ fn open_settings(app: AppHandle, field: Option<String>, page: Option<String>) ->
     show_settings(&app, field, page)
 }
 
+/// One of our windows comes in front (the Settings, the setup): whatever bubble is on screen
+/// leaves (02/10: an error pill stayed over the title of the Settings page), and a notice with
+/// it. Nothing is pasted, the request is cancelled.
+fn leave_bubble(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let (shown, notice) = state.inner.lock().map(|mut i| {
+        let notice = !i.visible && i.pending_dismiss.is_none();
+        if notice { i.notice_generation = i.notice_generation.wrapping_add(1); }
+        (i.visible, notice)
+    }).unwrap_or((false, false));
+    if shown { let _ = dismiss(app, &state); }
+    else if notice && host::handle_visible(host::overlay_handle()) {
+        host::hide_handle(host::overlay_handle());
+        backdrop::hide(app, "overlay");
+    }
+}
 /// What a second launch opens: the setup while it is not finished, the Settings afterwards.
 fn open_front_door(app: &AppHandle) {
     let done = app.state::<AppState>().inner.lock().map(|i| i.settings.setup_done).unwrap_or(true);
@@ -2080,6 +2188,7 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
         let _ = demo.set_focus();
         return Ok(());
     }
+    leave_bubble(app);
     if let Some(window) = app.get_webview_window("setup") {
         let _ = window.unminimize();
         return window.show().and_then(|_| window.set_focus()).map_err(|_| "Ouverture de l’accueil impossible.".to_string());
@@ -2139,14 +2248,23 @@ async fn open_setup(app: AppHandle, replay: Option<bool>) -> Result<(), String> 
 #[tauri::command]
 async fn finish_setup(app: AppHandle, window: tauri::WebviewWindow, open_settings: bool) -> Result<(), String> {
     if window.label() != "setup" { return Err("Fenêtre inattendue.".into()); }
-    let mut settings = app.state::<AppState>().inner.lock().map_err(|_| lock_error())?.settings.clone();
-    if !settings.setup_done {
-        settings.setup_done = true;
-        save_settings(app.clone(), app.state::<AppState>(), settings)?;
-    }
+    mark_setup_done(&app)?;
     if open_settings { let _ = show_settings(&app, None, None); }
     let _ = window.destroy();
     Ok(())
+}
+/// `setupDone` becomes true on the settings as they are now, under the save lock (the setup
+/// page may be saving an answer at the same moment: neither write loses the other).
+fn mark_setup_done(app: &AppHandle) -> Result<(), String> {
+    change_settings(app, &app.state::<AppState>(), |settings| !std::mem::replace(&mut settings.setup_done, true))
+}
+/// The setup reached « C'est prêt » (the demo played or was skipped): it is done from then on,
+/// however its window is closed (its cross used to bring the whole setup back at the next
+/// launch, the server already saved).
+#[tauri::command]
+async fn complete_setup(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() != "setup" { return Err("Fenêtre inattendue.".into()); }
+    mark_setup_done(&app)
 }
 
 /// The demo of the setup (docs/PLAN-0.6.md §3): a transparent window of its own, in which the
@@ -2685,23 +2803,6 @@ fn cancel_probe(window: tauri::WebviewWindow, state: State<'_, AppState>, run: S
     cancel_run(&mut *state.probes.lock().map_err(|_| lock_error())?, &run);
     Ok(())
 }
-/// The models of a saved server (with its saved key), without a trace: the picker refreshes
-/// its list when it opens.
-#[tauri::command]
-async fn list_models(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, server_id: String) -> Result<Vec<probe::ModelInfo>, probe::ProbeProblem> {
-    let refused = |technical: &str| probe::ProbeProblem { step: probe::StepId::Models, cause: probe::ProbeCause::Cancelled, status: None, technical: Some(technical.to_string()), log_id: None };
-    connection_window(&window).map_err(|message| refused(&message))?;
-    let server = state.inner.lock().map_err(|_| refused(&lock_error()))?.settings.server(&server_id).map_err(|error| refused(&error.message))?.clone();
-    let key = if server.no_key { String::new() } else { server.api_key.clone() };
-    let journal = state.diagnostics.clone();
-    journal.remember_secret(&key);
-    let on_step = |_: &[probe::ProbeStep]| {};
-    let log_app = app.clone();
-    let log = move |diag: diagnostics::Diag| record(&log_app, diag).id;
-    let redact = move |text: &str| journal.redact(text);
-    let hooks = probe::Hooks { on_step: &on_step, log: &log, redact: &redact };
-    probe::list_models(&server.endpoint, &key, probe::Limits::default(), CancellationToken::new(), &hooks).await
-}
 /// « Essayer avec une phrase »: one fixed, synthetic sentence sent to the model being chosen
 /// (what is typed, not what is saved). The reply goes back to the window and nowhere else.
 #[tauri::command]
@@ -2880,13 +2981,16 @@ fn finish_position(
 /// Answers whether the real glass shows: `false` (painted glass asked, Windows unable, a native
 /// error) tells the page to keep its painted material. Only the windows that float glass.
 #[tauri::command]
-fn glass_frame(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, AppState>, seq: u64, scale: f64, shapes: Vec<backdrop::Shape>) -> bool {
+fn glass_frame(app: AppHandle, window: tauri::WebviewWindow, seq: u64, scale: f64, shapes: Vec<backdrop::Shape>) -> bool {
     let label: &'static str = match window.label() {
         "overlay" => "overlay",
         "setup" => "setup",
         _ => return false,
     };
-    let setting = state.inner.lock().map(|i| i.settings.glass_material).unwrap_or(GlassMaterial::Painted);
+    // Never the state lock here: this runs on the main thread, on every frame of a surface
+    // and four times a second while one shows, and a paste may hold that lock inside an
+    // application that hangs (the emergency exit needs the main thread to hide the bubble).
+    let setting = glass_setting();
     let hwnd = host::handle(&window);
     if hwnd == 0 { return false; }
     let (real, failure) = backdrop::frame(label, hwnd, seq, &shapes, scale, setting);
@@ -2896,6 +3000,21 @@ fn glass_frame(app: AppHandle, window: tauri::WebviewWindow, state: State<'_, Ap
         record(&app, diagnostics::Diag::new(diagnostics::DiagStep::App, diagnostics::DiagLevel::Info, "glass.unavailable").cause(cause));
     }
     real
+}
+/// The material setting as `glass_frame` reads it, kept beside the settings (startup, every
+/// save): one atomic, no lock.
+static GLASS_SETTING: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+fn remember_glass(setting: GlassMaterial) {
+    GLASS_SETTING.store(if setting == GlassMaterial::Painted { 1 } else { 0 }, std::sync::atomic::Ordering::Release);
+}
+fn glass_setting() -> GlassMaterial {
+    if GLASS_SETTING.load(std::sync::atomic::Ordering::Acquire) == 1 { GlassMaterial::Painted } else { GlassMaterial::Glass }
+}
+/// The enabled chords, for the keyboard hook (`host::set_hotkeys`): kept beside the settings.
+fn remember_hotkeys(settings: &Settings) {
+    let chords: Vec<(u32, u32)> = settings.shortcut_bindings.iter().filter(|binding| binding.enabled)
+        .filter_map(|binding| actions::parse_shortcut(&binding.shortcut).ok()).filter_map(|key| actions::hotkey_vk(&key)).collect();
+    host::set_hotkeys(&chords);
 }
 fn reset_tray_tooltip(app: &AppHandle, simulated: bool) {
     let Some(language) = app.state::<AppState>().inner.lock().ok().map(|i| i.settings.language) else { return };
@@ -3090,7 +3209,10 @@ pub fn run() {
             let store = SettingsStore::new(&root);
             let mut settings = store.load()?;
             // A fresh install speaks the language of Windows (French, or English otherwise).
-            if !store.exists() { settings.language = host::windows_language(); }
+            if !store.exists() {
+                settings.language = host::windows_language();
+                actions::localize_defaults(&mut settings.actions, settings.language);
+            }
             let language = settings.language;
             let setup_done = settings.setup_done;
             // The journal's files: beside the data in a test run, in the local (non roaming)
@@ -3110,6 +3232,8 @@ pub fn run() {
             let demo_clipboard = args.iter().any(|a| a == "--demo-clipboard");
             let demo_long = args.iter().any(|a| a == "--demo-long");
             let shortcuts = settings.shortcut_bindings.iter().filter(|b| b.enabled).map(|b| b.shortcut.clone()).collect::<Vec<_>>();
+            remember_glass(settings.glass_material);
+            remember_hotkeys(&settings);
             let simulated = demo || args.iter().any(|a| a == "--simulate-inference");
             app.manage(AppState {
                 inner: Arc::new(Mutex::new(Inner::new(settings))),
@@ -3283,12 +3407,12 @@ pub fn run() {
             start_drag,
             probe_connection,
             cancel_probe,
-            list_models,
             try_model,
             get_diagnostics,
             clear_diagnostics,
             open_setup,
             finish_setup,
+            complete_setup,
             open_demo,
             close_demo,
             get_history,
@@ -3329,22 +3453,25 @@ mod tests {
     fn a_second_press_of_the_menu_within_400_ms_repeats_and_never_captures() {
         let t0 = std::time::Instant::now();
         let ms = |n: u64| t0 + std::time::Duration::from_millis(n);
-        let press = |at| MenuPress { binding_id: "menu".into(), at, capture_id: None, repeat: false };
+        let press = |at| MenuPress { binding_id: "menu".into(), at, capture_id: None, repeat: false, repeat_at: None, repeats: 0 };
         let mut i = Inner::new(Settings::default());
         assert_eq!(i.repeat_press("menu", t0), None, "a first press captures");
         i.menu_press = Some(press(t0));
-        // The first capture is still being taken: swallowed, then emitted once it is stored.
+        // The first capture is still being taken: swallowed, then held once it is stored.
         assert_eq!(i.repeat_press("menu", ms(150)), Some(Repeat::Swallow));
         menu_capture(&mut i, "first");
         assert_eq!(i.settle_press(t0, Some("first")).as_deref(), Some("first"));
-        // Stored and waiting: emitted at once, up to 399 ms after the first press.
+        // Stored and waiting: the second press repeats, up to 399 ms after the first press.
+        i.menu_press = Some(MenuPress { capture_id: Some("first".into()), ..press(t0) });
         assert_eq!(i.repeat_press("menu", ms(399)), Some(Repeat::Emit("first".into())));
         assert_eq!(i.repeat_press("menu", ms(400)), None, "400 ms later it is a new press");
         assert_eq!(i.repeat_press("other", ms(100)), None, "another binding is a new press");
         // Chosen already, or closing: nothing, and still no new capture.
+        i.menu_press = Some(MenuPress { capture_id: Some("first".into()), ..press(t0) });
         i.menu.as_mut().unwrap().chosen = true;
         assert_eq!(i.repeat_press("menu", ms(200)), Some(Repeat::Swallow));
         i.menu.as_mut().unwrap().chosen = false;
+        i.menu_press = Some(MenuPress { capture_id: Some("first".into()), ..press(t0) });
         i.pending_dismiss = Some(("first".into(), 1));
         assert_eq!(i.repeat_press("menu", ms(200)), Some(Repeat::Swallow));
         // A press that captured nothing leaves no trace; a stale settle changes nothing.
@@ -3357,6 +3484,78 @@ mod tests {
         // Without a double press, a stored capture repeats nothing.
         i.menu_press = Some(press(ms(2000)));
         assert_eq!(i.settle_press(ms(2000), Some("second")), None);
+    }
+    #[test]
+    fn a_double_press_runs_its_action_only_when_no_third_press_follows() {
+        let t0 = std::time::Instant::now();
+        let ms = |n: u64| t0 + std::time::Duration::from_millis(n);
+        let pressed = |i: &mut Inner, at: std::time::Instant| { let repeat = i.repeat_press("menu", at); i.rapid_press(at); repeat };
+        let open = |i: &mut Inner| {
+            *i = Inner::new(Settings::default());
+            menu_capture(i, "first");
+            i.rapid_press(t0);
+            i.menu_press = Some(MenuPress { binding_id: "menu".into(), at: t0, capture_id: Some("first".into()), repeat: false, repeat_at: None, repeats: 0 });
+        };
+        let mut i = Inner::new(Settings::default());
+        // Two presses, then nothing: the double press stands when its hold ends.
+        open(&mut i);
+        assert!(!i.repeat_stands("first"), "one press is not a double press");
+        assert_eq!(pressed(&mut i, ms(180)), Some(Repeat::Emit("first".into())));
+        assert!(i.repeat_stands("first"));
+        // A third press inside the 400 ms of the double press: a burst, nothing runs.
+        assert_eq!(pressed(&mut i, ms(300)), Some(Repeat::Swallow));
+        assert!(!i.repeat_stands("first"));
+        // A third press after those 400 ms but before the hold ended (2nd at 350, 3rd at 550).
+        open(&mut i);
+        assert_eq!(pressed(&mut i, ms(350)), Some(Repeat::Emit("first".into())));
+        assert_eq!(pressed(&mut i, ms(550)), None, "no longer a repeat: an ordinary press, ignored as rapid");
+        assert!(!i.repeat_stands("first"), "a press followed the second one: the action does not run");
+        // Twenty presses in two seconds: never.
+        open(&mut i);
+        for n in 1..20 { pressed(&mut i, ms(n * 100)); assert!(!i.repeat_stands("first") || n == 1); }
+        assert!(!i.repeat_stands("first"));
+        // The menu chose, closed or lost its selection meanwhile: nothing runs either.
+        for spoil in [0, 1, 2, 3] {
+            open(&mut i);
+            pressed(&mut i, ms(180));
+            match spoil {
+                0 => i.menu.as_mut().unwrap().chosen = true,
+                1 => i.menu.as_mut().unwrap().invalidated = true,
+                2 => i.pending_dismiss = Some(("first".into(), 1)),
+                _ => i.visible = false,
+            }
+            assert!(!i.repeat_stands("first"), "spoil {spoil}");
+        }
+        // The second press arrived while the capture was still being taken: held the same way.
+        let mut i = Inner::new(Settings::default());
+        i.rapid_press(t0);
+        i.menu_press = Some(MenuPress { binding_id: "menu".into(), at: t0, capture_id: None, repeat: false, repeat_at: None, repeats: 0 });
+        assert_eq!(pressed(&mut i, ms(120)), Some(Repeat::Swallow));
+        menu_capture(&mut i, "late");
+        assert_eq!(i.settle_press(t0, Some("late")).as_deref(), Some("late"));
+        assert!(i.repeat_stands("late"));
+        // ... and a third press before the capture was stored spoils it too.
+        let mut i = Inner::new(Settings::default());
+        i.rapid_press(t0);
+        i.menu_press = Some(MenuPress { binding_id: "menu".into(), at: t0, capture_id: None, repeat: false, repeat_at: None, repeats: 0 });
+        pressed(&mut i, ms(120));
+        pressed(&mut i, ms(240));
+        menu_capture(&mut i, "late");
+        assert_eq!(i.settle_press(t0, Some("late")), None);
+        assert!(!i.repeat_stands("late"));
+    }
+    #[test]
+    fn a_refused_press_leaves_the_undo_pill_alone() {
+        let mut i = Inner::new(Settings::default());
+        menu_capture(&mut i, "c");
+        assert!(!i.undo_offered());
+        i.applied = Some(Applied { request_id: "r".into(), window: 1, window_rect: None, control: 0, runtime_id: None, original: "a".into(), pasted: "b".into(), located: None, old_lines: Vec::new(), anchor: None, ground: None, undo: true });
+        assert!(i.undo_offered());
+        i.applied.as_mut().unwrap().undo = false;
+        assert!(!i.undo_offered(), "Undo withdrawn: the pill has nothing left to protect");
+        i.applied.as_mut().unwrap().undo = true;
+        i.pending_dismiss = Some(("c".into(), 1));
+        assert!(!i.undo_offered(), "leaving");
     }
     #[test]
     fn a_spammed_shortcut_opens_one_bubble_and_runs_one_request() {

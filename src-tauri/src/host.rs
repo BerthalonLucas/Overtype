@@ -218,6 +218,59 @@ pub fn grace_takes(now:u64,until:u64,end:u64,fg:isize,source:isize,vk:u32,other:
         &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
 }
 
+/// While a request runs (0.6, 02/10): the selection is still live in the source, and an Enter
+/// or a letter typed there by accident replaces it (the text went from 127 to 64 characters
+/// under five stray Enters, then « Texte modifié, rien remplacé »). From the choice until the
+/// request ends, the keys that would WRITE in the source are dropped: never ours (the paste),
+/// never a chord with Ctrl, Alt or Windows, never a modifier, Escape (it cancels the work), an
+/// arrow or a navigation key (leaving the selection is the user's right: the watcher then drops
+/// the target and gives the keys back), never a function key. Capped: a request that lasts
+/// longer gives the keyboard back.
+static WORK_UNTIL:AtomicU64=AtomicU64::new(0);
+static WORK_SOURCE:AtomicIsize=AtomicIsize::new(0);
+const WORK_GRACE_MAX_MS:u64=20_000;
+pub fn open_work_grace(source:isize){
+    WORK_SOURCE.store(source,Ordering::Relaxed);
+    WORK_UNTIL.store(if source==0{0}else{now_ms()+WORK_GRACE_MAX_MS},Ordering::Release);
+}
+pub fn close_work_grace(){WORK_UNTIL.store(0,Ordering::Release);}
+/// Whether the key `vk` typed at `now` in the window `fg` is dropped while the request works
+/// (`until`: 0, none). `other`: Ctrl, Alt or Windows is held.
+pub fn work_takes(now:u64,until:u64,fg:isize,source:isize,vk:u32,other:bool,extra:usize)->bool{
+    until!=0&&now<until&&fg!=0&&fg==source&&extra!=OUR_KEYS&&!other
+        &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x21..=0x28|0x2C|0x5B..=0x5D|0x70..=0x87|0x90|0x91|0xA0..=0xB7|0xE8)
+}
+
+/// The chords registered as global shortcuts (virtual key, and Ctrl 1 | Alt 2 | Shift 4 in the
+/// high word), for the hook: a press of one of them never reaches the application in front
+/// (Windows keeps it), so it is neither « a key typed in the text » for Undo nor for the marks
+/// (02/10: the shortcut hammered after a replacement took Undo away from the pill).
+static HOTKEYS:[AtomicU32;12]=[const{AtomicU32::new(0)};12];
+pub fn set_hotkeys(chords:&[(u32,u32)]){
+    for (slot,chord) in HOTKEYS.iter().zip(chords.iter().map(Some).chain(std::iter::repeat(None))){
+        slot.store(chord.map_or(0,|(vk,mods)|(vk&0xFFFF)|(mods<<16)),Ordering::Release);
+    }
+}
+/// A chord as the hook compares it.
+pub fn hotkey_code(vk:u32,ctrl:bool,alt:bool,shift:bool)->u32{(vk&0xFFFF)|((u32::from(ctrl)|u32::from(alt)<<1|u32::from(shift)<<2)<<16)}
+fn hotkey_pressed(vk:u32)->bool{
+    let code=hotkey_code(vk,held(VK_CONTROL),held(VK_MENU),held(VK_SHIFT));
+    HOTKEYS.iter().any(|chord|chord.load(Ordering::Acquire)==code)
+}
+
+/// A shortcut that holds Alt was just pressed (0.6, 02/10): released with nothing typed between,
+/// Alt opens the menu bar of the application in front (Windows 11 Notepad shows its key tips and
+/// moves the focus to « Fichier »), and the capture then ended in « Texte modifié, rien
+/// remplacé » after a short tap of the shortcut, the user having touched nothing. Windows keeps
+/// the shortcut's own key for itself, so the application saw Alt go down and up alone. One
+/// press of a key that means nothing (0xE8, unassigned: what AutoHotkey sends for the same
+/// reason), while Alt is still down, and the release is no longer a lone Alt.
+pub fn mask_alt_release(){
+    if !held(VK_MENU){return;}
+    let key=|up:bool|INPUT{r#type:INPUT_KEYBOARD,Anonymous:INPUT_0{ki:KEYBDINPUT{wVk:VIRTUAL_KEY(0xE8),wScan:0,dwFlags:if up{KEYEVENTF_KEYUP}else{Default::default()},time:0,dwExtraInfo:OUR_KEYS}}};
+    unsafe{SendInput(&[key(false),key(true)],std::mem::size_of::<INPUT>() as i32);}
+}
+
 /// A key that reached the source while Undo was offered: the user's own Ctrl+Z (the
 /// application undoes the paste itself), or any other key.
 #[derive(Clone,Copy,Debug,PartialEq,Eq)]
@@ -470,12 +523,12 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
         if code>=0&&MARKS_WATCH.load(Ordering::Acquire){
             let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
             let message=wparam.0 as u32;
-            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_marks(key.vkCode,key.dwExtraInfo){marks_action();}
+            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_marks(key.vkCode,key.dwExtraInfo)&&!hotkey_pressed(key.vkCode){marks_action();}
         }
         if code>=0&&UNDO_WATCH.load(Ordering::Acquire){
             let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
             let message=wparam.0 as u32;
-            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_undo(key.vkCode,key.dwExtraInfo)&&foreground()==UNDO_SOURCE.load(Ordering::Relaxed){
+            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_undo(key.vkCode,key.dwExtraInfo)&&!hotkey_pressed(key.vkCode)&&foreground()==UNDO_SOURCE.load(Ordering::Relaxed){
                 UNDO_WATCH.store(false,Ordering::Release);
                 let undo=key.vkCode==0x5A&&held(VK_CONTROL)&&!held(VK_MENU)&&!held(VK_SHIFT)&&!held(VK_LWIN)&&!held(VK_RWIN);
                 if let Some(typed)=TYPED.get(){let _=typed.try_send(if undo{Typed::UndoKey}else{Typed::Other});}
@@ -492,6 +545,15 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
                     if message==WM_KEYDOWN||message==WM_SYSKEYDOWN{GRACE_UNTIL.store(until.max(now+GRACE_SLIDE_MS),Ordering::Release);}
                     return LRESULT(1);
                 }
+            }
+        }
+        if code>=0&&WORK_UNTIL.load(Ordering::Acquire)!=0&&!MENU_OPEN.load(Ordering::Acquire){
+            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
+            let (now,until)=(now_ms(),WORK_UNTIL.load(Ordering::Acquire));
+            if now>=until{WORK_UNTIL.store(0,Ordering::Release);}
+            else{
+                let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
+                if work_takes(now,until,foreground(),WORK_SOURCE.load(Ordering::Relaxed),key.vkCode,other,key.dwExtraInfo){return LRESULT(1);}
             }
         }
         if code>=0&&OVERLAY_VISIBLE.load(Ordering::Acquire){
@@ -1441,6 +1503,37 @@ mod tests {
         assert!(!grace_takes(1_100, 1_700, 4_000, other_window, source, 0x0D, false, 0));
         assert!(!grace_takes(1_100, 0, 4_000, source, source, 0x0D, false, 0));
         assert!(!grace_takes(1_100, 1_700, 4_000, 0, 0, 0x0D, false, 0));
+    }
+    #[test]
+    fn the_keys_that_would_write_never_reach_the_selection_while_the_request_works() {
+        let (source, elsewhere) = (7isize, 9isize);
+        let takes = |vk| work_takes(1_000, 5_000, source, source, vk, false, 0);
+        // Enter, Backspace, Tab, Space, Delete, a letter, a digit, the keypad: dropped.
+        for vk in [0x0D, 0x08, 0x09, 0x20, 0x2E, 0x41, 0x5A, 0x31, 0x60, 0x6B] { assert!(takes(vk), "{vk:#x}"); }
+        // Escape cancels; the arrows, Home, End and the page keys leave the selection (the user's
+        // right); modifiers, function keys, media keys and our own mask key are never taken.
+        for vk in [0x1B, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22, 0x10, 0x11, 0x12, 0x5B, 0x70, 0x7B, 0xA2, 0xAF, 0xE8] { assert!(!takes(vk), "{vk:#x}"); }
+        assert!(!work_takes(1_000, 5_000, source, source, 0x0D, true, 0), "a chord with Ctrl, Alt or Windows is the user's");
+        assert!(!work_takes(1_000, 5_000, source, source, 0x56, false, OUR_KEYS), "our own paste goes through");
+        assert!(!work_takes(1_000, 5_000, elsewhere, source, 0x0D, false, 0), "another window in front");
+        assert!(!work_takes(1_000, 0, source, source, 0x0D, false, 0), "no request running");
+        assert!(!work_takes(5_000, 5_000, source, source, 0x0D, false, 0), "capped");
+        assert!(!work_takes(1_000, 5_000, 0, 0, 0x0D, false, 0));
+    }
+    #[test]
+    fn a_registered_chord_is_told_from_a_key_typed_in_the_text() {
+        // Ctrl+Alt+Space, as the hook reads it while the chord is held.
+        let menu = hotkey_code(0x20, true, true, false);
+        assert_eq!(menu, 0x20 | (3 << 16));
+        assert_ne!(menu, hotkey_code(0x20, false, false, false), "a plain space is typed text");
+        assert_ne!(menu, hotkey_code(0x20, true, true, true));
+        set_hotkeys(&[(0x20, 3), (0x54, 1 | 2 | 4)]);
+        assert_eq!(HOTKEYS[0].load(Ordering::Acquire), menu);
+        assert_eq!(HOTKEYS[1].load(Ordering::Acquire), hotkey_code(0x54, true, true, true));
+        assert_eq!(HOTKEYS[2].load(Ordering::Acquire), 0);
+        // A shorter list empties the slots it no longer uses.
+        set_hotkeys(&[]);
+        assert!(HOTKEYS.iter().all(|slot| slot.load(Ordering::Acquire) == 0));
     }
 
     #[test]

@@ -88,7 +88,10 @@ const circumference = 2 * Math.PI * 5;
 // The work pill's content (lot 8, src/loaders/WorkingPill.tsx) without its own surface: the
 // indicator's box reserved from the start, the orb after `delayMs`, the loops resting while the
 // page is hidden.
-export function WorkingContent({ indicator, delayMs = ORB_DELAY_MS }: { indicator: Indicator; delayMs?: number }) {
+// onCancel (0.6): the pill is a button while it works: a click on it cancels the request and
+// the pill leaves (a click used to do nothing at all, and the pill had no way out but Escape);
+// under the pointer the orb gives way to a ✕. Without it (a preview, the demo) it is a picture.
+export function WorkingContent({ indicator, delayMs = ORB_DELAY_MS, onCancel }: { indicator: Indicator; delayMs?: number; onCancel?: () => void }) {
   const t = useT();
   const hidden = usePageHidden();
   const [orb, setOrb] = useState(delayMs <= 0);
@@ -98,9 +101,12 @@ export function WorkingContent({ indicator, delayMs = ORB_DELAY_MS }: { indicato
     return () => window.clearTimeout(timer);
   }, [orb, delayMs]);
   const box = indicatorBox[indicator];
-  return <span className="result-working" role="img" aria-label={t('pill.working')} data-orb={orb ? 'shown' : 'waiting'} data-paused={hidden || undefined}>
-    <span className="working-slot" style={{ width: box.width, height: box.height }}>{orb && <span className="working-orb"><IndicatorView indicator={indicator} /></span>}</span>
-  </span>;
+  const slot = <span className="working-slot" style={{ width: box.width, height: box.height }}>{orb && <span className="working-orb"><IndicatorView indicator={indicator} /></span>}</span>;
+  if (!onCancel) return <span className="result-working" role="img" aria-label={t('pill.working')} data-orb={orb ? 'shown' : 'waiting'} data-paused={hidden || undefined}>{slot}</span>;
+  return <button type="button" className="result-working result-cancel" aria-label={t('pill.cancel')} title={t('pill.cancel')} data-orb={orb ? 'shown' : 'waiting'} data-paused={hidden || undefined} onClick={() => onCancel()}>
+    {slot}
+    <span className="working-x" aria-hidden="true"><X size={12} strokeWidth={iconStroke} /></span>
+  </button>;
 }
 
 // The check and Undo (Simulator.jsx:279-284). durationMs: resultTiming(afterReplace).durationMs.
@@ -233,7 +239,7 @@ export function resultContent(stage: ResultStage, handlers: ResultHandlers = {})
   switch (stage.stage) {
     case 'working': {
       const { width, height } = workingPillShape(stage.indicator);
-      return { key: 'working', size: { width, height }, node: <WorkingContent indicator={stage.indicator} delayMs={stage.delayMs} /> };
+      return { key: 'working', size: { width, height }, node: <WorkingContent indicator={stage.indicator} delayMs={stage.delayMs} onCancel={handlers.onDismiss} /> };
     }
     case 'done': {
       const timing = resultTiming(stage.afterReplace);

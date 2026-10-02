@@ -217,7 +217,7 @@ test('transient: Try again runs the same action on the same capture once, back t
   expect(runs[1]).toMatchObject({ captureId: 'retry', actionId: 'translate', serverId: first.serverId, text: first.text });
   expect(runs[1].id).not.toBe(first.id);
   expect(await sameSurface(page)).toBe(true);
-  await expect(page.getByRole('img', { name: 'Working' })).toHaveAttribute('data-orb', 'shown');
+  await expect(page.locator('.result-working')).toHaveAttribute('data-orb', 'shown');
 
   // Rust delivers a capture's first request only: the retried result is pasted through
   // replace_result, once, which revalidates the target (BRIDGE, Îlot).

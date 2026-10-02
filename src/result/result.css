@@ -60,3 +60,13 @@
 /* The work pill's content without its surface (lot 8, src/loaders/loaders.css). */
 .result-working { display: flex; align-items: center; justify-content: center; }
 .result-working[data-paused] .ldr, .result-working[data-paused] .ldr *, .result-working[data-paused] .ldr::before, .result-working[data-paused] .ldr::after { animation-play-state: paused; }
+
+/* 0.6: while it works the pill is its own way out. A click cancels; under the pointer (or the
+   focus) the orb gives way to a ✕, in place, the pill keeping its size. */
+.result-cancel { appearance: none; position: relative; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: inherit; background: transparent; color: inherit; cursor: pointer; }
+.result-cancel .working-slot { transition: opacity 120ms ease; }
+.result-cancel .working-x { position: absolute; inset: 0; display: grid; place-items: center; opacity: 0; transition: opacity 120ms ease; }
+.result-cancel .working-x svg { display: block; }
+.result-cancel:is(:hover, :focus-visible) .working-slot { opacity: 0; }
+.result-cancel:is(:hover, :focus-visible) .working-x { opacity: 1; }
+.result-cancel:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

@@ -78,7 +78,9 @@ export function ConnectionForm({ value, onChange, variant, onOpenLog, onReady, p
   return <div className="ft-connection" data-layout={variant}>
     <div className="ft-connection-url" data-field={field('endpoint')}>
       <Field label={t('conn.address')} htmlFor={urlId} hint={urlHint} problem={urlProblem}>
-        <Input id={urlId} value={endpoint} placeholder="https://llm.exemple.com" inputMode="url" maxLength={endpointMaxLength} onChange={event => set({ endpoint: cleanEndpoint(event.target.value) }, false)} />
+        {/* Enter, or leaving the field: the address is the one meant, the key may go there. */}
+        <Input id={urlId} value={endpoint} placeholder="https://llm.exemple.com" inputMode="url" maxLength={endpointMaxLength} onChange={event => set({ endpoint: cleanEndpoint(event.target.value) }, false)}
+          onKeyDown={event => { if (event.key === 'Enter' && probe.held) { event.preventDefault(); probe.start(); } }} onBlur={() => { if (probe.held) probe.start(); }} />
       </Field>
       <InsecureNotice endpoint={read} />
     </div>

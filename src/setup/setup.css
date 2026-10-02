@@ -139,9 +139,19 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
 
 /* ——— (2) Shortcut ——— */
 .su-body-stack { display: grid; gap: 18px; }
-.su-rec { display: grid; justify-items: center; gap: 10px; }
-.su-rec .st-recorder { justify-items: center; width: 100%; }
-.su-rec .st-recorder-line { justify-content: center; min-height: 64px; }
+.su-rec { display: grid; justify-items: center; gap: 12px; }
+.su-rec .st-recorder { justify-items: center; width: 100%; gap: 12px; }
+/* The lab's recorder (journey.css .jr-rec): the keycaps in an 88 px band that takes the page's
+   colour while it listens, the buttons centred underneath. */
+.su-rec .st-recorder-line { position: relative; display: grid; place-items: center; width: 100%; min-height: 88px; border-radius: var(--ft-r-group); }
+.su-rec .st-recorder-box { width: 100%; min-width: 0; height: 88px; justify-content: center; padding: 0 14px; border-radius: var(--ft-r-group); background: var(--ft-page-soft); box-shadow: inset 0 0 0 1.5px rgb(var(--ft-page-rgb) / .55); }
+.su-rec .st-recorder-box::after { display: none; }
+.su-rec .st-recorder-hint { font-size: 15px; font-weight: 500; color: var(--ft-page-text); animation: su-blink 1.6s ease-in-out infinite; }
+@keyframes su-blink { 50% { opacity: .45; } }
+:root[data-motion="reduced"] .su-rec .st-recorder-hint { animation: none; }
+.su-rec .st-recorder-keys, .su-rec .st-recorder-key { gap: 14px; }
+.su-rec .st-recorder-key .ft-keycombo-plus { font-size: 18px; }
+.su-rec .st-recorder-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .su-rec .st-recorder-problem, .su-rec .shortcut-notice { text-align: center; }
 .su-rec .shortcut-notice[data-ok] { color: var(--ft-ok); }
 .su-rec-note { margin: 0; min-height: 18px; font-size: 12.5px; text-align: center; color: var(--ft-text-3); }
@@ -218,3 +228,10 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
 .su-recap-model { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .su-recap-sub { flex: none; max-width: 60%; font-weight: 400; color: var(--ft-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .su-recap-todo { font-weight: 400; color: var(--ft-warn); }
+.su-rec .st-recorder:has(.shortcut-notice) + .su-rec-note { display: none; }
+/* Nothing in the setup ever scrolls sideways. */
+.su-scroll-vp { overflow-x: hidden !important; }
+.su-screen-in { min-width: 0; max-width: 100%; }
+/* More below the fold (a small screen): the thumb stays visible at rest until the end is reached,
+   so a question cut between its two halves says so. */
+.su-scroll:has(> .ft-scroll-viewport[data-fade-bottom]) > .ft-scrollbar { opacity: 1; }

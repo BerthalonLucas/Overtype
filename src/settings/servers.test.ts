@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Server, Settings } from '../types';
-import { addServer, canAddServer, emptyServer, newServerId, removeServer, setDefaultServer, updateServer } from './servers';
+import { addServer, canAddServer, emptyServer, newServerId, removeServer, setDefaultServer, updateServer, usable } from './servers';
 
 const server = (id: string, over: Partial<Server> = {}): Server => ({ ...emptyServer(id), endpoint: `https://${id}.exemple.com`, model: 'm', ...over });
 const settings = (servers: Server[], defaultServerId = servers[0].id) => ({ servers, defaultServerId }) as Settings;
@@ -36,6 +36,14 @@ describe('the servers of the Settings', () => {
     const two = settings([server('s1'), server('s2')]);
     expect(setDefaultServer(two, 's2').defaultServerId).toBe('s2');
     expect(setDefaultServer(two, 's9')).toBe(two);
+  });
+
+  it('never makes a server without an address or a model the default one', () => {
+    const two = settings([server('s1'), emptyServer('s2')]);
+    expect(usable(two.servers[0])).toBe(true);
+    expect(usable(two.servers[1])).toBe(false);
+    expect(usable(server('s3', { model: '  ' }))).toBe(false);
+    expect(setDefaultServer(two, 's2')).toBe(two);
   });
 
   it('drops the key of a server declared without one, and leaves the others alone', () => {

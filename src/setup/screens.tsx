@@ -92,19 +92,20 @@ export function ShortcutScreen({ store, settings, registrations }: { store: Setu
   const actionName = action?.shortName?.trim() || action?.name || '';
   const fallback = defaultBindings[0].shortcut;
   const suggest = () => bridge.suggestShortcut();
+  const [listening, setListening] = useState(false);
   return <div className="su-body-stack">
     <div className="su-rec">
       <ShortcutRecorder shortcut={binding?.shortcut ?? ''} enabled={binding?.enabled ?? true} label={t('setup.shortcut.label')} busy={store.recording} record={store.record}
-        registration={binding ? registrations(binding) : undefined} suggest={suggest} size="lg" />
-      <p className="su-rec-note">{t('setup.shortcut.note')}</p>
-      {binding && binding.shortcut !== fallback && <Button size="sm" variant="ghost" disabled={store.recording} onClick={() => void store.record(fallback)}>{t('setup.shortcut.restore', { shortcut: shortcutKeys(fallback, t).join(' + ') })}</Button>}
+        registration={binding ? registrations(binding) : undefined} suggest={suggest} size="xl" changeLabel={t('setup.shortcut.change')} hint={t('setup.shortcut.press')} onCapturing={setListening}
+        actions={binding && binding.shortcut !== fallback ? <Button size="sm" variant="ghost" disabled={store.recording} onClick={() => void store.record(fallback)}>{t('setup.shortcut.restore', { shortcut: shortcutKeys(fallback, t).join(' + ') })}</Button> : null} />
+      <p className="su-rec-note">{t(listening ? 'setup.shortcut.escape' : 'setup.shortcut.note')}</p>
     </div>
     <div className="su-q">
       <div className="su-q-head">
         <span className="su-q-label" id="su-mode-label">{t('setup.shortcut.when')}</span>
         <AnimatePresence initial={false}>
           {choice === 'direct' && <motion.span className="su-direct" initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 6 }} transition={tx('smooth')}>
-            <Select label={t('setup.shortcut.action')} value={actionId} options={settings.actions.map(item => ({ value: item.id, label: item.name }))} width={188}
+            <Select label={t('setup.shortcut.action')} value={actionId} options={settings.actions.map(item => ({ value: item.id, label: item.name }))} width={168}
               onChange={next => store.persist(withShortcutChoice(settings, 'direct', next), true)} />
           </motion.span>}
         </AnimatePresence>

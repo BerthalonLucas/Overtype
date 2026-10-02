@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { bridge } from '../bridge';
 import type { Translate } from '../i18n';
 import type { DiagEntry } from '../types';
-import { entryMessage, stepName } from './causes';
+import { causeText, entryMessage, stepName } from './causes';
 
 // The journal of the connection, as the hidden Diagnostic page and the setup's « Journal » sheet
 // read it: Rust's 500 last entries (get_diagnostics), then each new one as it happens (event
@@ -35,7 +35,6 @@ async function load() {
 function subscribe(listener: () => void) { start(); listeners.add(listener); return () => { listeners.delete(listener); }; }
 const snapshot = () => journal;
 export function useJournal(): Journal { return useSyncExternalStore(subscribe, snapshot, snapshot); }
-export const reloadJournal = () => load();
 export async function clearJournal() {
   await bridge.clearDiagnostics();
   publish({ entries: [], state: 'ready' });
@@ -63,6 +62,6 @@ export const levelGlyph = (level: DiagEntry['level']) => level === 'error' ? '�
 export function journalText(entries: readonly DiagEntry[], filter: 'all' | 'errors', t: Translate): string {
   return entries.filter(entry => filter === 'all' || entry.level === 'error').map(entry => redact([
     clockTime(entry.at), levelGlyph(entry.level), stepName(entry.step, t), entry.method ?? '', entry.url ?? '', entry.status ?? '',
-    entry.ms != null ? `${entry.ms} ms` : '', entryMessage(entry, t), entry.cause ? `(${entry.cause})` : '', entry.proxy ? `[${entry.proxy}]` : '', entry.key ?? '',
+    entry.ms != null ? `${entry.ms} ms` : '', entryMessage(entry, t), entry.cause ? `(${causeText(entry.cause, t)})` : '', entry.proxy ? `[${entry.proxy}]` : '', entry.key ?? '',
   ].filter(part => part !== '').join('  '))).join('\n');
 }

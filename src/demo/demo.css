@@ -148,9 +148,14 @@ body.flowtranslate-setup:has(.dm-root) { background: transparent; }
 .dm-caption-n b { font-size: 13px; font-weight: 700; }
 .dm-caption-n i { font-style: normal; font-size: 11px; opacity: .78; }
 
-/* ——— The strip on the right: 56 visible, unfolds to 316 (the panel slides, transform only) ——— */
-.dm-rail-clip { position: absolute; z-index: 35; overflow: hidden; border-radius: var(--ft-r-float); pointer-events: none; }
-.dm-rail { position: absolute; inset: 0; pointer-events: auto; display: flex; flex-direction: column; gap: 2px; padding: 8px; border-radius: var(--ft-r-float); color: var(--ft-text); will-change: transform; }
+/* ——— The strip on the right: 56 wide, unfolds to 316 ———
+   The glass IS the visible shape (0.6 review: a 316 px glass slid under a 56 px rounded clip,
+   and Chromium drew its backdrop in a square box: a lighter patch behind the rounded corners, a
+   hard edge outside the strip, no rim on its right side). The strip itself grows from its right
+   edge; its content keeps its 316 px and is simply uncovered. */
+.dm-rail-clip { position: absolute; z-index: 35; pointer-events: none; }
+.dm-rail { position: absolute; top: 0; right: 0; bottom: 0; overflow: hidden; pointer-events: auto; border-radius: var(--ft-r-float); color: var(--ft-text); will-change: width; }
+.dm-rail-in { display: flex; flex-direction: column; gap: 2px; height: 100%; padding: 8px; }
 .dm-rail-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .dm-rail-head, .dm-rail-item { appearance: none; display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 0; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: default; }
 .dm-rail-head { align-items: center; padding-bottom: 6px; margin-bottom: 4px; box-shadow: 0 1px 0 rgb(var(--ft-ink-rgb) / .08); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }

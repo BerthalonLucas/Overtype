@@ -11,6 +11,7 @@ import { TitleBar } from '../components/TitleBar';
 import { DiagnosticsPanel, type DiagnosticsLanding } from '../connection/DiagnosticsPanel';
 import { Demo } from '../demo/Demo';
 import { Wallpaper } from '../demo/Wallpaper';
+import { withLanguage } from '../actionDefaults';
 import { t as tNow, useT, type MessageKey } from '../i18n';
 import { shortcutKeys } from '../settings/ShortcutRecorder';
 import { useRegistrations } from '../settings/registrations';
@@ -57,6 +58,10 @@ const SIZE = { width: 620, height: 720 };
 // Natively the demo reports its end (`demo-ended`); Rust's own watchdog is 60 s. If even that
 // word never comes, the setup takes itself back.
 const DEMO_WATCHDOG_MS = 75_000;
+// Enter presses the big button once the screen has been there this long, and only after this
+// long without another Enter: a key mashed or held never skips a question.
+export const ENTER_SETTLE_MS = 500;
+export const ENTER_PAUSE_MS = 600;
 const FOLD_MS = 520;
 
 // Browser preview only (captures, tests): `&lang=fr|en`, `&theme=light|dark|system` and
@@ -106,6 +111,7 @@ function Setup({ initial }: { initial: string | null }) {
   const [log, setLog] = useState<DiagnosticsLanding | null>(null);
   const [demoFailed, setDemoFailed] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [finishFailed, setFinishFailed] = useState(false);
   const [fold, setFold] = useState<{ x: number; y: number } | null>(null);
   const lock = useRef(createNavLock()).current;
   const primaryRef = useRef<HTMLButtonElement>(null);
@@ -167,10 +173,19 @@ function Setup({ initial }: { initial: string | null }) {
   const finish = useCallback(async (openSettings: boolean) => {
     if (closing || lock.locked()) return;
     setClosing(true);
+    setFinishFailed(false);
     await store.flush();
     try { await bridge.finishSetup(openSettings); if (!bridge.native && !openSettings) location.assign('/'); }
-    catch { setClosing(false); lock.release(); }
+    // Refused (the file could not be written): said under the button, which works again.
+    catch { setClosing(false); setFinishFailed(true); lock.release(); }
   }, [closing, lock, store]);
+  // « C'est prêt » is the end: the setup is done from here, however the window is closed (its
+  // cross used to bring the whole setup back at the next launch, the server already saved).
+  useEffect(() => {
+    if (step !== 'ready' || !settings) return;
+    setFinishFailed(false);
+    void store.flush().then(() => bridge.completeSetup()).catch(() => undefined);
+  }, [step, settings !== null]); // eslint-disable-line react-hooks/exhaustive-deps
   const closeWindow = useCallback(async () => {
     await store.flush();
     void bridge.closeSettings().catch(() => undefined);
@@ -194,7 +209,8 @@ function Setup({ initial }: { initial: string | null }) {
     if (!reduced && typeof transition === 'function') { try { transition.call(document, () => flushSync(apply)); return; } catch { /* plain change below */ } }
     apply();
   };
-  const setLanguage = (language: Language) => { if (settings && language !== settings.language) store.persist({ ...settings, language }, true); };
+  // The default actions nobody renamed follow the language (« Corriger » / « Fix grammar »).
+  const setLanguage = (language: Language) => { if (settings && language !== settings.language) store.persist(withLanguage(settings, language), true); };
 
   // Focus: each screen's heading (read first by a screen reader; Enter still presses the big
   // button), the address field on « Votre modèle ».
@@ -209,7 +225,12 @@ function Setup({ initial }: { initial: string | null }) {
   }, [phase, step, settings !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Enter = the big button, Escape = Retour: never while a shortcut is being recorded, a list is
-  // open, or the journal shows (Escape then closes the journal).
+  // open, or the journal shows (Escape then closes the journal). Enter mashed (twelve presses
+  // rushed through the welcome and two questions unseen, 02/10) moves by one screen: it counts
+  // only on a screen that had the time to show, and after a pause since the previous Enter.
+  const shownAt = useRef(0);
+  const lastEnter = useRef(-Infinity);
+  useEffect(() => { shownAt.current = performance.now(); }, [step]);
   useEffect(() => {
     if (phase !== 'setup') return;
     const onKey = (event: KeyboardEvent) => {
@@ -221,7 +242,11 @@ function Setup({ initial }: { initial: string | null }) {
       if (ownsKey(target, event.key) || document.querySelector('[data-radix-popper-content-wrapper], .ft-dialog')) return;
       event.preventDefault();
       if (event.repeat) return;
-      if (event.key === 'Escape') back(); else primaryRef.current?.click();
+      if (event.key === 'Escape') { back(); return; }
+      const now = performance.now();
+      const deliberate = now - lastEnter.current >= ENTER_PAUSE_MS && now - shownAt.current >= ENTER_SETTLE_MS;
+      lastEnter.current = now;
+      if (deliberate) primaryRef.current?.click();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -330,7 +355,8 @@ function Setup({ initial }: { initial: string | null }) {
             </Button>
             {/* Always there (empty when there is nothing to say) so the big button never moves. */}
             <span className="su-foot-note" aria-live="polite">
-              {store.saveError ? <>{t('setup.notSaved')} <button type="button" className="ft-linklike" onClick={store.retry}>{t('common.retry')}</button></>
+              {finishFailed ? <span role="alert">{t('setup.notFinished')} <button type="button" className="ft-linklike" onClick={() => void finish(true)}>{t('common.retry')}</button></span>
+                : store.saveError ? <>{t('setup.notSaved')} <button type="button" className="ft-linklike" onClick={store.retry}>{t('common.retry')}</button></>
                 : step === 'welcome' ? t('setup.welcome.note')
                 : step === 'model' && !modelReady ? t('setup.model.wait')
                 : ' '}

@@ -5,7 +5,7 @@
 // journal entries, so a screen built on the preview behaves the same on the real app.
 //
 // It never carries a user text, and a key only as its mask (••••3f2a).
-import type { DiagEntry, DiagLevel, DiagStep, ModelInfo, NormalizedEndpoint, ProbeCause, ProbeProblem, ProbeResult, ProbeStep, ProbeStepEvent, ProbeStepId, StepDetail, TryResult } from './types';
+import type { DiagEntry, ModelInfo, NormalizedEndpoint, ProbeCause, ProbeProblem, ProbeResult, ProbeStep, ProbeStepEvent, ProbeStepId, StepDetail, TryResult } from './types';
 import { probeStepIds } from './types';
 
 // ——— Scenarios ———
@@ -106,7 +106,6 @@ function begin(run: string, kind: 'check' | 'try') {
   return { sleep, end: () => { running.delete(run); } };
 }
 
-const stepOf = (cause: ProbeCause): ProbeStepId | 'try' => cause.split('.')[0] as ProbeStepId | 'try';
 const technical: Partial<Record<ProbeCause, string>> = {
   'address.dns': 'No such host is known. (os error 11001)',
   'reach.refused': 'No connection could be made because the target machine actively refused it. (os error 10061)',
@@ -173,7 +172,8 @@ async function probe(emit: Emit, run: string, endpointInput: string, apiKey: str
     const models = mockModels.map(model => ({ ...model }));
     set('models', { state: 'ok', ms, detail: { code: 'models', count: models.length } });
     record(emit, { run, step: 'models', level: 'ok', code: 'models', ...request, status: 200, ms, detail: String(models.length) });
-    return result(true, models);
+    // The line's total is what the steps add up to (the pauses of the simulation are not the server's).
+    return { ...result(true, models), totalMs: steps.reduce((sum, step) => sum + (step.ms ?? 0), 0) };
   } catch (error) {
     if (!(error instanceof Cancelled)) throw error;
     // A newer check, or `cancel_probe`: nothing more is reported, nothing is left spinning.
@@ -207,7 +207,7 @@ async function tryModel(emit: Emit, run: string, endpointInput: string, apiKey: 
     if (sc === 'cle-refusee' && key) return failed('key.rejected', 401, ms);
     if ((sc === 'cle-requise' || sc === 'cle-refusee') && !key) return failed('key.required', 401, ms);
     if (sc === 'pas-d-api' || sc === 'vide' || !mockModels.some(known => known.id === name)) return failed('try.model', 404, ms);
-    record(emit, { run, step: 'try', level: 'ok', code: 'reply', method: 'POST', url, status: 200, ms, ...(key ? { key: maskKey(key) } : {}), detail: `${name} · ${mockReply.length} caractères` });
+    record(emit, { run, step: 'try', level: 'ok', code: 'reply', method: 'POST', url, status: 200, ms, ...(key ? { key: maskKey(key) } : {}), detail: `${name} · ${mockReply.length} chars` });
     return { run, ok: true, reply: mockReply, ms };
   } catch (error) {
     if (!(error instanceof Cancelled)) throw error;
@@ -215,46 +215,16 @@ async function tryModel(emit: Emit, run: string, endpointInput: string, apiKey: 
   } finally { end(); }
 }
 
-// The models of a saved server, without a trace: rejects with a ProbeProblem, as Rust does.
-async function listModels(emit: Emit, endpointInput: string, apiKey: string, noKey: boolean): Promise<ModelInfo[]> {
-  const sc = scenario;
-  const endpoint = normalizeEndpoint(endpointInput);
-  const key = noKey ? '' : apiKey.trim();
-  const refuse = (cause: ProbeCause, status?: number): never => {
-    const words = technical[cause];
-    const step = stepOf(cause) as DiagStep;
-    const entry = record(emit, { step, level: 'error' as DiagLevel, code: cause, ...(endpoint.ok ? { method: 'GET' as const, url: `${endpoint.base}/v1/models` } : {}), ...(status ? { status } : {}), ...(words ? { cause: words } : {}) });
-    throw { step: stepOf(cause), cause, ...(status ? { status } : {}), ...(words ? { technical: words } : {}), logId: entry.id } satisfies ProbeProblem;
-  };
-  if (!endpoint.ok) return refuse(`address.${endpoint.reason}`);
-  await new Promise(resolve => setTimeout(resolve, (sc === 'lent' ? 1800 : jitter(60, 160)) * mockTiming.scale));
-  if (sc === 'dns' && !endpoint.local) return refuse('address.dns');
-  if (sc === 'refuse') return refuse('reach.refused');
-  if (sc === 'certificat' && endpoint.secure) return refuse('reach.certificate');
-  if (sc === 'delai') return refuse('reach.timeout');
-  if (sc === 'cle-refusee' && key) return refuse('key.rejected', 401);
-  if ((sc === 'cle-requise' || sc === 'cle-refusee') && !key) return refuse('key.required', 401);
-  if (sc === 'pas-d-api') return refuse('models.notfound', 404);
-  if (sc === 'vide') return refuse('models.empty', 200);
-  return mockModels.map(model => ({ ...model }));
-}
-
 // ——— The commands of the connection, as `bridge.ts` calls them outside Tauri ———
-export const connectionCommands = ['probe_connection', 'cancel_probe', 'list_models', 'try_model', 'get_diagnostics', 'clear_diagnostics'] as const;
+export const connectionCommands = ['probe_connection', 'cancel_probe', 'try_model', 'get_diagnostics', 'clear_diagnostics'] as const;
 export type ConnectionCommand = typeof connectionCommands[number];
 export const isConnectionCommand = (name: string): name is ConnectionCommand => (connectionCommands as readonly string[]).includes(name);
-type SavedServer = { endpoint: string; apiKey: string; noKey: boolean };
-export async function connectionCommand(name: ConnectionCommand, args: Record<string, unknown> | undefined, emit: Emit, serverOf: (id: string) => SavedServer | undefined): Promise<unknown> {
+export async function connectionCommand(name: ConnectionCommand, args: Record<string, unknown> | undefined, emit: Emit): Promise<unknown> {
   const text = (key: string) => String(args?.[key] ?? '');
   switch (name) {
     case 'probe_connection': return probe(emit, text('run'), text('endpoint'), text('apiKey'), args?.noKey === true);
     case 'try_model': return tryModel(emit, text('run'), text('endpoint'), text('apiKey'), args?.noKey === true, text('model'));
     case 'cancel_probe': { const run = running.get(text('run')); run?.cancel(); running.delete(text('run')); return undefined; }
-    case 'list_models': {
-      const server = serverOf(text('serverId'));
-      if (!server) throw { step: 'models', cause: 'cancelled', technical: 'Ce serveur n’existe plus dans les réglages.' } satisfies ProbeProblem;
-      return listModels(emit, server.endpoint, server.apiKey, server.noKey);
-    }
     case 'get_diagnostics': return entries.map(entry => ({ ...entry }));
     case 'clear_diagnostics': entries = []; return undefined;
   }

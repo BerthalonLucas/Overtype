@@ -446,3 +446,18 @@
   .st-binding-edit { grid-template-columns: minmax(0, 1fr); }
   .st-toast-host { left: 56px; }
 }
+
+/* 0.6 review. Ctrl+A outside a field selected the whole window (sidebar, titles): only what is
+   typed, the journal and an instruction can be selected. */
+.ft-settings-window, .su-window { -webkit-user-select: none; user-select: none; }
+.ft-settings-window :is(input, textarea, .st-log, .st-try-reply), .su-window :is(input, textarea, .st-log, .su-trial-bubble) { -webkit-user-select: text; user-select: text; }
+/* A very long address: its echo wraps anywhere instead of widening the page (the setup scrolled
+   sideways and lost its title and its fields). */
+.ft-connection, .ft-connection > * { min-width: 0; }
+.ft-connection .ft-field-hint, .ft-connection .ft-field-problem { overflow-wrap: anywhere; }
+.ft-connection .ft-field-hint b { overflow-wrap: anywhere; }
+.st-server-host { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-segment[disabled] { opacity: .45; cursor: default; }
+.st-server-body > .st-confirm-wrap .st-confirm { margin-top: 12px; }
+/* The echo of the address keeps to one line: its end matters less than the page staying whole. */
+.ft-connection .ft-field-hint b { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }

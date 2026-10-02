@@ -84,7 +84,7 @@ export function ShortcutsPage() {
           record={shortcut => recordShortcut(menuBinding?.id ?? null, shortcut)} registration={menuBinding && registrations(menuBinding)} suggest={bridge.suggestShortcut} />
       </Row>
       <Row id="defaultAction" title={t('settings.defaultAction')} description={t(ilot ? 'settings.defaultActionHelp' : 'settings.defaultActionHelpV4')}
-        control={<Select label={t('settings.defaultAction')} value={defaultKnown ? settings.defaultActionId : undefined} onChange={defaultActionId => persist({ ...settings, defaultActionId }, true)} width={190}
+        control={<Select label={t('settings.defaultAction')} value={defaultKnown ? settings.defaultActionId : undefined} onChange={defaultActionId => persist({ ...settings, defaultActionId }, true)} width={170}
           options={settings.actions.map(action => ({ value: action.id, label: action.name || t('actions.untitled') }))} />} />
     </Group>
 

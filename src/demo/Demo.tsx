@@ -687,11 +687,12 @@ function ExplainRail({ open, item, shortcut, onChange }: { open: boolean; item: 
   const close = () => onChange({ open: false, item: null });
   return <div className="dm-rail-clip" style={{ left: RAIL.right - RAIL.width, top: RAIL.y, width: RAIL.width, height: RAIL.height }}>
     <motion.aside ref={panel} className="dm-rail ft-glass" data-open={open ? '' : undefined} aria-label={t('demo2.rail.title')}
-      initial={false} animate={{ x: open ? 0 : RAIL.width - RAIL.closed }} transition={tx('smooth')}
+      initial={false} animate={{ width: open ? RAIL.width : RAIL.closed }} transition={tx('smooth')}
       onPointerEnter={event => { if (event.pointerType === 'mouse' && !open) onChange({ open: true, item: null }); }}
       onPointerLeave={event => { if (event.pointerType === 'mouse') close(); }}
       onFocus={() => { if (!open) onChange({ open: true, item }); }}
       onBlur={event => { if (!panel.current?.contains(event.relatedTarget as Node | null)) close(); }}>
+      <div className="dm-rail-in" style={{ width: RAIL.width }}>
       <button type="button" className="dm-rail-head" aria-expanded={open} onClick={() => onChange(open ? { open: false, item: null } : { open: true, item: null })}>
         <span className="dm-rail-icon"><SlidersHorizontal size={16} strokeWidth={1.5} /></span>
         <span className="dm-rail-head-text"><strong>{t('demo2.rail.title')}</strong><small>{t('demo2.rail.hint')}</small></span>
@@ -715,6 +716,7 @@ function ExplainRail({ open, item, shortcut, onChange }: { open: boolean; item: 
           </li>;
         })}
       </ul>
+    </div>
     </motion.aside>
   </div>;
 }

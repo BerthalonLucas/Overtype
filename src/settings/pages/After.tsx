@@ -65,10 +65,13 @@ function AfterPreview() {
     ? { left: at.docRight + 12, top: (at.top + at.bottom) / 2 - 14 }
     // The app keeps the pill inside the work area: here, inside the preview (8 px margin).
     : { left: Math.max(8, at.x - pillWidth), top: at.bottom + 8 };
-  return <figure ref={stage} className="st-after-stage" aria-label={t('page.after.preview')} data-placement={settings.pillPlacement}>
+  // A picture of the pill, not the pill: nothing in it takes the focus or a click.
+  return <figure ref={stage} className="st-after-stage" aria-label={t('page.after.preview')} data-placement={settings.pillPlacement} inert>
     <div className="st-after-doc">
       <p className="st-after-muted">{t('page.actions.sampleHello')}</p>
       <p className="st-after-new"><SampleSentence on={after.changedWords} style={settings.changedWordsStyle} /><span ref={end} className="st-after-end" /></p>
+      {/* The lab's closing lines: the pill lands inside the card, under the changed paragraph. */}
+      <p className="st-after-muted">{t('page.after.sampleBye')}<br />Lucas</p>
     </div>
     <AnimatePresence initial={false}>
       {hasPill && <motion.div key={`${settings.pillPlacement}-${layout}`} className="ilot st-app" style={place}

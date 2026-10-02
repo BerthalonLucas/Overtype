@@ -34,6 +34,7 @@ const dictionary = {
   'glass.errorHint': { en: 'Settings and Try again are in the ⋯ menu.', fr: 'Réglages et Réessayer dans le menu ⋯.' },
   // The Îlot's working pill (lot 8): its accessible name, never shown (design-lab/src/data.js:17-18).
   'pill.working': { en: 'Working', fr: 'En cours' },
+  'pill.cancel': { en: 'Working — click to cancel', fr: 'En cours, cliquez pour annuler' },
   'menu.showOriginal': { en: 'Show original', fr: 'Afficher l’original' },
   'menu.hideOriginal': { en: 'Hide original', fr: 'Masquer l’original' },
   'menu.replace': { en: 'Replace', fr: 'Remplacer' },
@@ -96,6 +97,7 @@ const dictionary = {
   // Capture notices with a code of their own: the Settings window was in front, the tray's
   // « Revoir » found nothing recent.
   'result.error.settings_open': { en: 'Close Settings first', fr: 'Fermez d’abord les Réglages' },
+  'result.error.setup_open': { en: 'Finish the setup first', fr: 'Terminez d’abord l’accueil' },
   'result.error.nothing_recent': { en: 'No recent translation', fr: 'Aucune traduction récente' },
   'result.error.cancelled': { en: 'Cancelled', fr: 'Annulé' },
   // A capture Rust refused (capture-notice), where the request's words would mislead: the source
@@ -143,13 +145,13 @@ const dictionary = {
   'settings.loadError': { en: 'Settings are unavailable. Try again or restart {app}.', fr: 'Les réglages sont indisponibles. Réessayez ou redémarrez {app}.' },
   'settings.notSaved': { en: 'Settings were not saved.', fr: 'Les réglages n’ont pas été enregistrés.' },
   'settings.language': { en: 'Language', fr: 'Langue' },
-  'settings.languageHelp': { en: 'Menus, messages and settings. Action names stay as written.', fr: 'Menus, messages et réglages. Les noms des actions restent tels quels.' },
+  'settings.languageHelp': { en: 'Menus, messages and settings. The actions you renamed keep their names.', fr: 'Menus, messages et réglages. Les actions que vous avez renommées gardent leur nom.' },
   'settings.theme': { en: 'Theme', fr: 'Thème' },
   'settings.themeSystem': { en: 'Follow Windows', fr: 'Suivre Windows' },
   'settings.themeLight': { en: 'Light', fr: 'Clair' },
   'settings.themeDark': { en: 'Dark', fr: 'Sombre' },
   'settings.indicator': { en: 'Indicator', fr: 'Indicateur' },
-  'settings.indicatorHelp': { en: 'In the pill while the model works.', fr: 'Dans la pilule pendant que le modèle travaille.' },
+  'settings.indicatorHelp': { en: 'In the pill while the model works.', fr: 'Dans la pilule, pendant que le modèle travaille.' },
   'settings.indicatorPerle': { en: 'Perle', fr: 'Perle' },
   'settings.indicatorNebula': { en: 'Nebula', fr: 'Nébuleuse' },
   'settings.indicatorRibbon': { en: 'Ribbon', fr: 'Ruban' },

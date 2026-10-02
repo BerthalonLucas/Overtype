@@ -113,10 +113,10 @@ describe('the simulated connection of the preview', () => {
   let journal: DiagEntry[];
   const emit = (name: 'probe-step' | 'diagnostic', payload: ProbeStepEvent | DiagEntry) => { if (name === 'probe-step') steps.push(payload as ProbeStepEvent); else journal.push(payload as DiagEntry); };
   const servers = (id: string) => id === 's1' ? { endpoint: 'https://llm.exemple.com', apiKey: key, noKey: false } : undefined;
-  const probe = (run: string, endpoint = 'https://llm.exemple.com/v1', apiKey = key, noKey = false) => connectionCommand('probe_connection', { run, endpoint, apiKey, noKey }, emit, servers) as Promise<ProbeResult>;
-  const attempt = (run: string, model: string, apiKey = key) => connectionCommand('try_model', { run, endpoint: 'https://llm.exemple.com', apiKey, noKey: false, model }, emit, servers) as Promise<TryResult>;
+  const probe = (run: string, endpoint = 'https://llm.exemple.com/v1', apiKey = key, noKey = false) => connectionCommand('probe_connection', { run, endpoint, apiKey, noKey }, emit) as Promise<ProbeResult>;
+  const attempt = (run: string, model: string, apiKey = key) => connectionCommand('try_model', { run, endpoint: 'https://llm.exemple.com', apiKey, noKey: false, model }, emit) as Promise<TryResult>;
   const states = (result: ProbeResult) => result.steps.map(step => step.state);
-  beforeEach(async () => { steps = []; journal = []; mockTiming.scale = 0; setConnScenario('ok'); await connectionCommand('clear_diagnostics', undefined, emit, servers); });
+  beforeEach(async () => { steps = []; journal = []; mockTiming.scale = 0; setConnScenario('ok'); await connectionCommand('clear_diagnostics', undefined, emit); });
   afterEach(() => { mockTiming.scale = 1; setConnScenario('ok'); });
 
   it('reads the scenario from ?conn= and ignores an unknown one', () => {
@@ -145,7 +145,7 @@ describe('the simulated connection of the preview', () => {
     expect(journal.map(entry => entry.code)).toEqual(['resolved', 'tls', 'key_accepted', 'models']);
     expect(journal.at(-1)).toMatchObject({ run: 'r1', step: 'models', level: 'ok', method: 'GET', url: 'https://llm.exemple.com/v1/models', status: 200, key: '••••3f2a' });
     expect(JSON.stringify([journal, result])).not.toContain(key);
-    expect(await connectionCommand('get_diagnostics', undefined, emit, servers)).toEqual(journal);
+    expect(await connectionCommand('get_diagnostics', undefined, emit)).toEqual(journal);
     // This computer, plain HTTP, no key at all.
     const local = await probe('r2', '127.0.0.1:8002', '', true);
     expect(local.steps.map(step => step.detail?.code)).toEqual(['local', 'http_local', 'key_none', 'models']);
@@ -190,14 +190,14 @@ describe('the simulated connection of the preview', () => {
     const cancelled = await first;
     expect(cancelled).toMatchObject({ run: 'first', ok: false, problem: { cause: 'cancelled' } });
     expect(cancelled.steps.some(step => step.state === 'running' || step.state === 'waiting')).toBe(false);
-    await connectionCommand('cancel_probe', { run: 'second' }, emit, servers);
+    await connectionCommand('cancel_probe', { run: 'second' }, emit);
     expect(await second).toMatchObject({ run: 'second', ok: false, problem: { cause: 'cancelled' } });
     // A try runs beside a check without cancelling it; a second try cancels the first.
     mockTiming.scale = 0;
     setConnScenario('ok');
     const [check, tried] = await Promise.all([probe('check'), attempt('try', mockModels[0].id)]);
     expect([check.ok, tried.ok]).toEqual([true, true]);
-    await connectionCommand('cancel_probe', { run: 'gone' }, emit, servers);
+    await connectionCommand('cancel_probe', { run: 'gone' }, emit);
   });
 
   it('« Essayer avec une phrase » answers the fixed translation, or says why it cannot, and never logs the reply', async () => {
@@ -212,16 +212,6 @@ describe('the simulated connection of the preview', () => {
     expect(await cause('cle-refusee')).toBe('key.rejected');
     expect(await cause('cle-requise', mockModels[0].id, '')).toBe('key.required');
     expect(await cause('lent')).toBe('ok');
-  });
-
-  it('lists the models of a saved server and rejects with a problem otherwise', async () => {
-    expect(await connectionCommand('list_models', { serverId: 's1' }, emit, servers)).toEqual(mockModels);
-    await expect(connectionCommand('list_models', { serverId: 'gone' }, emit, servers)).rejects.toMatchObject({ cause: 'cancelled' });
-    setConnScenario('vide');
-    await expect(connectionCommand('list_models', { serverId: 's1' }, emit, servers)).rejects.toMatchObject({ step: 'models', cause: 'models.empty', status: 200 });
-    setConnScenario('cle-refusee');
-    await expect(connectionCommand('list_models', { serverId: 's1' }, emit, servers)).rejects.toMatchObject({ step: 'key', cause: 'key.rejected', status: 401 });
-    expect(steps).toEqual([]);
   });
 
   it('masks a key like Rust: four characters of a long one, none of a short one', () => {

@@ -60,8 +60,9 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //                    browser used to end on the check): the result exists, Copy result: paste.
 //   protected_window 0.6: the window in front runs as administrator, Windows lets us neither
 //                    read it nor send it a key: content, ✕ only (a capture notice).
-//   too_long, no_selection, protected_field, settings_open, nothing_recent: nothing was read or
-//                    sent: content, ✕ only (the last two are capture notices, no button at all).
+//   too_long, no_selection, protected_field, settings_open, setup_open, nothing_recent: nothing
+//                    was read or sent: content, ✕ only (the last three are capture notices, no
+//                    button at all; setup_open, 0.6: the same press over the first-run setup).
 //   cancelled        the user's own Escape: silent.
 const table: Record<ErrorCode, Entry> = {
   unreachable: { family: 'config', field: 'endpoint' },
@@ -84,6 +85,7 @@ const table: Record<ErrorCode, Entry> = {
   protected_field: { family: 'content' },
   protected_window: { family: 'content' },
   settings_open: { family: 'content' },
+  setup_open: { family: 'content' },
   nothing_recent: { family: 'content' },
   cancelled: { family: 'silent' },
 };

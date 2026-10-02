@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Button, KeyCombo, Keycap } from '../components/controls';
+import { Keyboard as KeyboardIcon, X } from 'lucide-react';
+import { Button, ICON, KeyCombo, Keycap } from '../components/controls';
 import { useTx } from '../components/motion';
 import { bridge } from '../bridge';
 import { useT, type MessageKey, type Translate } from '../i18n';
@@ -61,8 +62,15 @@ type Props = {
   // Lucas, 24/09: a taken chord gets a free one to take in one click (the menu's: Rust's
   // suggest_shortcut); null when none is free.
   suggest?: () => Promise<string | null>;
-  // lg: the menu's own shortcut (and the setup's question), with large keycaps.
-  size?: 'md' | 'lg';
+  // lg: the menu's own shortcut, with large keycaps. xl: the setup's question, as the lab draws
+  // it (design-lab/reglages/src/journey/screens.jsx): three large keycaps, « Changer » with its
+  // keyboard icon centred underneath, beside whatever `actions` adds (« Rétablir… »).
+  size?: 'md' | 'lg' | 'xl';
+  changeLabel?: string;
+  // What the box says while it listens with no key down yet (the setup has the lab's words).
+  hint?: string;
+  actions?: ReactNode;
+  onCapturing?: (capturing: boolean) => void;
 };
 // A chord as keycaps: the stored names (Ctrl+Alt+Space) in the interface's words (Espace, Maj).
 const keyNames: Record<string, MessageKey> = { Space: 'page.key.space', Shift: 'page.key.shift', Enter: 'page.key.enter', Backspace: 'page.key.backspace', Delete: 'page.key.delete' };
@@ -87,7 +95,7 @@ function useSuggestion(suggest: Props['suggest'], shortcut: string, taken: boole
 // While it listens the keycaps light up as the keys go down (design-lab/reglages/src/settings/
 // ShortcutRecorder.jsx), and its box carries data-recording so the window's own shortcuts
 // (Ctrl+Shift+M, Escape) stand aside. Escape, a click elsewhere or « Cancel » stop it.
-export function ShortcutRecorder({ shortcut, enabled, label, busy, record, registration, suggest, size = 'md' }: Props) {
+export function ShortcutRecorder({ shortcut, enabled, label, busy, record, registration, suggest, size = 'md', changeLabel, hint, actions, onCapturing }: Props) {
   const t = useT();
   const tx = useTx();
   const [capturing, setCapturing] = useState(false);
@@ -96,7 +104,9 @@ export function ShortcutRecorder({ shortcut, enabled, label, busy, record, regis
   const recorder = useRef<HTMLDivElement>(null);
   const conflict = useAltGrConflict(shortcut, enabled);
   const proposal = useSuggestion(suggest, shortcut, enabled && registration === 'taken');
-  useEffect(() => { if (capturing) recorder.current?.focus(); else setHeld([]); }, [capturing]);
+  const tellCapturing = useRef(onCapturing);
+  tellCapturing.current = onCapturing;
+  useEffect(() => { if (capturing) recorder.current?.focus(); else setHeld([]); tellCapturing.current?.(capturing); }, [capturing]);
   const take = async (value: string) => {
     setCapturing(false); setNotice(null);
     const error = await record(value);
@@ -117,8 +127,12 @@ export function ShortcutRecorder({ shortcut, enabled, label, busy, record, regis
   const saved = notice !== null && 'key' in notice && notice.key === 'shortcuts.saved';
   const key = shortcut.split('+').at(-1) ?? '';
   const invalid = capturing && notice !== null && !saved;
-  const caps = size === 'lg' ? 'lg' : 'md';
-  return <div className="st-recorder" data-size={size}>
+  const caps = size;
+  const stacked = size === 'xl';
+  const buttons = capturing
+    ? <Button size="sm" variant={stacked ? 'secondary' : 'ghost'} icon={stacked ? <X {...ICON} size={14} /> : undefined} onMouseDown={event => event.preventDefault()} onClick={() => { setNotice(null); setCapturing(false); }}>{t('shortcuts.cancel')}</Button>
+    : <Button size="sm" disabled={busy} icon={stacked ? <KeyboardIcon {...ICON} size={14} /> : undefined} onClick={() => { setNotice(null); setCapturing(true); }}>{changeLabel ?? t('shortcuts.change')}</Button>;
+  return <div className="st-recorder" data-size={size} data-stacked={stacked ? '' : undefined}>
     <div className="st-recorder-line">
       {capturing
         ? <div ref={recorder} tabIndex={0} role="textbox" aria-readonly="true" aria-label={t('page.shortcuts.pressFor', { label })} aria-live="polite" className="st-recorder-box" data-recording="" data-invalid={invalid ? '' : undefined}
@@ -131,16 +145,15 @@ export function ShortcutRecorder({ shortcut, enabled, label, busy, record, regis
                       <Keycap size={caps} active>{keyLabel(part, t)}</Keycap>
                     </motion.span>)}
                   </motion.span>
-                : <motion.span key="hint" className="st-recorder-hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tx(0.12)}>{t('shortcuts.press')}</motion.span>}
+                : <motion.span key="hint" className="st-recorder-hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tx(0.12)}>{hint ?? t('shortcuts.press')}</motion.span>}
             </AnimatePresence>
           </div>
         : <span className="st-recorder-value" role="img" aria-label={`${label}: ${shortcut || t('shortcuts.unset')}`} data-off={shortcut && !enabled ? '' : undefined}><KeyCombo keys={shortcut ? shortcutKeys(shortcut, t) : [t('shortcuts.unset')]} size={caps} /></span>}
       {/* While listening, a press on Cancel must not first blur the box (which would stop, then
           the click would start listening again). */}
-      {capturing
-        ? <Button size="sm" variant="ghost" onMouseDown={event => event.preventDefault()} onClick={() => { setNotice(null); setCapturing(false); }}>{t('shortcuts.cancel')}</Button>
-        : <Button size="sm" disabled={busy} onClick={() => { setNotice(null); setCapturing(true); }}>{t('shortcuts.change')}</Button>}
+      {!stacked && buttons}
     </div>
+    {stacked && <div className="st-recorder-actions">{buttons}{!capturing && actions}</div>}
     {noticeText && <p className="st-recorder-problem shortcut-notice" data-ok={saved || undefined} role={saved ? 'status' : 'alert'}>{noticeText}</p>}
     {enabled && shortcut && !capturing && (registration === 'taken' || registration === 'failed') && <p className="st-recorder-problem shortcut-notice" data-warning={registration} role="status">{t(registration === 'taken' ? 'shortcuts.stateTaken' : 'shortcuts.stateFailed', { shortcut })}</p>}
     {proposal && !capturing && <p className="shortcut-notice shortcut-suggestion"><Button size="sm" variant="ghost" disabled={busy} onClick={() => void take(proposal)}>{t('shortcuts.useSuggestion', { shortcut: proposal })}</Button></p>}

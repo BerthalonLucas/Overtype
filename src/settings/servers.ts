@@ -20,8 +20,12 @@ export function removeServer(settings: Settings, id: string): Settings {
   const servers = settings.servers.filter(server => server.id !== id);
   return { ...settings, servers, defaultServerId: settings.defaultServerId === id ? servers[0].id : settings.defaultServerId };
 }
+// A server the menu and the shortcuts can use: an address and a model.
+export const usable = (server: Pick<Server, 'endpoint' | 'model'>) => server.endpoint.trim() !== '' && server.model.trim() !== '';
+// Never a server that is not set up: every shortcut would end in « Adresse du serveur erronée ».
 export function setDefaultServer(settings: Settings, id: string): Settings {
-  return settings.servers.some(server => server.id === id) ? { ...settings, defaultServerId: id } : settings;
+  const server = settings.servers.find(item => item.id === id);
+  return server && usable(server) ? { ...settings, defaultServerId: id } : settings;
 }
 // noKey true drops the key (Rust would too); the id never changes.
 export function updateServer(settings: Settings, id: string, patch: Partial<Omit<Server, 'id'>>): Settings {

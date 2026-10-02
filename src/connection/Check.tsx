@@ -6,7 +6,7 @@ import { locales, useLanguage, useT } from '../i18n';
 import { Button, ICON, Notice, StatusDot, cx, type StatusState } from '../components/controls';
 import { useReduced, useTx } from '../components/motion';
 import type { ModelInfo, NormalizedEndpoint, ProbeProblem, ProbeResult, ProbeStep, ProbeStepEvent } from '../types';
-import { describeProblem, stepName, stepText } from './causes';
+import { causeText, describeProblem, stepName, stepText } from './causes';
 import { normalizeEndpoint, shortModel, textModels } from './endpoint';
 import './connection.css';
 
@@ -36,7 +36,11 @@ export type Probe = ProbeState & {
   endpoint: NormalizedEndpoint;
   // There is something to check: a readable address, and a key or « no key ».
   ready: boolean;
-  // Check now (« Vérifier à nouveau »); a check already running is replaced, never doubled.
+  // The address is no longer the one the key was typed for: nothing leaves by itself, the key
+  // goes to the new address only when the person asks (Enter, leaving the field, « Vérifier »).
+  held: boolean;
+  // Check now (« Vérifier », « Vérifier à nouveau »): the person's own gesture, which also lets
+  // the key go to the address shown. A check already running is replaced, never doubled.
   start: () => void;
 };
 const idle: ProbeState = { status: 'idle', steps: [], models: [], hidden: 0, problem: null, run: null, at: 0, totalMs: 0 };
@@ -49,6 +53,8 @@ export const watchdogMs = 15_000;
 let turn: Promise<unknown> = Promise.resolve();
 let serial = 0;
 const newRun = () => `check-${Date.now().toString(36)}-${(serial++).toString(36)}`;
+// Where a key goes: scheme, host and port. A path typed after it changes nothing to who receives it.
+export const keyOrigin = (read: NormalizedEndpoint): string | null => read.ok ? `${read.secure ? 'https' : 'http'}://${read.host}` : null;
 
 export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: string; apiKey: string; noKey: boolean; auto?: boolean }): Probe {
   const [state, setState] = useState<ProbeState>(idle);
@@ -59,12 +65,26 @@ export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: s
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
+  // The key belongs to the address it was typed for (0.6 review: while an address was being
+  // edited, the saved key left for every intermediate host that happened to resolve, « my-llm.co »
+  // on the way to « my-llm.com », in clear over http://). `trusted` is the origin the key may go
+  // to without asking: the saved connection as the window opens on it, then the address shown
+  // whenever the key itself is typed or pasted, or the person asks for the check.
+  const read = normalizeEndpoint(endpoint);
+  const origin = keyOrigin(read);
+  const hasKey = !noKey && apiKey.trim() !== '';
+  const trust = useRef<{ seen: boolean; key: string; origin: string | null }>({ seen: false, key: '', origin: null });
+  if (!trust.current.seen) {
+    if (endpoint.trim() !== '' || apiKey !== '') trust.current = { seen: true, key: apiKey, origin: hasKey ? origin : null };
+  } else if (apiKey !== trust.current.key) trust.current = { seen: true, key: apiKey, origin };
+  const held = read.ok && hasKey && trust.current.origin !== origin;
+
   const drop = useCallback(() => {
     const run = current.current;
     current.current = null;
     if (run) void bridge.cancelProbe(run).catch(() => undefined);
   }, []);
-  const start = useCallback(() => {
+  const check = useCallback(() => {
     window.clearTimeout(timer.current);
     drop();
     const run = newRun();
@@ -98,6 +118,9 @@ export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: s
       let watchdog = 0;
       try {
         off = await bridge.on<ProbeStepEvent>('probe-step', event => { if (event.run === run && mine()) setState(previous => ({ ...previous, steps: event.steps })); });
+        // Dropped while the listener was being set (a key typed right as the pause ended): Rust
+        // never hears of this check, so nothing runs behind the next one.
+        if (!mine()) return;
         const answer = bridge.probeConnection(run, address, key, none);
         const late = new Promise<'late'>(resolve => { watchdog = window.setTimeout(() => resolve('late'), watchdogMs); });
         const result = await Promise.race([answer, late]);
@@ -107,18 +130,24 @@ export function useProbe({ endpoint, apiKey, noKey, auto = true }: { endpoint: s
     });
     turn = job.catch(() => undefined);
   }, [drop]);
+  // The person's own gesture: the key may go to the address as it reads now.
+  const start = useCallback(() => {
+    const now = args.current;
+    trust.current = { seen: true, key: now.apiKey, origin: keyOrigin(normalizeEndpoint(now.endpoint)) };
+    check();
+  }, [check]);
 
-  const read = normalizeEndpoint(endpoint);
-  const ready = read.ok && (apiKey.trim() !== '' || noKey);
-  // Checked 600 ms after the last change, when there is something to check.
+  const ready = read.ok && (hasKey || noKey);
+  // Checked 600 ms after the last change, when there is something to check and nothing holds
+  // it. Otherwise nothing stays behind: no check running, no result of another address or of
+  // another server (the hook outlives the server it showed: a removed one, then a new one).
   useEffect(() => {
-    if (!auto) return undefined;
-    if (!ready) { window.clearTimeout(timer.current); drop(); setState(previous => previous.status === 'idle' && !previous.steps.length ? previous : idle); return undefined; }
-    timer.current = window.setTimeout(start, checkDelayMs);
+    if (!auto || !ready || held) { window.clearTimeout(timer.current); drop(); setState(previous => previous.status === 'idle' && !previous.steps.length ? previous : idle); return undefined; }
+    timer.current = window.setTimeout(check, checkDelayMs);
     return () => window.clearTimeout(timer.current);
-  }, [endpoint, apiKey, noKey, ready, auto, start, drop]);
+  }, [endpoint, apiKey, noKey, ready, held, auto, check, drop]);
   useEffect(() => () => { window.clearTimeout(timer.current); drop(); }, [drop]);
-  return { ...state, endpoint: read, ready, start };
+  return { ...state, endpoint: read, ready, held, start };
 }
 
 // A check mark drawn once (stroke-dashoffset).
@@ -153,7 +182,7 @@ export function ProbeTrace({ steps, problem, actions }: { steps: ProbeStep[]; pr
       </span>
       {step.state === 'error' && (described || actions) && <motion.span className="ft-trace-fix" role="alert" initial={{ opacity: 0, y: -2 }} animate={{ opacity: 1, y: 0 }} transition={tx('smooth')}>
         {described && <span className="ft-trace-fix-text">{described.fix}</span>}
-        {problem?.technical && <code className="ft-trace-cause">{problem.status ? `HTTP ${problem.status} · ` : ''}{problem.technical}</code>}
+        {problem?.technical && <code className="ft-trace-cause">{problem.status ? `HTTP ${problem.status} · ` : ''}{causeText(problem.technical, t)}</code>}
         {!problem?.technical && problem?.status ? <code className="ft-trace-cause">HTTP {problem.status}</code> : null}
         {actions && <span className="ft-trace-actions">{actions}</span>}
       </motion.span>}
@@ -200,6 +229,7 @@ export function CheckLine({ probe, model, check, className }: { probe: Probe; mo
   }
   else if (!probe.endpoint.ok) parts = [t('conn.needAddress')];
   else if (!probe.ready) { state = 'warn'; parts = [t('conn.needKey')]; }
+  else if (probe.held) { state = 'warn'; parts = [t('conn.heldKey')]; }
   else parts = [t('conn.notChecked')];
   return <span className={cx('ft-check-line', className)} data-state={state}>
     <StatusDot state={state}>
@@ -208,6 +238,7 @@ export function CheckLine({ probe, model, check, className }: { probe: Probe; mo
     {check?.collapsible && <button type="button" className="ft-check-toggle" aria-expanded={check.open} onClick={check.toggle}>
       {t('conn.details')}<ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" />
     </button>}
+    {probe.held && probe.status === 'idle' && <button type="button" className="ft-check-toggle ft-check-verify" onClick={probe.start}>{t('conn.verify')}</button>}
   </span>;
 }
 
@@ -241,7 +272,7 @@ export function CheckTrace({ probe, check, onOpenLog, className }: { probe: Prob
 // Line + trace, stacked: for the setup, or anywhere the check stands alone.
 export function ConnectionCheck({ probe, model, onOpenLog, className }: { probe: Probe; model?: string; onOpenLog?: (problem: ProbeProblem | null, run: string | null) => void; className?: string }) {
   const check = useCheck(probe);
-  if (probe.status === 'idle' && !probe.steps.length) return null;
+  if (probe.status === 'idle' && !probe.steps.length && !probe.held) return null;
   return <div className={cx('ft-check', className)} data-state={probe.status}>
     <CheckLine probe={probe} model={model} check={check} />
     <CheckTrace probe={probe} check={check} onOpenLog={onOpenLog} />

@@ -204,7 +204,7 @@ export function Slider({ label, value, min = 0, max = 100, step = 1, onChange, f
 }
 
 // ——— Segmented control (Radix ToggleGroup, single) with a sliding pill (motion layoutId) ———
-export type Segment<T extends string> = { value: T; label?: ReactNode; icon?: ReactNode; aria?: string };
+export type Segment<T extends string> = { value: T; label?: ReactNode; icon?: ReactNode; aria?: string; disabled?: boolean };
 export function Segmented<T extends string>({ label, value, onChange, options, size = 'md', block }: {
   label: string; value: T; onChange: (value: T) => void; options: Array<Segment<T>>; size?: 'sm' | 'md' | 'lg'; block?: boolean;
 }) {
@@ -213,7 +213,7 @@ export function Segmented<T extends string>({ label, value, onChange, options, s
   return <LayoutGroup id={group}>
     <ToggleGroupPrimitive.Root type="single" className="ft-segmented" data-size={size} data-block={block ? '' : undefined} aria-label={label}
       value={value} onValueChange={next => { if (next) onChange(next as T); }}>
-      {options.map(option => <ToggleGroupPrimitive.Item key={option.value} value={option.value} className="ft-segment" aria-label={option.aria ?? (typeof option.label === 'string' ? option.label : undefined)}>
+      {options.map(option => <ToggleGroupPrimitive.Item key={option.value} value={option.value} className="ft-segment" disabled={option.disabled} aria-label={option.aria ?? (typeof option.label === 'string' ? option.label : undefined)}>
         {value === option.value && <motion.span layoutId="pill" className="ft-segment-pill" transition={tx('snappy')} />}
         <span className="ft-segment-label">{option.icon}{option.label != null && <span>{option.label}</span>}</span>
       </ToggleGroupPrimitive.Item>)}

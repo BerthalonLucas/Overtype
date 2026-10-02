@@ -54,6 +54,9 @@ pub enum ErrorKind {
     /// A shortcut pressed while the Settings window is in front: nothing of another
     /// application is selected (a capture notice).
     SettingsOpen,
+    /// The same press while the first-run setup or its demo is in front (0.6): its own words
+    /// (« Close Settings first » pointed at a window that was not on screen).
+    SetupOpen,
     /// The tray's « Revoir la dernière traduction » with no result of the last ten minutes.
     NothingRecent,
     /// Anything unexpected on our side.
@@ -146,6 +149,7 @@ mod tests {
             (ErrorKind::ProtectedField, "protected_field"), (ErrorKind::KeysHeld, "keys_held"), (ErrorKind::Internal, "internal"),
             (ErrorKind::SettingsOpen, "settings_open"), (ErrorKind::NothingRecent, "nothing_recent"),
             (ErrorKind::ReadOnly, "read_only"), (ErrorKind::ProtectedWindow, "protected_window"),
+            (ErrorKind::SetupOpen, "setup_open"),
         ];
         for (kind, name) in codes {
             assert_eq!(serde_json::to_value(kind).unwrap(), serde_json::json!(name));

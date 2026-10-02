@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Globe, Info, LogOut, Power, RotateCcw, Sparkles } from 'lucide-react';
-import { menuShortcut } from '../../actionDefaults';
+import { menuShortcut, withLanguage } from '../../actionDefaults';
 import { bridge } from '../../bridge';
 import { useT } from '../../i18n';
 import { Button, Group, ICON, Row, Select, Switch } from '../../components/controls';
@@ -44,7 +44,7 @@ export function GeneralPage() {
       <Row id="autostart" icon={<Power {...ICON} />} title={t('settings.autostart')} description={t('settings.autostartHelp')}
         control={<Switch checked={settings.autostart} onCheckedChange={autostart => persist({ ...settings, autostart }, true)} label={t('settings.autostart')} />} />
       <Row id="language" icon={<Globe {...ICON} />} title={t('page.general.language')} description={t('settings.languageHelp')}
-        control={<Select<Language> label={t('page.general.language')} value={settings.language} onChange={language => persist({ ...settings, language }, true)} width={150}
+        control={<Select<Language> label={t('page.general.language')} value={settings.language} onChange={language => persist(withLanguage(settings, language), true)} width={150}
           options={[{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }]} />} />
     </Group>
 

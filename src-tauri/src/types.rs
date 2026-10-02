@@ -549,10 +549,6 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// The server a request names; an unknown id is the address's fault (`bad_endpoint`).
-    pub fn server(&self, id: &str) -> Result<&Server, crate::error::AppError> {
-        find_server(&self.servers, id)
-    }
     /// The default server (validation guarantees it exists; the first one otherwise). Read by
     /// the migration tests only: a request always names its server.
     #[cfg(test)]

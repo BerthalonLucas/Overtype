@@ -69,9 +69,9 @@ test('the sidebar: one page per topic, each with its colour, in English and Fren
   await expect.poll(() => saved(page)).toMatchObject({ language: 'fr', theme: 'dark', uiVersion: 'ilot' });
   await expect(page.locator('.st-save')).toHaveText('Enregistré');
   await shot(page, 'e2e-appearance-fr-dark');
-  // Action names are the person's own data: the language renamed nothing.
+  // The default actions nobody renamed follow the language (0.6); what the person named stays.
   await tab(page, 'Actions').click();
-  await expect(page.locator('.st-grid-name').first()).toHaveText('Fix grammar');
+  await expect(page.locator('.st-grid-name')).toHaveText(['Corriger', 'Traduire', 'Professionnel', 'Raccourcir', 'E-mail']);
 });
 
 test('the selection pill glides to the clicked page and never follows the mouse', async ({ page }) => {
@@ -259,9 +259,13 @@ test('the grid: order from the keyboard, letters checked in line, six actions at
   expect((await saved(page))?.actions.find(a => a.id === 'shorten')?.key).toBe('S');
 
   // A sixth action fills the menu (decision 6: no second page): a seventh cannot enter.
+  // One unnamed action at a time: « Add » waits until the new one has a name of its own.
   await page.getByRole('button', { name: 'Add an action', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Add an action', exact: true })).toBeDisabled();
+  await page.getByRole('textbox', { name: 'Action name', exact: true }).last().fill('Note');
   await page.getByRole('button', { name: 'Add an action', exact: true }).click();
-  await page.getByRole('switch', { name: 'New action in the menu', exact: true }).first().click();
+  await expect(page.getByRole('button', { name: 'Add an action', exact: true })).toBeDisabled();
+  await page.getByRole('switch', { name: 'Note in the menu', exact: true }).click();
   await expect(page.getByText('The menu is full: remove an action to add another.')).toBeVisible();
   await expect(page.getByRole('switch', { name: 'New action in the menu', exact: true }).last()).toBeDisabled();
   const last = await saved(page);
@@ -641,7 +645,13 @@ test('the Server page: a second server, the default one, then its removal; « Tr
   await expect(second.locator('.st-try-reply')).toContainText('This server asks for a key');
   await call(page, f => f.conn('ok'));
   // Removing the default server hands the default back to the one left.
+  // Asked once more, and saying which server becomes the default; « Keep » changes nothing.
   await second.getByRole('button', { name: 'Remove this server', exact: true }).click();
+  await expect(second.getByRole('alertdialog')).toContainText('llm.exemple.com becomes the default server.');
+  await second.getByRole('button', { name: 'Keep', exact: true }).click();
+  await expect(page.locator('.st-server')).toHaveCount(2);
+  await second.getByRole('button', { name: 'Remove this server', exact: true }).click();
+  await second.getByRole('button', { name: 'Remove', exact: true }).click();
   await expect(page.locator('.st-server')).toHaveCount(1);
   await expect.poll(() => saved(page)).toMatchObject({ defaultServerId: 's1', servers: [expect.objectContaining({ id: 's1' })] });
   await expect(page.getByRole('button', { name: /Add a server/ })).toBeVisible();

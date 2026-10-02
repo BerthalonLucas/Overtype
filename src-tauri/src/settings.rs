@@ -126,24 +126,42 @@ fn factory_profile(endpoint: &str, model: &str, api_key: &str) -> bool {
 /// (endpoint, model, key) and its default one: `quality` then `fast` when they are set up and
 /// differ; one empty server when none is. Returns the servers, the default one's id and
 /// whether the setup counts as done.
-fn servers_from_profiles(profiles: &HashMap<String, (String, String, String)>, mode: Option<&str>) -> (Vec<Server>, String, bool) {
-    let filled = |name: &str| -> Option<Server> {
+/// A factory profile is nobody's choice, unless something listens at its address right now
+/// (`listens`): that is the repository's own server (server/compose.yaml serves exactly these
+/// ports and model names), and dropping it left a working installation answering « Aucun
+/// serveur n'est réglé » to every shortcut after the update. It is kept as a server, and the
+/// setup still shows (its live check has the last word).
+fn servers_from_profiles(profiles: &HashMap<String, (String, String, String)>, mode: Option<&str>, listens: impl Fn(&Endpoint) -> bool) -> (Vec<Server>, String, bool) {
+    // The server, and whether somebody set it up.
+    let filled = |name: &str| -> Option<(Server, bool)> {
         let (endpoint, model, api_key) = profiles.get(name)?;
-        if endpoint.trim().is_empty() || factory_profile(endpoint, model, api_key) { return None; }
+        if endpoint.trim().is_empty() { return None; }
+        let factory = factory_profile(endpoint, model, api_key);
         // 0.5 validated its addresses; one that no longer reads is not a server set up.
         let endpoint = normalize_endpoint(endpoint).ok()?;
-        Some(Server { id: String::new(), name: String::new(), endpoint: endpoint.base, api_key: api_key.clone(), no_key: api_key.is_empty(), model: model.trim().to_string() })
+        if factory && !listens(&endpoint) { return None; }
+        Some((Server { id: String::new(), name: String::new(), endpoint: endpoint.base, api_key: api_key.clone(), no_key: api_key.is_empty(), model: model.trim().to_string() }, !factory))
     };
     let quality = filled("quality");
-    let fast = filled("fast").filter(|fast| quality.as_ref().is_none_or(|quality| (&fast.endpoint, &fast.model, &fast.api_key) != (&quality.endpoint, &quality.model, &quality.api_key)));
+    let fast = filled("fast").filter(|(fast, _)| quality.as_ref().is_none_or(|(quality, _)| (&fast.endpoint, &fast.model, &fast.api_key) != (&quality.endpoint, &quality.model, &quality.api_key)));
     let fast_is_default = mode == Some("fast") && fast.is_some();
-    let mut servers: Vec<Server> = quality.into_iter().chain(fast).collect();
+    let set_up = quality.iter().chain(fast.iter()).any(|(_, chosen)| *chosen);
+    let mut servers: Vec<Server> = quality.into_iter().chain(fast).map(|(server, _)| server).collect();
     if servers.is_empty() {
         return (vec![Server { id: FIRST_SERVER_ID.into(), ..Server::default() }], FIRST_SERVER_ID.into(), false);
     }
     for (index, server) in servers.iter_mut().enumerate() { server.id = format!("s{}", index + 1); }
     let default = if fast_is_default { servers.last() } else { servers.first() }.map(|server| server.id.clone()).unwrap_or_else(|| FIRST_SERVER_ID.into());
-    (servers, default, true)
+    (servers, default, set_up)
+}
+/// Whether something accepts a connection at a local address, asked once at the migration of a
+/// 0.5 file: this computer only, a fifth of a second at most, nothing sent.
+fn local_server_listens(endpoint: &Endpoint) -> bool {
+    use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
+    if !endpoint.local { return false; }
+    let Ok(addresses) = (endpoint.hostname.as_str(), endpoint.port).to_socket_addrs() else { return false };
+    let addresses: Vec<SocketAddr> = addresses.filter(|address| address.ip().is_loopback()).take(2).collect();
+    addresses.iter().any(|address| TcpStream::connect_timeout(address, std::time::Duration::from_millis(200)).is_ok())
 }
 
 impl SettingsStore {
@@ -207,7 +225,7 @@ impl SettingsStore {
                 for (name, profile) in raw.profiles.unwrap_or_default() {
                     profiles.insert(name, (profile.endpoint, profile.model, decrypt_key(&profile.api_key_dpapi)?));
                 }
-                servers_from_profiles(&profiles, raw.mode.as_deref())
+                servers_from_profiles(&profiles, raw.mode.as_deref(), local_server_listens)
             }
         };
         let mut settings = Settings {
@@ -240,6 +258,8 @@ impl SettingsStore {
         if !ilot_known && actions::migrate_to_ilot(&mut settings) {
             migrated = true;
         }
+        // The default actions nobody renamed read in the interface's language (0.6).
+        if actions::localize_defaults(&mut settings.actions, settings.language) { migrated = true; }
         validate(&settings)?;
         if from_0_5 {
             // The file as 0.5 wrote it stays beside the new one, once: a way back.
@@ -374,9 +394,11 @@ pub fn keep_menu_chord(fresh: &Settings, current: &Settings) -> Option<Settings>
 
 /// What is saved is clean (docs/PLAN-0.6.md §1.2): every address in its normalised form
 /// (no `/v1`, no final slash, `https://` when no scheme was typed), a model and a name without
-/// the spaces around them, and no key kept for a server that has none. An address that does
+/// the spaces around them, and no key kept for a server that has none; the default actions
+/// nobody renamed carry the names of the interface's language (`actions::localize_defaults`). An address that does
 /// not read is left as it is: `validate` then refuses it.
 pub fn sanitize(settings: &mut Settings) {
+    actions::localize_defaults(&mut settings.actions, settings.language);
     for server in &mut settings.servers {
         if let Ok(endpoint) = normalize_endpoint(&server.endpoint) { server.endpoint = endpoint.base; }
         else if server.endpoint.trim().is_empty() { server.endpoint.clear(); }
@@ -713,6 +735,10 @@ mod tests {
     }
     #[test]
     fn a_0_5_file_left_on_its_factory_profiles_starts_empty_and_sees_the_setup() {
+        // The repository's own server running on this machine is kept (see the next test): this
+        // one is about a machine where nothing listens there.
+        let serving = |address: &str| normalize_endpoint(address).is_ok_and(|endpoint| local_server_listens(&endpoint));
+        if serving(FACTORY_QUALITY.0) || serving(FACTORY_FAST.0) { return; }
         let (root, store, migrated) = migrate(&file_0_5("fast", FACTORY_QUALITY, FACTORY_FAST));
         assert_eq!(migrated.servers, vec![Server { id: "s1".into(), ..Server::default() }]);
         assert_eq!((migrated.default_server_id.as_str(), migrated.setup_done), ("s1", false));
@@ -736,13 +762,29 @@ mod tests {
             ("fast".to_string(), (fast.0.to_string(), fast.1.to_string(), fast.2.to_string())),
         ]);
         // Same address and model, another key: two servers.
-        let (servers, default, done) = servers_from_profiles(&profiles(("https://a.test/v1", "m", "key-one"), ("https://a.test/v1", "m", "key-two")), Some("quality"));
+        let nothing = |_: &Endpoint| false;
+        let (servers, default, done) = servers_from_profiles(&profiles(("https://a.test/v1", "m", "key-one"), ("https://a.test/v1", "m", "key-two")), Some("quality"), nothing);
         assert_eq!((servers.len(), default.as_str(), done), (2, "s1", true));
         // An address that no longer reads is not a server set up; an empty one neither.
-        let (servers, _, done) = servers_from_profiles(&profiles(("ftp://a.test", "m", ""), ("", "m", "")), Some("fast"));
+        let (servers, _, done) = servers_from_profiles(&profiles(("ftp://a.test", "m", ""), ("", "m", "")), Some("fast"), nothing);
         assert_eq!((servers, done), (vec![Server { id: "s1".into(), ..Server::default() }], false));
         // No profile at all (a damaged file): one empty server.
-        assert_eq!(servers_from_profiles(&HashMap::new(), None).0.len(), 1);
+        assert_eq!(servers_from_profiles(&HashMap::new(), None, nothing).0.len(), 1);
+        // The factory profiles: dropped when nothing listens there, kept when the repository's
+        // own server does (its address and its model stay; the setup still shows and checks).
+        let factory = profiles(FACTORY_QUALITY, FACTORY_FAST);
+        let (servers, _, done) = servers_from_profiles(&factory, Some("fast"), nothing);
+        assert_eq!((servers, done), (vec![Server { id: "s1".into(), ..Server::default() }], false));
+        let (servers, default, done) = servers_from_profiles(&factory, Some("fast"), |endpoint| endpoint.local);
+        assert_eq!(servers, vec![server("s1", FACTORY_QUALITY.0.trim_end_matches("/v1"), FACTORY_QUALITY.1, ""), server("s2", FACTORY_FAST.0.trim_end_matches("/v1"), FACTORY_FAST.1, "")]);
+        assert_eq!((default.as_str(), done), ("s2", false), "the default profile stays the default server, the setup still shows");
+        // Only one of them answers: that one alone; beside a server somebody set up, the setup is done.
+        let (servers, _, _) = servers_from_profiles(&factory, None, |endpoint| endpoint.port == 8001);
+        assert_eq!(servers.len(), 1);
+        let (servers, _, done) = servers_from_profiles(&profiles(("https://a.test/v1", "m", ""), FACTORY_FAST), None, |endpoint| endpoint.local);
+        assert_eq!((servers.len(), done), (2, true));
+        // Never another machine: only this computer is asked.
+        assert!(!local_server_listens(&normalize_endpoint("https://exemple.invalid").unwrap()));
         assert!(factory_profile("http://127.0.0.1:8001/v1/", " flowtranslate-quality ", ""));
         assert!(!factory_profile("http://127.0.0.1:8001/v1", "flowtranslate-fast", "a-key"));
     }

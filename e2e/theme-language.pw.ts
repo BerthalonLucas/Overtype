@@ -59,9 +59,10 @@ test('the settings window switches language and theme the moment they are chosen
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
   const saved = () => page.evaluate(() => (window as any).nativeFixture.calls.filter((c: any) => c.command === 'save_settings').at(-1)?.args.settings);
   await expect.poll(saved).toMatchObject({ language: 'fr' });
-  // Action names are user data: the switch never renames an action, built-in ones included.
+  // The default actions nobody renamed follow the language (0.6): « Fix grammar » reads « Corriger ».
   await tab('Actions').click();
-  await expect(page.locator('.st-grid-name').first()).toHaveText(actionName ?? '');
+  expect(actionName).toBe('Fix grammar');
+  await expect(page.locator('.st-grid-name').first()).toHaveText('Corriger');
   await tab('Apparence').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('radiogroup', { name: 'Thème', exact: true }).getByRole('radio', { name: 'Sombre', exact: true }).click();

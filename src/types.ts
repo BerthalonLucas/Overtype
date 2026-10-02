@@ -113,6 +113,8 @@ export const errorCodes = [
   // 0.6 (field test of 0.5.1): the paste changed nothing (a PDF in a browser); the window in
   // front runs as administrator and can neither be read nor written.
   'read_only', 'protected_window',
+  // 0.6: a shortcut pressed while the first-run setup (or its demo) is in front.
+  'setup_open',
 ] as const;
 export type ErrorCode = typeof errorCodes[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.

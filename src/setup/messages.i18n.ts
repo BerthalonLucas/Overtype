@@ -12,6 +12,7 @@ export const setupMessages = {
   'setup.loading': { en: 'Reading your settings…', fr: 'Lecture de vos réglages…' },
   'setup.loadError': { en: 'Your settings could not be read.', fr: 'Impossible de lire vos réglages.' },
   'setup.notSaved': { en: 'This choice could not be saved.', fr: 'Ce choix n’a pas pu être enregistré.' },
+  'setup.notFinished': { en: 'The setup could not be saved.', fr: 'L’accueil n’a pas pu être enregistré.' },
   // Welcome.
   'setup.welcome.title': { en: 'Welcome to {app}', fr: 'Bienvenue sur {app}' },
   'setup.welcome.text': { en: 'Fix, translate and rephrase the selected text, in any application.', fr: 'Corrigez, traduisez et reformulez le texte sélectionné, dans n’importe quelle application.' },
@@ -35,6 +36,9 @@ export const setupMessages = {
   'setup.shortcut.label': { en: 'Shortcut', fr: 'Raccourci' },
   'setup.shortcut.note': { en: 'Select some text anywhere, then press these keys.', fr: 'Sélectionnez du texte n’importe où, puis appuyez sur ces touches.' },
   'setup.shortcut.restore': { en: 'Restore {shortcut}', fr: 'Rétablir {shortcut}' },
+  'setup.shortcut.change': { en: 'Change', fr: 'Changer' },
+  'setup.shortcut.press': { en: 'Press the new combination…', fr: 'Appuyez sur la nouvelle combinaison…' },
+  'setup.shortcut.escape': { en: 'Escape to cancel.', fr: 'Échap pour annuler.' },
   'setup.shortcut.when': { en: 'When you press these keys', fr: 'Quand vous appuyez sur ces touches' },
   'setup.shortcut.menu': { en: 'Open the menu', fr: 'Ouvrir le menu' },
   'setup.shortcut.menuText': { en: 'You choose the action each time.', fr: 'Vous choisissez l’action à chaque fois.' },

@@ -109,7 +109,7 @@ const THINKING_SWITCH: &str = "chat_template_kwargs";
 fn request_body(profile: &Server, instruction: &str, text: &str, extended: bool, thinking_switch: bool) -> Value {
     let mut body = json!({"model":profile.model,
         "messages":[{"role":"system","content":instruction},{"role":"user","content":text}],
-        "stream":true,"temperature":0.3,"top_p":0.9,"max_tokens":4096});
+        "stream":true,"temperature":0.3,"top_p":0.9});
     if extended {
         body["top_k"] = json!(20);
         body["repetition_penalty"] = json!(1.05);
@@ -196,15 +196,17 @@ pub fn clean_output(text: &str) -> String {
     trimmed.to_string()
 }
 
-/// How long a connection, then a whole answer, may take (the tests shorten them).
+/// How long a connection may take, then how long the server may stay silent (before the first
+/// token: the prompt is read; then between two): no limit on the whole answer, a long text
+/// streams as long as it needs (the tests shorten them).
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
     pub connect: Duration,
-    pub total: Duration,
+    pub idle: Duration,
 }
 impl Default for Limits {
     fn default() -> Self {
-        Self { connect: Duration::from_secs(5), total: Duration::from_secs(120) }
+        Self { connect: Duration::from_secs(5), idle: Duration::from_secs(120) }
     }
 }
 
@@ -240,7 +242,7 @@ where
         return Err(AppError::new(ErrorKind::ModelNotFound, "Aucun modèle n’est choisi pour ce serveur."));
     }
     // A server on this computer is reached directly, whatever proxy the environment names.
-    let client = probe::client(&probe::route(&address), limits.connect, limits.total).map_err(AppError::internal)?;
+    let client = probe::streaming_client(&probe::route(&address), limits.connect, limits.idle).map_err(AppError::internal)?;
     let mut extended = true;
     let mut thinking_switch = true;
     let response = loop {
@@ -601,7 +603,7 @@ mod tests {
         stream_within(profile(endpoint), "Fix it.".into(), "texte".into(), cancel, limits, |_| Ok(())).await
     }
     async fn run(endpoint: String) -> Result<String, AppError> {
-        run_with(endpoint, CancellationToken::new(), Limits { connect: Duration::from_secs(2), total: Duration::from_secs(5) }).await
+        run_with(endpoint, CancellationToken::new(), Limits { connect: Duration::from_secs(2), idle: Duration::from_secs(5) }).await
     }
     async fn code(endpoint: String) -> ErrorKind {
         run(endpoint).await.expect_err("an error").kind
@@ -652,7 +654,7 @@ mod tests {
         assert_eq!(code(format!("http://127.0.0.1:{closed}/v1")).await, ErrorKind::Unreachable);
         // A server that accepts and never answers.
         let silent = fake_server(Vec::new(), true);
-        let timeout = run_with(silent, CancellationToken::new(), Limits { connect: Duration::from_secs(2), total: Duration::from_millis(400) }).await.unwrap_err();
+        let timeout = run_with(silent, CancellationToken::new(), Limits { connect: Duration::from_secs(2), idle: Duration::from_millis(400) }).await.unwrap_err();
         assert_eq!(timeout.kind, ErrorKind::Timeout);
         // An address that does not read, no address at all (nothing set up), and no model chosen:
         // each opens its field, and nothing leaves this computer.
@@ -701,7 +703,7 @@ mod tests {
     async fn an_unreachable_server_says_why() {
         // Nothing listens: a port taken then released (Windows takes about 2 s to say so).
         let closed = { let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap(); listener.local_addr().unwrap().port() };
-        let patient = Limits { connect: Duration::from_secs(5), total: Duration::from_secs(8) };
+        let patient = Limits { connect: Duration::from_secs(5), idle: Duration::from_secs(8) };
         let refused = run_with(format!("http://127.0.0.1:{closed}/v1"), CancellationToken::new(), patient).await.unwrap_err();
         assert_eq!(refused.kind, ErrorKind::Unreachable);
         assert!(refused.message.contains("rien n’écoute"), "{}", refused.message);

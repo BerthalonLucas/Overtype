@@ -1331,8 +1331,8 @@ fn translate(
     state: State<'_, AppState>,
     request: TranslationRequest,
 ) -> Result<(), String> {
-    if request.text.is_empty() || request.text.chars().count() > 6000 {
-        return Err("La traduction accepte de 1 à 6 000 caractères.".into());
+    if request.text.is_empty() || request.text.chars().count() > capture::MAX_CHARS {
+        return Err("La traduction accepte de 1 à 200 000 caractères.".into());
     }
     let (profile, instruction, execution_info, cancel, inner, history, demo, demo_long, halo_scene) = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;

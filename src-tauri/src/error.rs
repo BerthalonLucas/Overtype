@@ -39,7 +39,7 @@ pub enum ErrorKind {
     /// The window in front runs as administrator while we do not: Windows lets us neither
     /// read its text nor send it a key (a capture notice, and a refusal of the paste).
     ProtectedWindow,
-    /// Over 6,000 characters.
+    /// Over 200,000 characters (capture::MAX_CHARS).
     TooLong,
     /// Cancelled by the user or replaced by a newer request.
     Cancelled,

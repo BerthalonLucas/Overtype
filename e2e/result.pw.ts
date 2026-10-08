@@ -255,7 +255,7 @@ test('each family has its one button: the field, Try again, Copy result, or none
 
   // Content: no button but ✕.
   await page.goto(url({ scenario: 'result-error-content', stage: 'error' }));
-  await expect(page.getByRole('alert')).toHaveText('Selection too long (max 6,000 characters)');
+  await expect(page.getByRole('alert')).toHaveText('Selection too long (max 200,000 characters)');
   await expect(page.locator('.result-pill button')).toHaveCount(1);
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.locator('.result-pill')).toHaveCount(0);

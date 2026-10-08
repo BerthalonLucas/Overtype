@@ -1,3 +1,12 @@
+# Overtype 0.6.1 — des textes longs — 8 octobre 2026
+
+- **200 000 caractères au lieu de 6 000.** Une sélection ou une copie peut aller jusqu’à 200 000 caractères : de quoi tenir dans un contexte de 131k tokens, le texte puis sa réécriture. Au-delà, la pilule « Sélection trop longue » reste.
+- **Plus de plafond sur la réponse.** La requête n’impose plus 4 096 tokens en sortie : le serveur écrit jusqu’au bout du contexte qui lui reste. Une longue réécriture n’est plus refusée comme « incomplète ».
+- **Plus de limite de deux minutes.** L’attente n’est plus bornée au total mais au silence : la requête échoue seulement si le serveur ne renvoie rien pendant 120 s (lecture du texte avant le premier mot, ou entre deux mots). Un long texte s’écrit aussi longtemps qu’il le faut.
+
+À savoir : le contexte du serveur doit suivre. Un modèle lancé avec 8k de contexte refusera un long texte (erreur du serveur).
+
+Validation : `cargo test` (inférence, capture, probe) et Vitest. Pas encore de passage réel sur un texte de 200 000 caractères.
 # Overtype 0.6.0 — un nouveau nom, de nouveaux Réglages, un accueil, un serveur — 2 octobre 2026
 
 - **FlowTranslate devient Overtype.** Le nom change partout : fenêtres, zone de notification, installateur (`Overtype_0.6.0_x64-setup.exe`), exécutable (`Overtype.exe`), raccourcis. Rien n’est perdu : les réglages, les clés protégées par Windows et l’historique restent dans le même dossier (`%APPDATA%\com.flowtranslate.desktop`). Installé par-dessus une 0.5, l’installateur retire FlowTranslate (dossier, raccourcis, entrée de « Applications installées ») sans toucher aux données, et le lancement à l’ouverture de session suit vers `Overtype.exe`.

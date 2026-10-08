@@ -28,6 +28,11 @@ const ANCHOR_DRIFT: f64 = 2.;
 /// How much of a document UI Automation is asked for (UTF-16 units). A text that fills it was
 /// cut there: what lies beyond was not read.
 const FIELD_CAP: usize = 200_000;
+/// The longest text sent (Lucas, 2026-10-08; 6,000 before): a translation spends the context
+/// twice, the text then about as much again, so this fits a context of 131k tokens.
+pub(crate) const MAX_CHARS: usize = 200_000;
+/// UI Automation's refusal of a selection past MAX_CHARS (UTF-16 units there).
+const UIA_TOO_LONG: &str = "La sélection dépasse 200 000 unités de texte et pourrait être tronquée.";
 
 thread_local! {
     // uiautomation::UIAutomation::new initializes COM every time without balancing
@@ -64,13 +69,13 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
         .next()
         .ok_or_else(|| NO_SELECTION.to_string())?;
     let text = range
-        .get_text(6001)
+        .get_text(MAX_CHARS as i32 + 1)
         .map_err(|_| "Impossible de lire la sélection.".to_string())?;
     if text.is_empty() {
         return Err(NO_SELECTION.into());
     }
-    if text.encode_utf16().count() >= 6001 {
-        return Err("La sélection dépasse 6 000 unités de texte et pourrait être tronquée.".into());
+    if text.encode_utf16().count() > MAX_CHARS {
+        return Err(UIA_TOO_LONG.into());
     }
     let selection_len = text.chars().count();
     let range_editable = range
@@ -180,18 +185,18 @@ fn refuse_protected(password: Result<bool, ()>) -> Result<(), AppError> {
     }
 }
 
-/// What a copy gave: nothing readable is nothing to act on; past 6,000 characters it is
+/// What a copy gave: nothing readable is nothing to act on; past MAX_CHARS characters it is
 /// refused before anything is sent.
 fn copied_text(text: Option<String>) -> Result<String, AppError> {
     let text = text.filter(|text| !text.trim().is_empty())
         .ok_or_else(|| AppError::new(ErrorKind::NoSelection, "Rien à traduire dans la fenêtre active."))?;
-    if text.chars().count() > 6000 {
+    if text.chars().count() > MAX_CHARS {
         return Err(too_long());
     }
     Ok(text)
 }
 fn too_long() -> AppError {
-    AppError::new(ErrorKind::TooLong, "Sélection trop longue (6 000 caractères).")
+    AppError::new(ErrorKind::TooLong, "Sélection trop longue (200 000 caractères).")
 }
 
 /// Whether a paste can replace what was captured (0.4.0, decided at the capture): the
@@ -302,7 +307,7 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                     ensure_source_unchanged(source_window)?;
                     return Ok(StoredCapture { public, target, invalidated: false, levels });
                 }
-                Err(message) if message.contains("6 000") => return Err(AppError::new(ErrorKind::TooLong, message)),
+                Err(message) if message == UIA_TOO_LONG => return Err(AppError::new(ErrorKind::TooLong, message)),
                 Err(_) => {}
             }
         }
@@ -816,8 +821,8 @@ mod tests {
         assert_eq!(refuse_protected(Err(())).unwrap_err().kind, ErrorKind::ProtectedField);
         assert_eq!(copied_text(None).unwrap_err().kind, ErrorKind::NoSelection);
         assert_eq!(copied_text(Some(" \n\t".into())).unwrap_err().kind, ErrorKind::NoSelection);
-        assert_eq!(copied_text(Some("é".repeat(6001))).unwrap_err().kind, ErrorKind::TooLong);
-        assert_eq!(copied_text(Some("é".repeat(6000))).unwrap(), "é".repeat(6000));
+        assert_eq!(copied_text(Some("é".repeat(MAX_CHARS + 1))).unwrap_err().kind, ErrorKind::TooLong);
+        assert_eq!(copied_text(Some("é".repeat(MAX_CHARS))).unwrap(), "é".repeat(MAX_CHARS));
         // A window that is not in front (0 never is): the capture is refused as changed.
         assert_eq!(ensure_source_unchanged(0).unwrap_err().kind, ErrorKind::TargetChanged);
         // The paste: NUL, a read-only field, the chord still held, another window in front.

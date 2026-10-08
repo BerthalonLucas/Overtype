@@ -91,7 +91,7 @@ const dictionary = {
   // 0.6: the paste changed nothing (a PDF in a browser); the window runs as administrator.
   'result.error.read_only': { en: 'Read-only text, not replaced', fr: 'Texte en lecture seule, rien remplacé' },
   'result.error.protected_window': { en: 'Administrator window — can’t be read', fr: 'Fenêtre administrateur, lecture impossible' },
-  'result.error.too_long': { en: 'Selection too long (max 6,000 characters)', fr: 'Sélection trop longue (6 000 caractères max)' },
+  'result.error.too_long': { en: 'Selection too long (max 200,000 characters)', fr: 'Sélection trop longue (200 000 caractères max)' },
   'result.error.no_selection': { en: 'Select some text first', fr: 'Sélectionnez d’abord du texte' },
   'result.error.protected_field': { en: 'Protected field, not read', fr: 'Champ protégé, rien lu' },
   // Capture notices with a code of their own: the Settings window was in front, the tray's

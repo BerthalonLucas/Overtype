@@ -1,6 +1,6 @@
 [package]
 name = "flowtranslate"
-version = "0.6.0"
+version = "0.6.1"
 description = "Overtype Windows desktop host"
 authors = ["Overtype contributors"]
 edition = "2021"

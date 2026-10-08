@@ -284,7 +284,17 @@ fn windows_proxy_host(value: &str) -> Option<String> {
 /// The HTTP client of every request of the app: no redirect followed, and no proxy for a
 /// direct route (a local server above all).
 pub fn client(route: &Route, connect: Duration, total: Duration) -> Result<reqwest::Client, String> {
-    let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).connect_timeout(connect).timeout(total);
+    build(route, reqwest::Client::builder().connect_timeout(connect).timeout(total))
+}
+
+/// The client of a streamed answer: no limit on the whole, only on a silence (`idle`, reset by
+/// every read), so a long text streams as long as it needs.
+pub fn streaming_client(route: &Route, connect: Duration, idle: Duration) -> Result<reqwest::Client, String> {
+    build(route, reqwest::Client::builder().connect_timeout(connect).read_timeout(idle))
+}
+
+fn build(route: &Route, builder: reqwest::ClientBuilder) -> Result<reqwest::Client, String> {
+    let mut builder = builder.redirect(reqwest::redirect::Policy::none());
     if *route == Route::Direct { builder = builder.no_proxy(); }
     builder.build().map_err(|_| "Impossible de créer le client HTTP.".to_string())
 }

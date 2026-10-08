@@ -309,7 +309,7 @@ test('content: the text alone and ✕; cancelled: the pill just leaves', async (
   await openIlot(page);
   await chooseAndWork(page, 'content');
   await on(page, f => f.error('too_long'));
-  await expect(page.getByRole('alert')).toHaveText('Selection too long (max 6,000 characters)');
+  await expect(page.getByRole('alert')).toHaveText('Selection too long (max 200,000 characters)');
   await expect(page.locator('.ilot-stage button')).toHaveCount(1);
   await page.getByRole('button', { name: 'Close' }).click();
   await expect.poll(() => calls(page, 'dismiss_overlay')).toHaveLength(1);

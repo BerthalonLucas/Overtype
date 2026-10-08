@@ -60,6 +60,12 @@
 .st-nav-sep { display: block; height: 1px; margin: 6px 10px; background: var(--ft-line); }
 .st-tab-badge { display: grid; place-items: center; width: 16px; height: 16px; }
 .st-tab-badge .ft-status { gap: 0; }
+/* « Mises à jour » (0.6.2): the waiting version lights its button up, and a dot on « Général ». */
+.st-update-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.st-update-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ft-accent); box-shadow: 0 0 0 3px rgb(var(--ft-accent-rgb) / .25); }
+.ft-button.st-update-ready { position: relative; box-shadow: var(--ft-button-shadow), 0 0 0 3px rgb(var(--ft-accent-rgb) / .3), 0 0 18px rgb(var(--ft-accent-rgb) / .45); }
+.ft-button.st-update-ready::after { content: ""; position: absolute; inset: -4px; border-radius: inherit; box-shadow: 0 0 0 2px rgb(var(--ft-accent-rgb) / .45); animation: st-rec 1.8s ease-in-out infinite; pointer-events: none; }
+:root[data-motion="reduced"] .ft-button.st-update-ready::after { animation: none; opacity: .6; }
 .st-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Search landing: the found row glows once. */

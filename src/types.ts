@@ -190,3 +190,5 @@ export type DiagLevel = 'ok' | 'info' | 'error';
 export type DiagEntry = { id: number; at: string; run?: string; step: DiagStep; level: DiagLevel; method?: 'GET' | 'POST'; url?: string; status?: number; ms?: number; code: string; cause?: string; detail?: string; proxy?: string; key?: string };
 // `demo-ended`: the demo window closed (done: it played to its end; false: skipped, closed, or its watchdog).
 export type DemoEnded = { done: boolean };
+// `update-status` (Rust update.rs, 0.6.2): the in-app update, as Settings › General shows it.
+export type UpdateStatus = { current: string; available: string | null; checkedAt: number | null; checking: boolean; failed: boolean; installing: boolean; downloaded: number; total: number | null };

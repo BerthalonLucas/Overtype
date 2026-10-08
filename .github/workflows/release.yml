@@ -51,7 +51,17 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - run: npm run tauri -- build --bundles nsis
+      # The installer is signed for the in-app update (src-tauri/src/update.rs): the key lives in the
+      # repository's secrets, its public half in tauri.conf.json. No key, no release.
+      - name: Build and sign the installer
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Secret TAURI_SIGNING_PRIVATE_KEY absent : installateur non signé, release refusée.' }
+          npm run tauri -- build --bundles nsis --config src-tauri/tauri.updater.conf.json
+          if ($LASTEXITCODE -ne 0) { throw 'Build de l’installateur impossible.' }
       - name: Publish the installer and its SHA-256
         shell: pwsh
         env:
@@ -69,11 +79,23 @@ jobs:
           $lines[$starts[0]..$end] | Set-Content -Encoding utf8 release-notes.md
           Add-Content release-notes.md ""
           Add-Content release-notes.md "SHA-256 de l’installateur : ``$hash``"
+          # What the installed apps read to update themselves (releases/latest/download/latest.json).
+          $sig = "$($exe.FullName).sig"
+          if (-not (Test-Path $sig)) { throw 'Signature de l’installateur absente.' }
+          [ordered]@{
+            version = $tag.TrimStart('v')
+            notes = (Get-Content release-notes.md -Raw)
+            pub_date = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            platforms = @{ 'windows-x86_64' = @{
+              signature = (Get-Content $sig -Raw).Trim()
+              url = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$($exe.Name)"
+            } }
+          } | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8NoBOM latest.json
           if ($env:GITHUB_REF -eq 'refs/heads/main' -and $env:GITHUB_EVENT_NAME -eq 'push') {
             git tag $tag $env:GITHUB_SHA
             if ($LASTEXITCODE -ne 0) { throw 'Création du tag impossible.' }
             git push origin "refs/tags/$tag"
             if ($LASTEXITCODE -ne 0) { throw 'Publication du tag impossible.' }
           }
-          gh release create $tag $exe.FullName SHA256SUMS.txt --title "Overtype $tag" --notes-file release-notes.md --verify-tag
+          gh release create $tag $exe.FullName SHA256SUMS.txt latest.json --title "Overtype $tag" --notes-file release-notes.md --verify-tag
           if ($LASTEXITCODE -ne 0) { throw 'Publication de la release impossible.' }

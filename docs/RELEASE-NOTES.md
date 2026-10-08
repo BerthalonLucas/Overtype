@@ -1,3 +1,11 @@
+# Overtype 0.6.2 — la mise à jour depuis l’app — 8 octobre 2026
+
+- **Plus besoin de réinstaller.** Réglages › Général › À propos : « Vérifier les mises à jour » interroge GitHub, et quand une version plus récente existe, le bouton « Mettre à jour vers x.y.z » s’allume (et un point sur « Général » dans la barre latérale). Un clic : téléchargement, vérification de la signature, installation en mode passif, puis l’app redémarre dans la nouvelle version. Les réglages, les clés et l’historique ne bougent pas.
+- **Vérifié tout seul.** Au démarrage, puis toutes les six heures. Rien d’autre ne part vers GitHub qu’une demande du fichier de version.
+- **Signé.** Chaque installateur publié est signé ; l’app refuse un fichier dont la signature ne correspond pas à sa clé.
+
+À savoir : cette version s’installe encore à la main (la 0.6.1 ne sait pas se mettre à jour). Les suivantes arriveront par le bouton.
+
 # Overtype 0.6.1 — des textes longs — 8 octobre 2026
 
 - **200 000 caractères au lieu de 6 000.** Une sélection ou une copie peut aller jusqu’à 200 000 caractères : de quoi tenir dans un contexte de 131k tokens, le texte puis sa réécriture. Au-delà, la pilule « Sélection trop longue » reste.

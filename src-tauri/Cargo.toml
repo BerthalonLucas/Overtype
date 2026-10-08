@@ -1,6 +1,6 @@
 [package]
 name = "flowtranslate"
-version = "0.6.1"
+version = "0.6.2"
 description = "Overtype Windows desktop host"
 authors = ["Overtype contributors"]
 edition = "2021"
@@ -32,6 +32,8 @@ tauri = { version = "2.11.5", features = ["tray-icon"] }
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-global-shortcut = "2.3.2"
 tauri-plugin-single-instance = "2.4.4"
+# ~2.12: 2.13 needs Tauri 2.12, whose JS and CLI packages this app does not use yet.
+tauri-plugin-updater = "~2.12.0"
 thiserror = "2.0.17"
 tokio = { version = "1.47.1", features = ["sync", "time", "rt-multi-thread", "macros"] }
 tokio-util = "0.7.16"

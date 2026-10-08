@@ -26,6 +26,7 @@ mod system_motion;
 mod system_theme;
 mod tray_text;
 mod types;
+mod update;
 use arboard::Clipboard;
 use chrono::Utc;
 use history::HistoryStore;
@@ -3199,6 +3200,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::Builder::new().app_name(brand::APP_NAME).build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             // FLOWTRANSLATE_DATA_DIR isolates a test run: the executable of the build target
             // would otherwise share settings.json and the history with the installed app.
@@ -3257,6 +3259,7 @@ pub fn run() {
                 demo_long,
                 simulated,
             });
+            update::init(app.handle());
             // Commands may arrive as soon as the WebView loads. State must exist first.
             // No browser accelerators in our pages (F5 reloads the overlay under the capture).
             for config in app.config().app.windows.clone() {
@@ -3361,6 +3364,7 @@ pub fn run() {
             watch_overlay(app.handle().clone());
             system_theme::watch(app.handle().clone());
             system_motion::watch(app.handle().clone());
+            update::watch(app.handle().clone());
             if demo {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn_blocking(move || {
@@ -3426,7 +3430,10 @@ pub fn run() {
             get_history,
             delete_history,
             system_theme,
-            system_motion
+            system_motion,
+            update::update_status,
+            update::check_update,
+            update::install_update
         ])
         .run(tauri::generate_context!())
         .expect("Impossible de démarrer l’application");

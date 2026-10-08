@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react';
-import { Globe, Info, LogOut, Power, RotateCcw, Sparkles } from 'lucide-react';
+import { Download, Globe, Info, LogOut, Power, RotateCcw, Sparkles } from 'lucide-react';
 import { menuShortcut, withLanguage } from '../../actionDefaults';
 import { bridge } from '../../bridge';
 import { useT } from '../../i18n';
 import { Button, Group, ICON, Row, Select, Switch } from '../../components/controls';
 import type { Language } from '../../types';
 import { useSettingsContext } from '../useSettingsStore';
+import { useUpdate } from '../useUpdate';
 import { InlineConfirm } from './InlineConfirm';
 
 // « Général »: start at sign-in, the interface language, « Revoir l'accueil », the reset (asked
@@ -63,8 +64,37 @@ export function GeneralPage() {
     </Group>
 
     <Group title={t('page.general.aboutGroup')}>
+      <UpdateRow />
       <Row icon={<Info {...ICON} />} title={t('page.general.version', { version: __APP_VERSION__ })} description={t('page.general.versionHelp')}
         control={<Button variant="ghost" icon={<LogOut {...ICON} size={15} />} onClick={() => void bridge.quit()}>{t('settings.quit')}</Button>} />
     </Group>
   </>;
+}
+
+// « Mises à jour » (0.6.2): « Vérifier » asks GitHub now; a newer version lights « Mettre à jour
+// vers x.y.z » up, which downloads it, checks its signature and hands over to its installer (the
+// app quits, the new version starts).
+function UpdateRow() {
+  const t = useT();
+  const { settings } = useSettingsContext();
+  const status = useUpdate();
+  const [installFailed, setInstallFailed] = useState(false);
+  const available = status?.available ?? null;
+  const installing = status?.installing ?? false;
+  const check = () => { setInstallFailed(false); void bridge.checkUpdate().catch(() => undefined); };
+  const install = () => { setInstallFailed(false); bridge.installUpdate().catch(() => setInstallFailed(true)); };
+  const percent = status?.total ? Math.min(100, Math.round(status.downloaded / status.total * 100)) : 0;
+  const time = status?.checkedAt ? new Date(status.checkedAt).toLocaleTimeString(settings.language, { hour: '2-digit', minute: '2-digit' }) : null;
+  const description = installing ? t('page.general.updateInstalling', { percent })
+    : installFailed ? t('page.general.updateInstallFailed')
+    : status?.checking ? t('page.general.updateChecking')
+    : available ? t('page.general.updateAvailable', { version: available })
+    : status?.failed ? t('page.general.updateFailed')
+    : time ? t('page.general.updateUpToDate', { time })
+    : t('page.general.updateNever');
+  return <Row id="update" icon={<Download {...ICON} />} title={t('page.general.updates')} description={description}
+    control={<div className="st-update-actions">
+      {available && <Button variant="primary" className="st-update-ready" icon={<Download {...ICON} size={15} />} busy={installing} onClick={install}>{t('page.general.updateInstall', { version: available })}</Button>}
+      <Button variant={available ? 'ghost' : 'secondary'} busy={status?.checking} disabled={installing} onClick={check}>{t('page.general.updateCheck')}</Button>
+    </div>} />;
 }

@@ -263,3 +263,11 @@ Types in `src/types.ts`, wrappers in `src/bridge.ts`, preview in `src/bridge.moc
 - **Default actions** nobody renamed (name and tile label exactly the shipped ones) carry the names of the interface's language: `actions::localize_defaults` at load and at every save, `localizeDefaults` / `withLanguage` in `src/actionDefaults.ts`.
 - **Journal.** Request errors carry a code and a fixed word as cause, never a French sentence; the page says every code and the known fixed words in the interface's language (`causeText`, `diag.code.*`, `diag.word.*`).
 - **Removed.** `list_models` (never called by the interface).
+
+## 0.6.2: in-app updates (src-tauri/src/update.rs)
+
+- `update_status() -> UpdateStatus`, `check_update() -> UpdateStatus`, `install_update() -> UpdateStatus` (Settings window). `UpdateStatus` is `{current, available: string|null, checkedAt: number|null, checking, failed, installing, downloaded, total: number|null}`; every change is also sent to the Settings window as `update-status`.
+- Rust checks at start, then every six hours (never in a debug build nor under `FLOWTRANSLATE_DATA_DIR`), with `tauri-plugin-updater` against `https://github.com/BerthalonLucas/Overtype/releases/latest/download/latest.json`. The installer's minisign signature is checked against the public key of `tauri.conf.json` before anything runs.
+- `install_update` downloads, verifies, then starts the NSIS installer in passive mode with `/UPDATE`: the app quits (`std::process::exit`), the installer restarts it. It answers only on failure.
+- The release workflow signs with the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets (`--config src-tauri/tauri.updater.conf.json`) and publishes `latest.json` beside the installer; without the secret no release is made. Local and CI builds stay unsigned.
+- Browser preview: `?update=0.9.0` shows a waiting version; `install_update` refuses.

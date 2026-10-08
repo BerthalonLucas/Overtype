@@ -17,6 +17,7 @@ import { fieldFromLocation, pageOfField, resolveField, revealField, serverOfFiel
 import { describeRefusal } from './messages';
 import { clickRun, isDiagnosticsChord, loadDiagnosticsShown, pageAbout, pageFromLocation, pageOr, pageTitle, saveDiagnosticsShown, visiblePages, type ClickRun, type PageId } from './nav';
 import { useRegistrations } from './registrations';
+import { useUpdate } from './useUpdate';
 import { queryMaxLength, searchSettings } from './search';
 import { SettingsContext, useSettingsContext, useSettingsStore, type SaveProblem, type SaveStatus, type SettingsContextValue, type ToastExtra } from './useSettingsStore';
 import { ActionsPage } from './pages/Actions';
@@ -109,6 +110,7 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
   const store = useSettingsStore();
   const { settings } = store;
   const registrations = useRegistrations();
+  const update = useUpdate();
   // Closed by its own cross or Escape: the page is told nothing by Windows, so it notes it itself.
   const [hiddenAt, setHiddenAt] = useState(0);
   const openedNow = useOpened();
@@ -317,6 +319,8 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
   const defaultProbe = probes[settings.defaultServerId] ?? probeA;
   const serverBadge = defaultProbe.status === 'error' ? 'error' : defaultProbe.status === 'running' ? 'running' : null;
   const serverAside = serverBadge ? <span className="st-tab-badge"><StatusDot state={serverBadge} /><span className="st-sr">{t(serverBadge === 'error' ? 'nav.serverFailing' : 'nav.serverChecking')}</span></span> : null;
+  // A newer version waits: a dot of the accent on « Général », where its button lights up.
+  const updateAside = update?.available ? <span className="st-tab-badge"><i className="st-update-dot" aria-hidden="true" /><span className="st-sr">{t('nav.updateAvailable')}</span></span> : null;
   const onScroll = (event: UIEvent<HTMLDivElement>) => { const on = event.currentTarget.scrollTop > 56; if (on !== scrolled) setScrolled(on); };
   const { settings: _settings, loadError: _loadError, reload: _reload, current: _current, ...actions } = store;
   const context: SettingsContextValue = { ...actions, settings, go, openLog, landing, showToast, registrations, probes, addressDrafts, setAddressDraft, expanded, setExpanded };
@@ -346,7 +350,7 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
                     </motion.button>) : <p className="st-results-empty">{t('nav.noResult')}</p>}
                   </div>
                 : <TabList label={t('nav.pages')}>
-                    {pages.filter(id => id !== 'diagnostic').map(id => { const Glyph = pageIcons[id]; return <Tab key={id} value={id} icon={<Glyph {...ICON} />} badge={id === 'server' ? serverAside : null}>{t(pageTitle(id))}</Tab>; })}
+                    {pages.filter(id => id !== 'diagnostic').map(id => { const Glyph = pageIcons[id]; return <Tab key={id} value={id} icon={<Glyph {...ICON} />} badge={id === 'server' ? serverAside : id === 'general' ? updateAside : null}>{t(pageTitle(id))}</Tab>; })}
                     <AnimatePresence initial={false}>
                       {showDiag && <motion.div key="diag" className="st-diag-tab" initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96, transition: tx({ duration: 0.16, ease: 'out' }) }} transition={tx('smooth')}>
                         {/* « Apparition en place »: the entry fades and grows where it will stay, no slide. */}

@@ -4,12 +4,12 @@ import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { listen as tauriListen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { connectionCommand, isConnectionCommand, mockModels, normalizeEndpoint, setConnScenario, type ConnScenario } from './bridge.mock';
-import type { Capture, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome } from './types';
+import type { Capture, DemoEnded, DiagEntry, ExecutionInfo, HighlightResult, HistoryEntry, OverlayGeometry, PillTarget, ProbeResult, Rect, Refusal, Screen, Server, Settings, SettingsField, SettingsPage, ShortcutConflict, ShortcutStatus, StreamEvent, SystemMotion, TextRange, TranslationRequest, TryResult, UndoOutcome, UpdateStatus } from './types';
 
 type Unlisten = () => void;
 // 0.6: 'probe-step' (ProbeStepEvent, to the window that started the check), 'diagnostic' (DiagEntry,
 // settings and setup windows), 'demo-ended' (DemoEnded, to the setup window).
-type EventName = 'capture' | 'translation' | 'settings-changed' | 'target-invalidated' | 'overlay-dismiss-requested' | 'glass-near' | 'capture-target' | 'capture-notice' | 'work-area' | 'result-delivery' | 'system-theme' | 'system-motion' | 'menu-key' | 'menu-repeat' | 'settings-focus-field' | 'halo' | 'shortcut-status' | 'undo-state' | 'probe-step' | 'diagnostic' | 'demo-ended';
+type EventName = 'capture' | 'translation' | 'settings-changed' | 'target-invalidated' | 'overlay-dismiss-requested' | 'glass-near' | 'capture-target' | 'capture-notice' | 'work-area' | 'result-delivery' | 'system-theme' | 'system-motion' | 'menu-key' | 'menu-repeat' | 'settings-focus-field' | 'halo' | 'shortcut-status' | 'undo-state' | 'probe-step' | 'diagnostic' | 'demo-ended' | 'update-status';
 type Handler<T> = (payload: T) => void;
 
 // A fresh install, as Rust's Settings::default(): one server, nothing set up, the setup to do.
@@ -83,6 +83,9 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
   if (name === 'capture_text') return structuredClone(demoCapture) as T;
   if (name === 'frontend_ready') return null as T;
+  // The preview never updates; `?update=0.9.0` shows a version waiting.
+  if (name === 'update_status' || name === 'check_update') return { current: __APP_VERSION__, available: new URLSearchParams(location.search).get('update'), checkedAt: Date.now(), checking: false, failed: false, installing: false, downloaded: 0, total: null } as T;
+  if (name === 'install_update') throw 'Aperçu : pas de mise à jour.';
   if (name === 'get_history') return structuredClone(demoHistory) as T;
   if (name === 'delete_history') { const id = args?.id as string | null; demoHistory = id === null ? [] : demoHistory.filter(item => item.id !== id); return undefined as T; }
   if (name === 'translate') {
@@ -270,6 +273,11 @@ export const bridge = {
   // false outside the native app (the painted material, or the page's own backdrop-filter).
   glassFrame: (seq: number, scale: number, shapes: { x: number; y: number; width: number; height: number; radius: number; opacity: number }[]) => native ? command<boolean>('glass_frame', { seq, scale, shapes }) : Promise.resolve(false),
   // The Windows app mode read by Rust (null when unknown, or outside the native app).
+  // In-app updates (docs/BRIDGE.md): the status, a check now, and the install, which quits the
+  // app when it succeeds (the installer starts the new version).
+  updateStatus: () => command<UpdateStatus>('update_status'),
+  checkUpdate: () => command<UpdateStatus>('check_update'),
+  installUpdate: () => command<UpdateStatus>('install_update'),
   systemTheme: () => native ? command<unknown>('system_theme').catch(() => null) : Promise.resolve(null),
   // Whether Windows asks to reduce animations (Rust reads SPI_GETCLIENTAREAANIMATION); null or
   // undefined when unknown, always unknown in the browser preview.

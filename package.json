@@ -1,7 +1,7 @@
 {
   "name": "flowtranslate-frontend",
   "private": true,
-  "version": "0.6.1",
+  "version": "0.6.2",
   "type": "module",
   "scripts": {
     "ui:lab": "vite --host 127.0.0.1 --port 5174 --strictPort --open /lab.html",

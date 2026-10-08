@@ -5,6 +5,7 @@ import type { Language } from '../../types';
 // says the same, to « you ». The app's name is never written: `{app}`.
 export const settingsPagesMessages = {
   // Sidebar.
+  'nav.updateAvailable': { en: 'Update available', fr: 'Mise à jour disponible' },
   'nav.general': { en: 'General', fr: 'Général' },
   'nav.shortcuts': { en: 'Shortcuts', fr: 'Raccourcis' },
   'nav.actions': { en: 'Actions', fr: 'Actions' },
@@ -44,6 +45,16 @@ export const settingsPagesMessages = {
   'page.general.resetGroup': { en: 'Reset', fr: 'Réinitialiser' },
   'page.general.aboutGroup': { en: 'About', fr: 'À propos' },
   'page.general.version': { en: '{app} {version}', fr: '{app} {version}' },
+  'page.general.updates': { en: 'Updates', fr: 'Mises à jour' },
+  'page.general.updateCheck': { en: 'Check for updates', fr: 'Vérifier les mises à jour' },
+  'page.general.updateInstall': { en: 'Update to {version}', fr: 'Mettre à jour vers {version}' },
+  'page.general.updateAvailable': { en: 'Version {version} is out. {app} restarts once it is installed.', fr: 'La version {version} est sortie. {app} redémarre une fois installé.' },
+  'page.general.updateUpToDate': { en: 'Up to date · checked at {time}', fr: 'À jour · vérifié à {time}' },
+  'page.general.updateNever': { en: 'Checked at start, then every six hours.', fr: 'Vérifié au démarrage, puis toutes les six heures.' },
+  'page.general.updateChecking': { en: 'Checking…', fr: 'Vérification…' },
+  'page.general.updateFailed': { en: 'GitHub did not answer. Try again later.', fr: 'GitHub n’a pas répondu. Réessayez plus tard.' },
+  'page.general.updateInstalling': { en: 'Downloading… {percent}%', fr: 'Téléchargement… {percent} %' },
+  'page.general.updateInstallFailed': { en: 'The update failed. Try again.', fr: 'La mise à jour a échoué. Réessayez.' },
   'page.general.versionHelp': { en: 'Its icon stays in the notification area.', fr: 'Son icône reste dans la zone de notification.' },
   // Shortcuts.
   'page.shortcuts.actionGone': { en: 'Deleted action', fr: 'Action supprimée' },

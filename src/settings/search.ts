@@ -7,6 +7,7 @@ type Entry = { field: string; title: MessageKey; page: PageId; words: string };
 const entries: Entry[] = [
   { field: 'autostart', title: 'settings.autostart', page: 'general', words: 'démarrer windows démarrage start startup boot sign in login' },
   { field: 'language', title: 'page.general.language', page: 'general', words: 'français english anglais french langue language' },
+  { field: 'update', title: 'page.general.updates', page: 'general', words: 'mise à jour mettre à jour update upgrade nouvelle version installer télécharger download' },
   { field: 'replay', title: 'page.general.replay', page: 'general', words: 'setup premier lancement bienvenue accueil welcome first run tour demo démo' },
   { field: 'reset', title: 'settings.reset', page: 'general', words: 'réinitialiser rétablir reset restore default défaut' },
   { field: 'menuShortcut', title: 'settings.menuShortcutField', page: 'shortcuts', words: 'touches ctrl alt espace clavier keys keyboard space hotkey' },

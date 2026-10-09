@@ -61,7 +61,7 @@ jobs:
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Secret TAURI_SIGNING_PRIVATE_KEY absent : installateur non signé, release refusée.' }
           npm run tauri -- build --bundles nsis --config src-tauri/tauri.updater.conf.json
-          if ($LASTEXITCODE -ne 0) { throw 'Build de l’installateur impossible.' }
+          if ($LASTEXITCODE -ne 0) { throw "Build de l’installateur impossible." }
       - name: Publish the installer and its SHA-256
         shell: pwsh
         env:
@@ -81,7 +81,7 @@ jobs:
           Add-Content release-notes.md "SHA-256 de l’installateur : ``$hash``"
           # What the installed apps read to update themselves (releases/latest/download/latest.json).
           $sig = "$($exe.FullName).sig"
-          if (-not (Test-Path $sig)) { throw 'Signature de l’installateur absente.' }
+          if (-not (Test-Path $sig)) { throw "Signature de l’installateur absente." }
           [ordered]@{
             version = $tag.TrimStart('v')
             notes = (Get-Content release-notes.md -Raw)

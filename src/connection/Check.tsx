@@ -69,8 +69,8 @@ export const watchdogMs = 15_000;
 // Rust runs one check per window: a newer one cancels the older. Two servers of the same window
 // therefore take turns here instead of cancelling each other.
 let turn: Promise<unknown> = Promise.resolve();
-let serial = 0;
-const newRun = () => `check-${Date.now().toString(36)}-${(serial++).toString(36)}`;
+// A run id Rust accepts (letters, digits, - and _, 64 at most), like useTryModel's.
+const newRun = () => `check-${crypto.randomUUID()}`;
 // Where a key goes: scheme, host and port. A path typed after it changes nothing to who receives it.
 export const keyOrigin = (read: NormalizedEndpoint): string | null =>
   read.ok ? `${read.secure ? 'https' : 'http'}://${read.host}` : null;

@@ -5,7 +5,15 @@ import { bridge } from '../bridge';
 import { locales, useLanguage, useT } from '../i18n';
 import { Button, ICON, Notice, StatusDot, cx, type StatusState } from '../components/controls';
 import { useReduced, useTx } from '../components/motion';
-import type { ModelInfo, NormalizedEndpoint, ProbeProblem, ProbeResult, ProbeStep, ProbeStepEvent } from '../types';
+import {
+  probeStepIds,
+  type ModelInfo,
+  type NormalizedEndpoint,
+  type ProbeProblem,
+  type ProbeResult,
+  type ProbeStep,
+  type ProbeStepEvent,
+} from '../types';
 import { causeText, describeProblem, stepName, stepText } from './causes';
 import { normalizeEndpoint, shortModel, textModels } from './endpoint';
 import './connection.css';
@@ -164,9 +172,7 @@ export function useProbe({
           previous.steps.find((step) => step.state === 'waiting')?.id ??
           'reach';
         const steps: ProbeStep[] = (
-          previous.steps.length
-            ? previous.steps
-            : (['address', 'reach', 'key', 'models'] as const).map((id) => ({ id, state: 'waiting' as const }))
+          previous.steps.length ? previous.steps : probeStepIds.map((id) => ({ id, state: 'waiting' as const }))
         ).map((step) =>
           step.id === running
             ? { id: step.id, state: 'error' }

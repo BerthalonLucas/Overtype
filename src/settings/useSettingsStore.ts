@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { promptError } from '../actionDefaults';
+import { freeMenuId, promptError } from '../actionDefaults';
 import { bridge } from '../bridge';
 import { t as tNow, type MessageKey } from '../i18n';
 import { shareSettings } from '../useSettings';
@@ -18,8 +18,6 @@ export type SaveStatus = 'saved' | 'just-saved' | 'saving' | 'error';
 // Why a save failed: one of our messages, or Rust's refusal (shown translated when known).
 export type SaveProblem = { key: MessageKey } | { text: string };
 export const typingDelayMs = 300;
-const menuBindingId = (bindings: ShortcutBinding[]) =>
-  ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find((id) => bindings.every((b) => b.id !== id))!;
 
 export type SettingsStore = {
   settings: Settings | null;
@@ -204,7 +202,7 @@ export function useSettingsStore(): SettingsStore {
         ? [
             ...previous.shortcutBindings,
             {
-              id: menuBindingId(previous.shortcutBindings),
+              id: freeMenuId(previous.shortcutBindings),
               kind: 'menu',
               shortcut,
               actionId: previous.defaultActionId,

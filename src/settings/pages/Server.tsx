@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, LockOpen, MessageSquareText, Plus, RotateCw, Server as ServerIcon, Trash2 } from 'lucide-react';
 import { bridge } from '../../bridge';
-import { locales, useLanguage, useT } from '../../i18n';
+import { useT } from '../../i18n';
 import {
   Button,
   Group,
@@ -14,7 +14,7 @@ import {
   Tooltip,
 } from '../../components/controls';
 import { useTx } from '../../components/motion';
-import { CheckLine, CheckTrace, useCheck, type Probe } from '../../connection/Check';
+import { CheckLine, CheckTrace, useCheck, useDuration, type Probe } from '../../connection/Check';
 import { ConnectionForm } from '../../connection/ConnectionForm';
 import { useTryModel } from '../../connection/useTryModel';
 import { describeProblem } from '../../connection/causes';
@@ -28,14 +28,10 @@ import { useSettingsContext } from '../useSettingsStore';
 function TryLine({ server, ready }: { server: Server; ready: boolean }) {
   const t = useT();
   const tx = useTx();
-  const language = useLanguage();
   const { trial, start } = useTryModel(server);
   const busy = trial.state === 'running';
   const result = trial.state === 'ok' || trial.state === 'failed' ? trial : null;
-  const seconds = (ms: number) =>
-    t('conn.seconds', {
-      seconds: new Intl.NumberFormat(locales[language], { maximumFractionDigits: 1 }).format(ms / 1000),
-    });
+  const seconds = useDuration(0);
   return (
     <div className="st-try">
       <Button

@@ -1,4 +1,6 @@
 import type { ConnectionValue } from '../connection/ConnectionForm';
+import { freeMenuId } from '../actionDefaults';
+import { emptyServer } from '../settings/servers';
 import type { Server, Settings, SettingsPage, ShortcutBinding } from '../types';
 
 // The setup's pure logic (docs/PLAN-0.6.md §4.1, design-lab/reglages/src/journey/Journey.jsx):
@@ -83,8 +85,6 @@ export function directActionId(settings: Settings): string {
     ? binding.actionId
     : settings.defaultActionId;
 }
-const freeMenuId = (bindings: ShortcutBinding[]) =>
-  ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find((id) => bindings.every((binding) => binding.id !== id))!;
 
 // Menu: kind 'menu' (the Îlot opens beside the selection). Direct: kind 'action' on that action,
 // replacing the selection. An unknown action falls back to the default one.
@@ -146,7 +146,7 @@ export function withConnection(settings: Settings, value: ConnectionValue): Sett
     noKey: value.noKey,
     model: value.model,
   };
-  if (!current) return { ...settings, servers: [{ id: 's1', name: '', ...patch }], defaultServerId: 's1' };
+  if (!current) return { ...settings, servers: [{ ...emptyServer('s1'), ...patch }], defaultServerId: 's1' };
   return {
     ...settings,
     defaultServerId: current.id,

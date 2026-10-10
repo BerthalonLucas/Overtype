@@ -143,6 +143,9 @@ export function instructionError(value: string): string | null {
 }
 // One shortcut on a fresh install: the Îlot menu (under uiVersion 'v4' it runs the default
 // action and replaces the selection).
+// The first free id for a menu binding: « menu », then « menu-2 », « menu-3 »…
+export const freeMenuId = (bindings: ShortcutBinding[]) =>
+  ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find((id) => bindings.every((binding) => binding.id !== id))!;
 export const defaultBindings: ShortcutBinding[] = [
   { id: 'menu', kind: 'menu', shortcut: menuShortcut, actionId: defaultActionId, outputMode: 'replace', enabled: true },
 ];

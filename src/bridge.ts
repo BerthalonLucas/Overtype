@@ -9,6 +9,7 @@ import {
   localizeDefaults,
 } from './actionDefaults';
 import { resetFrom } from './settings/reset';
+import { emptyServer } from './settings/servers';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
@@ -77,7 +78,6 @@ type EventName =
 type Handler<T> = (payload: T) => void;
 
 // A fresh install, as Rust's Settings::default(): one server, nothing set up, the setup to do.
-const emptyServer: Server = { id: 's1', name: '', endpoint: '', apiKey: '', noKey: false, model: '' };
 const defaultSettings: Settings = {
   defaultActionId,
   actions: structuredClone(defaultActions),
@@ -97,7 +97,7 @@ const defaultSettings: Settings = {
   pillPlacement: 'below',
   glassMaterial: 'glass',
   menuActionIds: [...defaultMenuActionIds],
-  servers: [structuredClone(emptyServer)],
+  servers: [emptyServer('s1')],
   defaultServerId: 's1',
   setupDone: false,
   changedWordsStyle: 'encre',
@@ -109,7 +109,7 @@ function previewServers(search: string): Pick<Settings, 'servers' | 'defaultServ
   const params = new URLSearchParams(search);
   const fresh = params.get('window') === 'setup' && params.get('replay') !== '1' && params.get('stage') !== 'demo';
   const asked = params.get('servers') ?? (fresh ? 'empty' : 'one');
-  if (asked === 'empty') return { servers: [structuredClone(emptyServer)], defaultServerId: 's1', setupDone: false };
+  if (asked === 'empty') return { servers: [emptyServer('s1')], defaultServerId: 's1', setupDone: false };
   const first: Server = {
     id: 's1',
     name: '',

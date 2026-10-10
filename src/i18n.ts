@@ -438,6 +438,8 @@ export type Translate = (key: MessageKey, params?: Params) => string;
 
 export const languages: readonly Language[] = ['en', 'fr'];
 export const locales: Record<Language, string> = { en: 'en-US', fr: 'fr-FR' };
+// Each language by its own name, whatever the interface's language.
+export const languageNames: Record<Language, string> = { en: 'English', fr: 'Français' };
 
 // The app's name is never written in a message: `{app}` reads it from src/brand.ts.
 export function translate(language: Language, key: MessageKey, params?: Params): string {

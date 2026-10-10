@@ -27,7 +27,6 @@ const EXPECTED_FAIL = {
   'contenteditable-bornes-element': 'QA-03-A',
   // Dans un contenteditable riche, le texte collé n'est pas retrouvé : Annuler n'est pas proposé.
   'annulation-ctrl-z-contenteditable': 'QA-03-B',
-  'uia-muette-revalidation': 'NATIVE-001',
   'fermeture-urgence-collage-engage': 'NATIVE-006',
   'collage-bloque-resultat-deja-present': 'NATIVE-010',
 };

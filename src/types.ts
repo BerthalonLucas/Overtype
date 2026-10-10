@@ -228,6 +228,9 @@ export const errorCodes = [
   // Lot C (NATIVE-004): the clipboard cannot be kept whole (an Office picture beside its text):
   // nothing is copied or pasted over it, nothing is lost.
   'clipboard_unkeepable',
+  // Lot C (NATIVE-001): UI Automation no longer answers for the selection at the paste: nothing
+  // proves it, nothing is replaced.
+  'target_unverified',
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.

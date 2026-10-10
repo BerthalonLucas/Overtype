@@ -434,7 +434,11 @@ pub fn undo(
                 }
             };
             let identity = TargetIdentity {
-                runtime_id: target.runtime_id.map(<[i32]>::to_vec),
+                // The element just checked: a UIA target is proved by its id (NATIVE-001).
+                runtime_id: target
+                    .runtime_id
+                    .map(<[i32]>::to_vec)
+                    .or_else(|| element.get_runtime_id().ok()),
                 native_window: target.window,
                 control: target.control,
                 selected_text: text,

@@ -60,6 +60,9 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //                    browser used to end on the check): the result exists, Copy result: paste.
 //   protected_window 0.6: the window in front runs as administrator, Windows lets us neither
 //                    read it nor send it a key: content, ✕ only (a capture notice).
+//   target_unverified  lot C (NATIVE-001): UI Automation no longer answers for the selection at
+//                    the paste (no element, no id, a selection it cannot read): nothing proves it
+//                    is still there, nothing was replaced: paste, Copy result.
 //   clipboard_unkeepable  lot C (NATIVE-004): the clipboard cannot be kept whole, so nothing was
 //                    written over it: paste (Copy result is the user's own choice); as a capture
 //                    notice, its own words: copy the text yourself, then try again.
@@ -84,6 +87,7 @@ const table: Record<ErrorCode, Entry> = {
   read_only: { family: 'paste' },
   keys_held: { family: 'paste' },
   clipboard_unkeepable: { family: 'paste' },
+  target_unverified: { family: 'paste' },
   too_long: { family: 'content' },
   no_selection: { family: 'content' },
   protected_field: { family: 'content' },

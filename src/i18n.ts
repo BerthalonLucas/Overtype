@@ -106,6 +106,11 @@ const dictionary = {
     en: 'Administrator window — can’t be read',
     fr: 'Fenêtre administrateur, lecture impossible',
   },
+  // Lot C (NATIVE-001): UI Automation no longer answers for the selection; nothing was replaced.
+  'result.error.target_unverified': {
+    en: 'Can’t check selection — not replaced',
+    fr: 'Sélection invérifiable, rien remplacé',
+  },
   // Lot C (NATIVE-004): the clipboard cannot be kept whole; nothing was written over it.
   'result.error.clipboard_unkeepable': {
     en: 'Can’t save clipboard — not replaced',

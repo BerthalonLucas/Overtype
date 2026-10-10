@@ -761,9 +761,10 @@ fn copy_and_restore() -> Result<Option<String>, &'static str> {
 
 /// The identity check before a paste and for the watcher: the source window is still in
 /// front, its focused control is the same and, when UI Automation gave the selection,
-/// the focused element and its selection are unchanged; a copy target's selection still reads
-/// as the copied text (NATIVE-002). A UIA that stopped answering is not a change (the paste
-/// goes to the same control).
+/// the focused element and its selection are unchanged (a UIA target compares its selection
+/// even without a drawable anchor: review n°1); a copy target's selection still reads as the
+/// copied text (NATIVE-002). A UIA that stopped answering proves nothing: `target_unverified`,
+/// the replacement is refused (NATIVE-001).
 pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
     // `reason`: which check saw the change, for the journal (a fixed word, never a text).
     let changed = |message: &str, reason: &'static str| {
@@ -791,21 +792,35 @@ pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
         }
         return Ok(());
     }
+    // NATIVE-001 (decision 1, Lucas 10/10): from here on a UIA target, which UI Automation alone
+    // proves. One that no longer answers (no focused element, no runtime id, a selection it
+    // cannot read) proves nothing: the replacement is refused, the result is for Copy. A silent
+    // UIA used to count as no change, and the paste went wherever the selection had moved.
+    let unverified = |reason: &'static str| {
+        Err(AppError::new(
+            ErrorKind::TargetUnverified,
+            "La sélection ne peut plus être vérifiée; remplacement refusé, utilisez Copier.",
+        )
+        .because(reason))
+    };
     let Some(runtime_id) = &target.runtime_id else {
-        return Ok(());
+        return unverified("no runtime id");
     };
     let Some(element) = focused_element() else {
-        return Ok(());
+        return unverified("uia silent");
     };
-    if element_changed(
-        target.check,
-        runtime_id,
-        element.get_runtime_id().ok().as_deref(),
-    ) {
+    let Ok(now) = element.get_runtime_id() else {
+        return unverified("runtime id unreadable");
+    };
+    if element_changed(target.check, runtime_id, Some(&now)) {
         return changed("La cible a changé; remplacement refusé.", "element");
     }
-    if let Some(reason) = text_changed(target, || selection(&element)) {
+    let selection = selection(&element);
+    if let Some(reason) = selection_changed(target, &selection) {
         return changed("La sélection a changé; remplacement refusé.", reason);
+    }
+    if selection.is_err() {
+        return unverified("selection unreadable");
     }
     Ok(())
 }
@@ -817,20 +832,6 @@ pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
 /// was refused (« Text changed ») by an identity that never holds.
 fn element_changed(check: TargetCheck, captured: &[i32], now: Option<&[i32]>) -> bool {
     check == TargetCheck::Uia && now.is_some_and(|id| id != captured)
-}
-
-/// Whether the target's text is no longer what was captured, as far as UI Automation can tell
-/// (and which part of it changed): a UIA target compares its selection even without a drawable
-/// anchor (review n°1: it used to skip that comparison); a copy target is checked by
-/// `control_copy` at the paste, never here.
-fn text_changed(
-    target: &TargetIdentity,
-    now: impl FnOnce() -> Result<(String, Vec<Rect>, usize, bool), String>,
-) -> Option<&'static str> {
-    if target.check != TargetCheck::Uia {
-        return None;
-    }
-    selection_changed(target, &now())
 }
 
 /// Review n°1: a text only a synthetic copy gave (VS Code's Monaco has no text pattern) is
@@ -1242,17 +1243,17 @@ mod tests {
             check: TargetCheck::Uia,
         };
         assert_eq!(
-            text_changed(&target, || Ok(("bloc B".into(), Vec::new(), 6, true))),
+            selection_changed(&target, &Ok(("bloc B".into(), Vec::new(), 6, true))),
             Some("text"),
             "another selection in the same element"
         );
         assert_eq!(
-            text_changed(&target, || Err(NO_SELECTION.into())),
+            selection_changed(&target, &Err(NO_SELECTION.into())),
             Some("collapsed"),
             "collapsed to the caret"
         );
         assert_eq!(
-            text_changed(&target, || Ok(("mot A".into(), Vec::new(), 5, true))),
+            selection_changed(&target, &Ok(("mot A".into(), Vec::new(), 5, true))),
             None
         );
         // 0.6: the rectangles a Chromium `<input>` only gives later are not a change (0.5.1
@@ -1264,19 +1265,11 @@ mod tests {
             height: 18.,
         };
         assert_eq!(
-            text_changed(&target, || Ok(("mot A".into(), vec![line], 5, true))),
+            selection_changed(&target, &Ok(("mot A".into(), vec![line], 5, true))),
             None
         );
-        // A copy target is not read through UI Automation: its control copy decides.
-        let copy = TargetIdentity {
-            check: TargetCheck::Copy,
-            runtime_id: None,
-            ..target
-        };
-        assert_eq!(
-            text_changed(&copy, || panic!("a copy target is never read through UIA")),
-            None
-        );
+        // A copy target is not compared with UIA's selection: UIA must prove it (`copy_proved`,
+        // NATIVE-002), then its control copy decides.
         assert!(same_copy(Some("mot A"), "mot A").is_ok());
         for copied in [
             None,
@@ -1478,7 +1471,46 @@ mod tests {
                 &Err("La sélection n’est pas accessible par UI Automation.".into())
             ),
             None,
-            "a control that stopped answering is not a change"
+            "a control that stopped answering is not a change (validate_target refuses it as \
+             unverified: NATIVE-001)"
+        );
+    }
+
+    #[test]
+    fn a_uia_target_ui_automation_no_longer_answers_for_is_refused_as_unverified() {
+        // NATIVE-001 (decision 1): the target's window is in front, UI Automation gives no
+        // focused element (the bench's fault, this thread only): nothing proves the selection.
+        let target = TargetIdentity {
+            runtime_id: Some(vec![42]),
+            native_window: crate::host::foreground(),
+            control: 0,
+            selected_text: "x".into(),
+            anchor: None,
+            selection_len: 1,
+            editable: true,
+            check: TargetCheck::Uia,
+        };
+        faults::silence_uia(true);
+        let silent = validate_target(&target);
+        faults::silence_uia(false);
+        let silent = silent.unwrap_err();
+        assert_eq!(
+            (silent.kind, silent.reason),
+            (ErrorKind::TargetUnverified, "uia silent")
+        );
+        // A UIA target without the element's id has nothing to be proved with either.
+        let anonymous = TargetIdentity {
+            runtime_id: None,
+            ..target
+        };
+        let refused = validate_target(&anonymous).unwrap_err();
+        assert_eq!(
+            (refused.kind, refused.reason),
+            (ErrorKind::TargetUnverified, "no runtime id")
+        );
+        assert_eq!(
+            serde_json::to_value(ErrorKind::TargetUnverified).unwrap(),
+            "target_unverified"
         );
     }
 

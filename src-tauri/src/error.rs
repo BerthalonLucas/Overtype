@@ -31,6 +31,10 @@ pub enum ErrorKind {
     PasteBlocked,
     /// The selection, the field or the window changed: nothing was replaced.
     TargetChanged,
+    /// UI Automation no longer answers for the captured selection (no focused element, no
+    /// runtime id, a selection it cannot read): nothing proves it is still there, so nothing was
+    /// replaced (NATIVE-001). The result exists: Copy result.
+    TargetUnverified,
     /// The field cannot be written (read-only, a console, a copy without a known selection).
     NotEditable,
     /// The paste went out and changed nothing: the text is read-only (a PDF in a browser).
@@ -177,6 +181,7 @@ mod tests {
             (ErrorKind::ProtectedWindow, "protected_window"),
             (ErrorKind::SetupOpen, "setup_open"),
             (ErrorKind::ClipboardUnkeepable, "clipboard_unkeepable"),
+            (ErrorKind::TargetUnverified, "target_unverified"),
         ];
         for (kind, name) in codes {
             assert_eq!(serde_json::to_value(kind).unwrap(), serde_json::json!(name));

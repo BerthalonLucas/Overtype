@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BriefcaseBusiness, FoldVertical, Languages, Mail, SpellCheck, WandSparkles } from 'lucide-react';
 import { useT } from '../../i18n';
 import { Group, Row, Segmented, Select } from '../../components/controls';
-import { useReduced, useTx } from '../../components/motion';
+import { useReduced } from '../../components/motion';
 import { IndicatorView } from '../../loaders/indicators';
 import { indicatorOf } from '../../loaders/pill';
-import { useSystemReducesMotion } from '../../motion/MotionPreferences';
-import { motionPresets, springTransition } from '../../motion/tokens';
-import type { AutoClose, Indicator, MotionPreference, MotionPreset, TextSize, Theme } from '../../types';
+import { IlotView, type IlotHandle } from '../../menu/Ilot';
+import { menuActions } from '../../menu/IlotStage';
+import { MotionPreferences, useSystemReducesMotion } from '../../motion/MotionPreferences';
+import type { AutoClose, Indicator, MotionPreference, MotionPreset, Settings, TextSize, Theme } from '../../types';
 import { useSettingsContext } from '../useSettingsStore';
 import { CardChoice } from './CardChoice';
 import '../../loaders/loaders.css';
@@ -31,32 +31,37 @@ function MiniWindow({ tone }: { tone: 'light' | 'dark' }) {
   );
 }
 
-// Fluide vs Rebondi, shown by a mini-Îlot driven by the app's own presets (src/motion/tokens.ts):
-// it appears as the compact pill on the « enter » spring (opacity, the preset's scale and glide),
-// then springs open into the menu grid on the « morph » spring; the box animates its size, the
-// content sits centred at its natural size and cross-fades (like MorphSurface). Placed like the
-// app: its compact right edge on the end of the selected line, the grid opening to the right.
-// Replays on hover, on click, and when chosen. At rest it shows the open menu.
-const PILL = { width: 104, height: 26, borderRadius: 13 };
-const MENU = { width: 118, height: 64, borderRadius: 14 };
-const miniTiles = [SpellCheck, Languages, BriefcaseBusiness, FoldVertical, Mail, WandSparkles];
-function MiniIlot({ kind, selected }: { kind: MotionPreset; selected: boolean }) {
-  const t = useT();
-  const tx = useTx();
+// Fluide vs Rebondi, shown by the app's own Îlot (src/menu/Ilot.tsx) under that preset
+// (src/motion/tokens.ts), drawn at .55 of its size: it enters as the compact row on the « enter »
+// spring, then springs open into its grid on the « morph » spring. Placed like the app: its
+// compact state ends on the end of the selected line, the grid opening to the right. Replays on
+// hover, on click, and when chosen. At rest it shows the open grid. A picture: no key, no focus,
+// no click reaches the Îlot itself (inert).
+const miniScale = 0.55;
+function MiniIlot({ kind, selected, settings }: { kind: MotionPreset; selected: boolean; settings: Settings }) {
   const reduced = useReduced();
-  const preset = motionPresets[kind];
-  const [phase, setPhase] = useState<'hidden' | 'pill' | 'menu'>('menu');
+  const actions = useMemo(() => menuActions(settings), [settings]);
+  // run 0 is the resting grid; each replay mounts a new Îlot (its entrance), compact first.
+  const [run, setRun] = useState(0);
+  const [shown, setShown] = useState(true);
+  const ilot = useRef<IlotHandle>(null);
   const timers = useRef<number[]>([]);
   const clear = () => {
     timers.current.forEach((id) => window.clearTimeout(id));
     timers.current = [];
   };
-  // Every replay starts from scratch: spamming the hover or the click never stacks timers.
+  // Every replay starts from scratch: spamming the hover or the click never stacks timers. The
+  // previous Îlot leaves first (its exit, 170 ms at most), then the new one enters.
   const play = () => {
     clear();
-    setPhase('hidden');
-    timers.current.push(window.setTimeout(() => setPhase('pill'), 160));
-    timers.current.push(window.setTimeout(() => setPhase('menu'), 160 + 620));
+    setShown(false);
+    timers.current.push(
+      window.setTimeout(() => {
+        setRun((previous) => previous + 1);
+        setShown(true);
+      }, 180),
+    );
+    timers.current.push(window.setTimeout(() => ilot.current?.press('Tab'), 180 + 620));
   };
   const first = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: plays the preview when the selection changes only
@@ -68,65 +73,46 @@ function MiniIlot({ kind, selected }: { kind: MotionPreset; selected: boolean })
     if (selected) play();
   }, [selected]);
   useEffect(() => clear, []);
-  const spring = (which: 'enter' | 'morph') => (reduced ? tx(0.12) : springTransition(preset[which]));
-  const hidden = phase === 'hidden';
-  const box = phase === 'menu' || reduced ? MENU : PILL;
-  const transition = hidden
-    ? { duration: 0 }
-    : { default: spring('morph'), opacity: tx(0.18), scale: spring('enter'), y: spring('enter') };
   return (
     <span className="st-motion-art" onPointerEnter={play} onClick={play}>
       <span className="st-motion-doc" aria-hidden="true">
         <i />
         <i data-sel="" />
       </span>
-      <motion.span
-        className="st-mini-ilot ft-glass"
-        initial={false}
-        animate={{
-          opacity: hidden ? 0 : 1,
-          scale: hidden && !reduced ? preset.fromScale : 1,
-          y: hidden && !reduced ? -preset.travel : 0,
-          ...box,
+      <span
+        aria-hidden="true"
+        inert
+        style={{
+          position: 'absolute',
+          left: 'calc(22px + (100% - 44px) * .64 - 60px)',
+          top: 41,
+          transform: `scale(${miniScale})`,
+          transformOrigin: '0 0',
         }}
-        transition={transition}
       >
-        <AnimatePresence initial={false}>
-          {phase !== 'menu' && !reduced ? (
-            <motion.span
-              key="pill"
-              className="st-mini-layer st-mini-pill"
-              initial={{ opacity: 1 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={tx(0.16)}
-            >
-              <span className="st-mini-act">
-                <SpellCheck size={11} strokeWidth={1.6} />
-                <b>{t('page.appearance.miniAction')}</b>
-                <span className="st-mini-hint">↵</span>
-              </span>
-              <span className="st-mini-sep" />
-              <i className="st-mini-dot" />
-            </motion.span>
-          ) : (
-            <motion.span
-              key="menu"
-              className="st-mini-layer st-mini-grid"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={tx(0.2)}
-            >
-              {miniTiles.map((Glyph, index) => (
-                <span key={index}>
-                  <Glyph size={12} strokeWidth={1.6} />
-                </span>
-              ))}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.span>
+        <MotionPreferences motion={settings.motion} preset={kind}>
+          <AnimatePresence initial={false}>
+            {shown && (
+              <IlotView
+                key={run}
+                ref={(handle: IlotHandle | null) => {
+                  // The leaving Îlot may unmount after the new one mounted: keep the newest.
+                  if (handle) ilot.current = handle;
+                }}
+                actions={actions}
+                knownActions={settings.actions}
+                lastActionId={settings.defaultActionId}
+                keyboard="none"
+                originX="0%"
+                initialMode={run === 0 || reduced ? 'grid' : 'compact'}
+                onChoose={() => undefined}
+                onInstruction={() => undefined}
+                onClose={() => undefined}
+              />
+            )}
+          </AnimatePresence>
+        </MotionPreferences>
+      </span>
     </span>
   );
 }
@@ -203,7 +189,7 @@ export function AppearancePage() {
               { value: 'smooth', label: t('settings.motionSmooth'), hint: t('page.appearance.smoothHint') },
               { value: 'bouncy', label: t('settings.motionBouncy'), hint: t('page.appearance.bouncyHint') },
             ]}
-            render={(option, selected) => <MiniIlot kind={option.value} selected={selected} />}
+            render={(option, selected) => <MiniIlot kind={option.value} selected={selected} settings={settings} />}
           />
         </div>
         {/* Lucas had « Effets d'animation » switched off without knowing it: in « suivre Windows »,

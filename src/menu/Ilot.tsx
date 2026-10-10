@@ -64,6 +64,8 @@ import './ilot.css';
  *   onRequestKeyboard()  'injected' only: the pastille or the « Ask » tile clicked asks for the
  *                  keyboard; the field opens once the promise answers true (the parent then
  *                  passes keyboard 'focused').
+ *                  'none': a picture of the Îlot (the Settings previews): no key listened to,
+ *                  no focus moved, the free instruction drawn as available.
  *   ref            IlotHandle: press(key, modifiers) → whether the menu used the key: a key Rust
  *                  forwards (`menu-key`), or one the window received before the Îlot listened
  *                  (src/menu/IlotStage.tsx replays them in order). A character pressed while the
@@ -82,7 +84,7 @@ import './ilot.css';
  * Wrap it in <AnimatePresence> for its exit. Measure it on [data-ilot-shape].
  */
 
-export type IlotKeyboard = 'focused' | 'injected';
+export type IlotKeyboard = 'focused' | 'injected' | 'none';
 export type IlotShape = 'menu' | 'pill';
 // The content of the pill shape (the same as src/result/ResultPill.tsx ResultContent).
 export type PillContent = { key: string; size?: SurfaceSize; node: ReactNode };

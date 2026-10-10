@@ -340,12 +340,15 @@ fn too_long() -> AppError {
 }
 
 /// Whether a paste can replace what was captured (0.4.0, decided at the capture): the
-/// selection UI Automation gave in an editable control, or the selection the synthetic
-/// copy proved (a copy needs one). A copy the user made himself guarantees no selection;
-/// a console never replaces its selection on Ctrl+V; a password field is never written.
+/// selection UI Automation gave in an editable control (`writable`), or a synthetic copy whose
+/// selection UI Automation proved (`writable`: `copy_proved`). A copy alone proves nothing
+/// (NATIVE-002, reproduced on VS Code: without a selection Ctrl+Insert copies the whole line,
+/// and the paste then inserted at the caret); a copy the user made himself guarantees no
+/// selection; a console never replaces its selection on Ctrl+V; a password field is never
+/// written.
 pub fn replaceable(
     origin: CaptureOrigin,
-    editable: bool,
+    writable: bool,
     window_class: &str,
     password: bool,
 ) -> bool {
@@ -353,10 +356,22 @@ pub fn replaceable(
         return false;
     }
     match origin {
-        CaptureOrigin::Uia => editable,
-        CaptureOrigin::Copy => true,
+        CaptureOrigin::Uia | CaptureOrigin::Copy => writable,
         CaptureOrigin::Fresh | CaptureOrigin::Replay | CaptureOrigin::Demo => false,
     }
+}
+
+/// NATIVE-002 (Lucas, 10/10): whether UI Automation proves that a synthetic copy came from a
+/// selection: the focused element's selection is one non-empty range that reads as the copied
+/// text (line endings and editor spaces aside). Without that proof the copy is the source of the
+/// action, never a selection to paste over: Copy only. No editor-specific proof is trusted.
+fn copy_proved(copied: &str) -> bool {
+    focused_element()
+        .and_then(|element| selection(&element).ok())
+        .is_some_and(|(selected, ..)| proves_copy(&selected, copied))
+}
+fn proves_copy(selected: &str, copied: &str) -> bool {
+    !selected.is_empty() && canonical(selected) == canonical(copied)
 }
 
 pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture, AppError> {
@@ -524,8 +539,9 @@ fn read_clipboard() -> Option<String> {
 }
 
 /// Without a UIA selection: copies for the user (synthetic Ctrl+Insert), else accepts a
-/// copy he made himself in the last three seconds, else nothing to translate. A copy
-/// that worked proves a selection: it can be pasted over (origin `copy`).
+/// copy he made himself in the last three seconds, else nothing to translate. A copy that
+/// worked can be pasted over (origin `copy`) only when UI Automation proves its selection
+/// (`copy_proved`, NATIVE-002); otherwise its result is for Copy only.
 pub(crate) fn clipboard_capture(
     source_window: isize,
     source_class: &str,
@@ -572,7 +588,8 @@ pub(crate) fn clipboard_capture(
         error.because(copied.as_ref().err().copied().unwrap_or(""))
     })?;
     ensure_source_unchanged(source_window)?;
-    let can_replace = replaceable(origin, true, source_class, false);
+    let proved = origin == CaptureOrigin::Copy && copy_proved(&text);
+    let can_replace = replaceable(origin, proved, source_class, false);
     let target = can_replace.then(|| TargetIdentity {
         runtime_id: ui_automation()
             .ok()
@@ -733,8 +750,9 @@ fn copy_and_restore() -> Result<Option<String>, &'static str> {
 
 /// The identity check before a paste and for the watcher: the source window is still in
 /// front, its focused control is the same and, when UI Automation gave the selection,
-/// the focused element and its selection are unchanged. A UIA that stopped answering is
-/// not a change (the paste goes to the same control).
+/// the focused element and its selection are unchanged; a copy target's selection still reads
+/// as the copied text (NATIVE-002). A UIA that stopped answering is not a change (the paste
+/// goes to the same control).
 pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
     // `reason`: which check saw the change, for the journal (a fixed word, never a text).
     let changed = |message: &str, reason: &'static str| {
@@ -748,6 +766,19 @@ pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
             .is_some_and(|(handle, _)| handle != target.control)
     {
         return changed("Le champ actif a changé; remplacement refusé.", "control");
+    }
+    // NATIVE-002: a copy target was replaceable only because UI Automation read its selection as
+    // the copied text, and it must still read so. Collapsed by a click, the control copy of VS
+    // Code would give back its whole line (the very text captured when that line was selected),
+    // and the paste would insert at the caret.
+    if target.check == TargetCheck::Copy {
+        if !copy_proved(&target.selected_text) {
+            return changed(
+                "La sélection a changé; remplacement refusé.",
+                "copy unproved",
+            );
+        }
+        return Ok(());
     }
     let Some(runtime_id) = &target.runtime_id else {
         return Ok(());
@@ -1454,6 +1485,21 @@ mod tests {
             false
         ));
         assert!(replaceable(CaptureOrigin::Copy, true, "Notepad", false));
+        // NATIVE-002: a copy UI Automation does not prove is for Copy only (VS Code without a
+        // selection copies its whole line: the paste inserted at the caret).
+        assert!(!replaceable(CaptureOrigin::Copy, false, "Notepad", false));
+        assert!(proves_copy("mot A", "mot A"));
+        assert!(
+            proves_copy("a\r\nb\u{a0}c", "a\nb c"),
+            "line endings, editor spaces"
+        );
+        for (selected, copied) in [
+            ("", "seconde ligne à garder\n"),
+            ("mot", "ligne entière avec mot\n"),
+            ("delta", "alpha\ndelta"),
+        ] {
+            assert!(!proves_copy(selected, copied), "{selected:?} / {copied:?}");
+        }
         assert!(!replaceable(
             CaptureOrigin::Copy,
             true,

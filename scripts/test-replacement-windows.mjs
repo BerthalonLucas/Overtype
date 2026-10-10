@@ -28,10 +28,8 @@ const EXPECTED_FAIL = {
   // Dans un contenteditable riche, le texte collé n'est pas retrouvé : Annuler n'est pas proposé.
   'annulation-ctrl-z-contenteditable': 'QA-03-B',
   'uia-muette-revalidation': 'NATIVE-001',
-  'vscode-ligne-sans-selection': 'NATIVE-002',
   'fermeture-urgence-collage-engage': 'NATIVE-006',
   'collage-bloque-resultat-deja-present': 'NATIVE-010',
-  'writer-selection-multiple': 'NATIVE-012',
   'selection-multiple-uia-simulee': 'NATIVE-012',
 };
 
@@ -561,6 +559,49 @@ scenario('vscode-ligne-sans-selection', 'NATIVE-002 : VS Code, curseur sur une l
     details.observed = what;
     assert.equal(now, original, `aucune écriture sans preuve de sélection (capture ${captured.route ?? captured.kind}${captured.matches ? ' = ligne entière' : ''}, ${captured.replaceable ? 'remplaçable' : 'non remplaçable'} ; collage ${result ? (result.ok ? 'annoncé réussi' : `refusé ${result.kind}`) : 'non tenté'} ; ${what})`);
     return `capture ${captured.ok ? (captured.replaceable ? 'remplaçable' : 'Copier seulement') : captured.kind}, fichier inchangé`;
+  } finally {
+    kill(pid);
+  }
+});
+
+// Témoin de NATIVE-002 : avec une vraie sélection, VS Code est remplacé exactement, ou bien la capture
+// est « Copier seulement » ; jamais une autre écriture.
+scenario('vscode-selection-reelle', 'VS Code, une vraie sélection dans une ligne : remplacée exactement, ou Copier seulement', async details => {
+  if (!codePath) throw new Skip('VS Code introuvable (FLOWTRANSLATE_BENCH_VSCODE)');
+  const profile = join(scratch, 'vscode-sel');
+  await mkdir(join(profile, 'User'), { recursive: true });
+  await writeFile(join(profile, 'User', 'settings.json'), JSON.stringify({
+    'workbench.startupEditor': 'none', 'security.workspace.trust.enabled': false, 'telemetry.telemetryLevel': 'off',
+    'update.mode': 'none', 'files.autoSave': 'off', 'chat.disableAIFeatures': true,
+  }));
+  const original = 'première ligne\nseconde ligne à garder\ntroisième ligne\n';
+  const file = join(scratch, 'vssel.txt');
+  await writeFile(file, original, 'utf8');
+  const pid = launch(codePath, ['--user-data-dir', profile, '--extensions-dir', join(scratch, 'vscode-ext'), '--disable-extensions',
+    '--new-window', '-g', `${file}:2:9`]);
+  try {
+    const front = await driver({ op: 'focus', title: 'vssel.txt' });
+    need(front.ok, 'VS Code au premier plan');
+    await sleep(1500);
+    await driver({ op: 'keys', keys: 'esc' });
+    await driver({ op: 'keys', keys: 'shift+end' });
+    await sleep(500);
+    details.uia = await driver({ op: 'uia-selection' });
+    await seed();
+    const captured = await capture(details, { expect: 'ligne à garder' });
+    need(captured.ok && captured.matches, `capture de la sélection (${captured.kind ?? captured.selectedLength})`);
+    let result = null;
+    if (captured.replaceable) {
+      result = await replace(details, 'RÉSULTAT');
+      await driver({ op: 'keys', keys: 'ctrl+s' });
+      await sleep(1000);
+    }
+    const now = await readFile(file, 'utf8');
+    details.file = now;
+    const replaced = original.replace('ligne à garder', 'RÉSULTAT');
+    assert.ok([original, replaced].includes(now), `remplacée exactement ou intacte (fichier devenu « ${now.split('\n')[1]} »)`);
+    if (result?.ok) assert.equal(now, replaced, 'collage annoncé réussi : la sélection est remplacée');
+    return `${captured.route ?? 'aucune route'}, ${captured.replaceable ? (result?.ok ? `remplacée (${result.confirmed ? 'relu' : 'supposé'})` : `collage refusé ${result?.kind}`) : 'Copier seulement'}`;
   } finally {
     kill(pid);
   }

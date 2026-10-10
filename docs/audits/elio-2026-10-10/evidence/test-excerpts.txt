@@ -1,0 +1,233 @@
+
+===== versions.log =====
+
+$ bash -c node --version; npm --version; python --version; uname -s; command -v cargo; command -v docker; command -v powershell; exit 0
+v26.5.1
+11.17.0
+Python 3.13.5
+Linux
+
+EXIT_CODE=0
+
+===== frontend-unit-host-retry.log =====
+
+$ npm test
+
+> flowtranslate-frontend@0.6.2 test
+> vitest run
+
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - JSON import "./package.json" without import attributes (vite.config.ts:3:25). Add `with { type: 'json' }`
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+ RUN  v5.0.0 artefacts-locaux/qa-work
+
+
+ Test Files  40 passed (40)
+      Tests  314 passed (314)
+   Start at  03:38:11
+   Duration  11.58s (environment 62%, import 17%, tests 14%, transform 6%, worker 1%)
+
+Environment  jsdom was created 40 times · 17.93s total, 62% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+EXIT_CODE=0
+
+===== frontend-build-host.log =====
+
+$ npm run build
+
+> flowtranslate-frontend@0.6.2 build
+> tsc -b && vite build
+
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - JSON import "./package.json" without import attributes (vite.config.ts:3:25). Add `with { type: 'json' }`
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+[36mvite v8.2.2 [32mbuilding client environment for production...[36m[39m
+transforming...
+✓ 2450 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.44 kB │ gzip:   0.27 kB
+dist/assets/index-DMMDBe_w.css  137.42 kB │ gzip:  27.96 kB
+dist/assets/index-Czec0MnU.js   864.90 kB │ gzip: 269.82 kB
+
+[33m[33m[INEFFECTIVE_DYNAMIC_IMPORT] [0mnode_modules/@tauri-apps/api/window.js is dynamically imported by src/bridge.ts but also statically imported by node_modules/@tauri-apps/api/webview.js, node_modules/@tauri-apps/api/webviewWindow.js, dynamic import will not move module into another chunk.
+[39m
+[33m[plugin builtin:vite-reporter]
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 644ms[39m
+
+EXIT_CODE=0
+
+===== python-unit-host.log =====
+
+$ python -m unittest discover -s server -p test_*.py -v
+test_corpus_balanced_unique_nonempty (test_evaluation.EvaluationTests.test_corpus_balanced_unique_nonempty) ... ok
+test_preflight_honors_env_file_and_process_override (test_evaluation.EvaluationTests.test_preflight_honors_env_file_and_process_override) ... ok
+test_prompt_and_percentiles (test_evaluation.EvaluationTests.test_prompt_and_percentiles) ... ok
+test_remote_endpoint_policy (test_evaluation.EvaluationTests.test_remote_endpoint_policy) ... ok
+test_start_script_first_launch_and_stopped_service_are_selected_only (test_evaluation.EvaluationTests.test_start_script_first_launch_and_stopped_service_are_selected_only) ... skipped 'Windows PowerShell test'
+test_stream_unicode_and_truncation (test_evaluation.EvaluationTests.test_stream_unicode_and_truncation) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.596s
+
+OK (skipped=1)
+
+EXIT_CODE=0
+
+===== e2e-complete.log =====
+
+$ npx --no-install playwright test --workers=6 --output=preuves-locales/qa-artifacts/e2e
+[WebServer] (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[WebServer]   - JSON import "./package.json" without import attributes (vite.config.ts:3:25). Add `with { type: 'json' }`
+[WebServer] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+[... extrait abrégé : milieu du log omis ...]
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../reports/overtype-review/qa-artifacts/e2e/result.pw.ts-work-→-error--b33af-ontent-centred-smooth-dark-/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../reports/overtype-review/qa-artifacts/e2e/result.pw.ts-work-→-error--b33af-ontent-centred-smooth-dark-/error-context.md
+
+  24) e2e/settings-window.pw.ts:39:1 › the sidebar: one page per topic, each with its colour, in English and French, light and dark; the hidden switches never show
+
+    Test timeout of 20000ms exceeded.
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../reports/overtype-review/qa-artifacts/e2e/settings-window.pw.ts-the--535e0--hidden-switches-never-show/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../reports/overtype-review/qa-artifacts/e2e/settings-window.pw.ts-the--535e0--hidden-switches-never-show/error-context.md
+
+  24 failed
+    e2e/demo.pw.ts:147:3 › the demo › « Revoir » in the middle of anything starts clean; « Passer » mashed ends once
+    e2e/demo.pw.ts:204:3 › the demo › reduced motion: a slideshow of the seven phases, drawn by the same components at rest
+    e2e/ilot-bridge.pw.ts:415:1 › Îlot: an emptied grid shows only « Ask »; the compact state still offers the last action
+    e2e/ilot-place.pw.ts:338:1 › a place outside the window: the pill fades out as soon as Rust answers, not once its shape rests, and is never seen over the new text after that
+    e2e/ilot-place.pw.ts:385:1 › in the margin, a wider shape after the check (an Undo refused) is placed again for its size: never pushed over the text, its ✕ in the work area
+    e2e/ilot-place.pw.ts:464:1 › the time stands still while the pill is out of sight: a 2 s Undo still has its 2 s once the pill is back
+    e2e/ilot-place.pw.ts:481:1 › Undo withdrawn on the pill’s way to the margin: it never sweeps over the text, the check alone lands at the margin’s left edge, every frame in the region
+    e2e/ilot-place.pw.ts:505:1 › the pill stays where it is when Rust refuses its place or the window’s move; a retried paste and a bottom Îlot never ask
+    e2e/ilot-result.pw.ts:339:1 › the check after a paste stays 1.1 s on the simulated clock, without Undo while Rust offers none; turned off, the Îlot closes at once
+    e2e/ilot.pw.ts:326:3 › the entrance follows the « smooth » preset from the side of the selection
+    e2e/ilot.pw.ts:393:1 › the workbench lists the Îlot scenarios with the motion preset ───────────
+    e2e/motion.pw.ts:64:44 › « réduites » wins over a system that does not reduce: loops rest, menus and pills never move (Îlot)
+    e2e/motion.pw.ts:76:52 › « toujours » animates even when the system reduces motion (Îlot) ──────
+    e2e/motion.pw.ts:76:52 › « toujours » animates even when the system reduces motion (0.4) ───────
+    e2e/motion.pw.ts:90:1 › the preset reaches Motion and the CSS: « bouncy » enters from 0.94 and springs the band
+    e2e/native-bridge.pw.ts:123:1 › IPC fixture: initial regions are sent even when hidden WebView rAF is suspended
+    e2e/native-bridge.pw.ts:162:1 › IPC fixture: a late copy acknowledgement never appears in the next capture
+    e2e/native-bridge.pw.ts:171:1 › IPC fixture: reduced motion closes immediately through the same handshake
+    e2e/native-bridge.pw.ts:184:45 › IPC fixture (Îlot): a long source waits at the bottom from the start; the band is born there without a move
+    e2e/reported-defects.pw.ts:3:1 › settings background covers the widened production document ────
+    e2e/reported-defects.pw.ts:50:1 › waiting shows the working pill alone, 44 × 28, its Perle after 250 ms
+    e2e/reported-defects.pw.ts:66:1 › the 0.4 journey waits with a turning spinner in a pill of 60 × 28
+    e2e/result.pw.ts:105:5 › work → error pill of 30 px, on the same surface, content centred (smooth, dark)
+    e2e/settings-window.pw.ts:39:1 › the sidebar: one page per topic, each with its colour, in English and French, light and dark; the hidden switches never show
+  226 passed (6.9m)
+
+EXIT_CODE=1
+
+===== e2e-failed-recheck.log =====
+
+$ npx --no-install playwright test --last-failed --workers=2 --output=preuves-locales/qa-artifacts/e2e
+[WebServer] (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[WebServer]   - JSON import "./package.json" without import attributes (vite.config.ts:3:25). Add `with { type: 'json' }`
+[WebServer] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+Running 24 tests using 2 workers
+
+  ✓   2 e2e/ilot-bridge.pw.ts:415:1 › Îlot: an emptied grid shows only « Ask »; the compact state still offers the last action (1.6s)
+  ✓   3 e2e/ilot-place.pw.ts:338:1 › a place outside the window: the pill fades out as soon as Rust answers, not once its shape rests, and is never seen over the new text after that (5.0s)
+  ✓   4 e2e/ilot-place.pw.ts:385:1 › in the margin, a wider shape after the check (an Undo refused) is placed again for its size: never pushed over the text, its ✕ in the work area (5.9s)
+  ✓   5 e2e/ilot-place.pw.ts:464:1 › the time stands still while the pill is out of sight: a 2 s Undo still has its 2 s once the pill is back (5.3s)
+  ✓   6 e2e/ilot-place.pw.ts:481:1 › Undo withdrawn on the pill’s way to the margin: it never sweeps over the text, the check alone lands at the margin’s left edge, every frame in the region (3.2s)
+  ✓   7 e2e/ilot-place.pw.ts:505:1 › the pill stays where it is when Rust refuses its place or the window’s move; a retried paste and a bottom Îlot never ask (9.6s)
+  ✓   8 e2e/ilot-result.pw.ts:339:1 › the check after a paste stays 1.1 s on the simulated clock, without Undo while Rust offers none; turned off, the Îlot closes at once (8.4s)
+  ✓   1 e2e/demo.pw.ts:147:3 › the demo › « Revoir » in the middle of anything starts clean; « Passer » mashed ends once (40.0s)
+[WebServer] 3:39:24 AM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+  ✓   9 e2e/ilot.pw.ts:326:3 › the entrance follows the « smooth » preset from the side of the selection (3.2s)
+  ✓  11 e2e/ilot.pw.ts:393:1 › the workbench lists the Îlot scenarios with the motion preset (827ms)
+[WebServer] 3:39:29 AM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+  ✓  12 e2e/motion.pw.ts:64:44 › « réduites » wins over a system that does not reduce: loops rest, menus and pills never move (Îlot) (2.8s)
+[WebServer] 3:39:30 AM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+  ✓  13 e2e/motion.pw.ts:76:52 › « toujours » animates even when the system reduces motion (Îlot) (3.8s)
+[WebServer] 3:39:34 AM [vite] (client) [console.warn] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled
+  ✓  14 e2e/motion.pw.ts:76:52 › « toujours » animates even when the system reduces motion (0.4) (4.1s)
+  ✓  15 e2e/motion.pw.ts:90:1 › the preset reaches Motion and the CSS: « bouncy » enters from 0.94 and springs the band (2.8s)
+  ✓  16 e2e/native-bridge.pw.ts:123:1 › IPC fixture: initial regions are sent even when hidden WebView rAF is suspended (1.0s)
+  ✓  17 e2e/native-bridge.pw.ts:162:1 › IPC fixture: a late copy acknowledgement never appears in the next capture (1.2s)
+  ✓  18 e2e/native-bridge.pw.ts:171:1 › IPC fixture: reduced motion closes immediately through the same handshake (1.3s)
+  ✓  19 e2e/native-bridge.pw.ts:184:45 › IPC fixture (Îlot): a long source waits at the bottom from the start; the band is born there without a move (1.2s)
+  ✓  20 e2e/reported-defects.pw.ts:3:1 › settings background covers the widened production document (762ms)
+  ✓  10 e2e/demo.pw.ts:204:3 › the demo › reduced motion: a slideshow of the seven phases, drawn by the same components at rest (22.9s)
+  ✓  21 e2e/reported-defects.pw.ts:50:1 › waiting shows the working pill alone, 44 × 28, its Perle after 250 ms (1.9s)
+  ✓  23 e2e/reported-defects.pw.ts:66:1 › the 0.4 journey waits with a turning spinner in a pill of 60 × 28 (1.4s)
+  ✓  22 e2e/result.pw.ts:105:5 › work → error pill of 30 px, on the same surface, content centred (smooth, dark) (3.2s)
+  ✓  24 e2e/settings-window.pw.ts:39:1 › the sidebar: one page per topic, each with its colour, in English and French, light and dark; the hidden switches never show (4.9s)
+
+  24 passed (1.3m)
+
+EXIT_CODE=0
+
+===== visual-linux.log =====
+
+$ npx --no-install playwright test --config playwright.visual.config.ts --update-snapshots=none --output=preuves-locales/qa-artifacts/visual
+[WebServer] (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+[WebServer]   - JSON import "./package.json" without import attributes (vite.config.ts:3:25). Add `with { type: 'json' }`
+[WebServer] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+[... extrait abrégé : milieu du log omis ...]
+    Error: A snapshot doesn't exist at artefacts-locaux/qa-work/visual-tests/references/linux/chromium/notice-dark.png.
+
+      20 |       if (id === 'history') await expect(page.locator('html')).toHaveAttribute('data-lab-ready', 'true');
+      21 |       // Soft: when the state differs, the menu that follows it is compared as well.
+    > 22 |       await expect.soft(page).toHaveScreenshot(`${id}-${theme}.png`);
+         |                               ^
+      23 |       if (id === 'short') {
+      24 |         await page.getByRole('button', { name: 'More options', exact: true }).click();
+      25 |         await expect(page.getByRole('menu')).toBeVisible();
+        at artefacts-locaux/qa-work/visual-tests/states.spec.ts:22:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../reports/overtype-review/qa-artifacts/visual/states-notice-dark-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../reports/overtype-review/qa-artifacts/visual/states-notice-dark-chromium/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../reports/overtype-review/qa-artifacts/visual/states-notice-dark-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../reports/overtype-review/qa-artifacts/visual/states-notice-dark-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14 failed
+    [chromium] › visual-tests/states.spec.ts:12:5 › short / light @v4 ──────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › long / light @v4 ───────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › pending / light @v4 ────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › partial / light @v4 ────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › error / light @v4 ──────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › notice / light @v4 ─────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › settings / light @v4 ───────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › history / light @v4 ────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › short / dark @v4 ───────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › long / dark @v4 ────────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › pending / dark @v4 ─────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › partial / dark @v4 ─────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › error / dark @v4 ───────────────────────────────
+    [chromium] › visual-tests/states.spec.ts:12:5 › notice / dark @v4 ──────────────────────────────
+  1 interrupted
+    [chromium] › visual-tests/states.spec.ts:12:5 › settings / dark @v4 ────────────────────────────
+  37 did not run
+
+EXIT_CODE=130

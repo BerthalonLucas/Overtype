@@ -1,0 +1,2727 @@
+{
+  "main_sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+  "raw_findings": 46,
+  "canonical_findings": 40,
+  "counts": {
+    "P1": 4,
+    "P2": 23,
+    "P3": 13
+  },
+  "merge_map": {
+    "DEP-003": [
+      "SEC-05"
+    ],
+    "DEP-004": [
+      "ARCH-06"
+    ],
+    "NATIVE-008": [
+      "BR-01"
+    ],
+    "NATIVE-011": [
+      "SEC-03"
+    ],
+    "ARCH-03": [
+      "SEC-02"
+    ],
+    "QA-03": [
+      "BR-03"
+    ]
+  },
+  "findings": [
+    {
+      "id": "NATIVE-001",
+      "title": "La revalidation UIA autorise une cible devenue invérifiable",
+      "severity": "P1",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/capture.rs",
+      "lines": [
+        428,
+        513
+      ],
+      "evidence": "validate_target retourne Ok si get_focused_element échoue (438); element_changed ne refuse un runtime_id différent que si un id a été obtenu (453–455); selection_changed ignore les erreurs hors NO_SELECTION (505–513). Le contrôle Win32 inconnu ne provoque pas non plus de refus (434). pasted::check laisse également passer une erreur get_runtime_id (pasted.rs:219–226).",
+      "call_path": "Sélection UIA capturée → inférence → même HWND, contrôle sans handle distinct → le fournisseur cesse de répondre après déplacement du caret/changement interne → schedule_auto_delivery → paste → validate_target Ok → Ctrl+V. Le watcher réutilise la même validation et ne révoque rien.",
+      "impact": "Insertion ou remplacement dans un champ/une sélection non prouvés, contraire à AGENTS.md:10 et SPEC.md:23. L’erreur UIA transitoire n’est pas une preuve de stabilité.",
+      "recommendation": "Traiter Uia/Copy comme des niveaux de preuve explicites. Pour une cible Uia, échec d’identité ou de sélection = refus avant injection; éventuellement revérifier par copie avec provenance et preuve de sélection, sinon proposer Copier. Appliquer la même politique aux identités d’Undo.",
+      "cost_tradeoff": "Moyen : certains fournisseurs fragiles seront moins souvent remplaçables. Garder capture/affichage/Copier pour ne pas supprimer la fonctionnalité.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "PR6 valide plus strictement identité, protection et document, sans justification pour rétablir son ancien schéma de cibles entier."
+      ],
+      "source_ids": [
+        "NATIVE-001"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-001",
+        "title": "Revalidation UIA permissive : choix délibéré, garantie de sélection non établie",
+        "original_severity": "P1",
+        "verdict": "à nuancer",
+        "severity": "P1",
+        "proposed_severity": "P1",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "Le chemin de collage accepte effectivement une perte de lecture UIA : absence du focused element, runtime id illisible ou erreur de sélection autre que NO_SELECTION. Pour une cible UIA capturée avec identité, aucune deuxième copie ne remplace cette preuve. Le watcher emploie exactement le même validateur. Le risque de collage après déplacement interne reste valide, mais ce n’est pas une omission accidentelle : commentaires et tests consacrent explicitement ce choix.",
+        "counter_evidence": "Le foreground, un changement de contrôle connu, un runtime id différent connu, un texte/longueur/anchor différents et une sélection explicitement collapsed sont refusés; trois validations entourent les attentes et l’écriture du clipboard. Le code ne laisse donc pas passer toute modification. UI-DECISIONS:22 autorise l’absence de relecture DU DOCUMENT; elle ne fournit pas de preuve de sélection/identité. BRIDGE et tests admettent cependant le provider silencieux : tension entre contrat de sécurité AGENTS/SPEC et compatibilité documentée, à résoudre explicitement.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              428,
+              445
+            ],
+            "evidence": "Retour Ok quand UIA ne donne pas d’élément; validation conditionnelle du contrôle et de l’id."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              453,
+              513
+            ],
+            "evidence": "element_changed ignore None; selection_changed ignore erreurs autres que NO_SELECTION; control_copy réservé à Copy."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              578,
+              599
+            ],
+            "evidence": "Trois validate_target, mais pas de preuve de remplacement pour Uia silencieuse."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              783,
+              793
+            ],
+            "evidence": "Test explicite : un contrôle devenu inaccessible n’est pas un changement."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              3145,
+              3164
+            ],
+            "evidence": "Watcher dépend du même validate_target."
+          },
+          {
+            "file": "src-tauri/src/pasted.rs",
+            "lines": [
+              219,
+              226
+            ],
+            "evidence": "Undo exige texte relocalisé mais ignore l’échec de runtime id."
+          },
+          {
+            "file": "AGENTS.md",
+            "lines": [
+              10,
+              10
+            ],
+            "evidence": "Identité et texte doivent être revalidés."
+          },
+          {
+            "file": "docs/UI-DECISIONS.md",
+            "lines": [
+              21,
+              22
+            ],
+            "evidence": "Document readback optionnel, pas abrogation explicite de l’identité/sélection."
+          }
+        ],
+        "recommendation": "Conserver le collage sans lecture du document; préciser une preuve de sélection/identité de remplacement quand UIA devient muette, sinon Copier. Ne pas rétablir la précondition whole-document de PR6.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-002",
+      "title": "Deux copies identiques ne prouvent pas qu’une sélection existe",
+      "severity": "P1",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/capture.rs",
+      "lines": [
+        202,
+        212
+      ],
+      "evidence": "CaptureOrigin::Copy est toujours remplaçable hors console/password (206–212). clipboard_capture crée la cible à partir de la copie (336–384). control_copy/same_copy compare seulement le texte (471–487), pas l’existence d’une plage. Le commentaire 469 reconnaît que Monaco copie la ligne entière sans sélection.",
+      "call_path": "VS Code/Monaco, aucun texte sélectionné, caret sur une ligne → Ctrl+Insert copie cette ligne → capture Copy can_replace=true → contrôle copie la même ligne → égalité acceptée → Ctrl+V insère le résultat au caret au lieu de remplacer la sélection inexistante.",
+      "impact": "Écriture automatique injustifiée et duplication de texte. Même phénomène si une vraie sélection de ligne complète a été perdue et le copier sans sélection rend la même ligne.",
+      "recommendation": "Sans plage lisible ni contrat fiable d’éditeur, conserver le résultat en lecture seule/Copier. Pour Win32 Edit/RichEdit, exploiter la plage réelle du contrôle; pour providers web, exiger une preuve UIA ou un adaptateur borné. Ne pas utiliser Ctrl+A ni SetValue sur tout le document.",
+      "cost_tradeoff": "Moyen : baisse de couverture de remplacement sur Monaco sans API de sélection; c’est le coût honnête d’une garantie de sélection.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "PR6 demande document/plage unique et provider éditable; à adapter, pas à fusionner aveuglément."
+      ],
+      "source_ids": [
+        "NATIVE-002"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-002",
+        "title": "L’égalité de deux copies ne prouve pas une sélection active",
+        "original_severity": "P1",
+        "verdict": "à nuancer",
+        "severity": "P1",
+        "proposed_severity": "P1",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "replaceable(Copy)=true et same_copy vérifie exclusivement l’égalité du texte non vide. Une copie sans sélection produisant la même ligne est mathématiquement indiscernable d’une sélection dans cette implémentation. Le cas dangereux reste plausible et important pour l’intégrité du document.",
+        "counter_evidence": "La seconde copie n’est PAS absente : elle refuse une sélection perdue si la ligne copiée diffère du texte capturé. Le scénario VS Code/Monaco dépend du réglage copy-without-selection, de Ctrl+Insert et de l’accessibilité réelle du provider/version; il n’est pas une reproduction universelle. Si UIA expose la sélection, le chemin Uia remplace le scénario Copy. Après collage, certains cas de lecture seule sont détectés, mais une insertion réellement faite n’est pas annulée par ces checks.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              202,
+              212
+            ],
+            "evidence": "Copy remplaçable même sans propriété de plage."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              336,
+              384
+            ],
+            "evidence": "Capture Copy issue de la copie; selection_len est le nombre de caractères copiés, pas une plage native."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              466,
+              487
+            ],
+            "evidence": "Contrôle exact, pas contains; commentaire reconnaît la copie de ligne sans sélection."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              578,
+              584
+            ],
+            "evidence": "Second control_copy avant paste."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              620,
+              637
+            ],
+            "evidence": "Post-check read-only ne protège pas d’une insertion réussie au caret."
+          }
+        ],
+        "recommendation": "Prouver le cas sur un éditeur et ses réglages avant annoncer duplication reproduite; utiliser une preuve de sélection native/UIA ou adaptateur borné sans imposer lecture du document.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-005",
+      "title": "Des commandes synchrones peuvent bloquer le thread UI et son hook clavier",
+      "severity": "P1",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/lib.rs",
+      "lines": [
+        989,
+        991
+      ],
+      "evidence": "capture_text est #[tauri::command] fn, appelle directement capture_with_binding et UIA/attentes. get_settings (592–595), save_settings (664–671), frontend_ready (1316–1318), copy_result (1865–1872) attendent aussi le mutex depuis des commandes synchrones. install_keyboard_hook est appelé dans setup (3345), SetWindowsHookExW sur le thread appelant (host.rs:599–603). Les livraisons gardent inner pendant UIA (1603–1654).",
+      "call_path": "Invoke capture_text natif lent, ou livraison bloquée chez le provider puis invoke get_settings/copy_result/choix synchrone → attente mutex sur UI → pompe de messages suspendue → hook LL installé sur ce thread ne répond plus dans son budget.",
+      "impact": "Gel du WebView/fenêtres; Microsoft prévoit le retrait silencieux du hook LL après timeout (plafond Windows récent : 1 s). Le watchdog masque la fenêtre par handle mais ne rend pas le thread UI.",
+      "recommendation": "Capture native sur worker MTA dédié/spawn_blocking; commandes lisant un état potentiellement verrouillé hors UI et section critique courte. Hook LL sur thread pompant dédié, callback atomiques/try_send uniquement (déjà bien appliqué dans le callback). Ne pas faire UIA sur le thread de fenêtre.",
+      "cost_tradeoff": "Moyen : préserver les appels Tauri de fenêtres sur run_on_main_thread et éviter les inversions lock/UI. Le chemin raccourci ordinaire est déjà dispatché hors UI; ne pas confondre avec invoke capture_text.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [],
+      "source_ids": [
+        "NATIVE-005"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-005",
+        "title": "Un mutex détenu pendant UIA peut bloquer les commandes Tauri synchrones",
+        "original_severity": "P1",
+        "verdict": "confirmé statiquement",
+        "severity": "P1",
+        "proposed_severity": "P1",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "risque",
+        "assessment": "La règle API Tauri confirme sync sans command(async) exécuté sur main thread. get_settings/copy_result/frontend_ready peuvent attendre inner, détenu tout au long de paste et locate. Le hook LL est installé dans setup sur le thread appelant; les threads menu-keys/undo-watch ne déplacent PAS l’installation. Le risque UI/hook est fondé.",
+        "counter_evidence": "Le raccourci normal et les livraisons sont déjà spawn_blocking; l’appel demo à capture_text aussi. La méthode bridge.captureText n’a pas de call-site de production trouvé dans src : ne pas décrire ce seul invoke comme le parcours quotidien. En revanche getSettings est appelé par plusieurs vues. Retrait du hook n’est ni certain à chaque livraison ni mesuré : il faut un blocage dépassant le timeout pendant une notification clavier. Les handles natifs cachés évitent un autre deadlock mais pas l’attente mutex UI.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              592,
+              595
+            ],
+            "evidence": "get_settings sync + inner.lock."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              642,
+              659
+            ],
+            "evidence": "Raccourci dispatché spawn_blocking."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              989,
+              991
+            ],
+            "evidence": "capture_text sync disponible IPC."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1316,
+              1318
+            ],
+            "evidence": "frontend_ready sync + mutex."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1599,
+              1654
+            ],
+            "evidence": "Worker paste/locate garde inner."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1865,
+              1872
+            ],
+            "evidence": "copy_result sync appelle result_for, mutex."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              3343,
+              3373
+            ],
+            "evidence": "Hook installé setup; demo capture sur worker."
+          },
+          {
+            "file": "src-tauri/src/host.rs",
+            "lines": [
+              591,
+              603
+            ],
+            "evidence": "Workers pour callbacks métier; SetWindowsHookEx reste dans appelant."
+          },
+          {
+            "file": "src/useSettings.ts",
+            "lines": [
+              18,
+              18
+            ],
+            "evidence": "Appel getSettings réel."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1586,
+              1591
+            ],
+            "evidence": "result_for acquiert inner, appelé par copy_result sync."
+          }
+        ],
+        "recommendation": "Raccourcir le lock et sortir des commandes UI les attentes; hook sur thread dédié pompant. Garder les appels fenêtre main-thread où Tauri l’exige.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-006",
+      "title": "La fermeture d’urgence ne révoque pas une livraison déjà entrée dans son verrou",
+      "severity": "P1",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/lib.rs",
+      "lines": [
+        1962,
+        1986
+      ],
+      "evidence": "force_close masque immédiatement mais close_now/cancel n’exécute qu’après inner.lock dans un thread séparé (1976–1981). schedule_auto_delivery garde inner pendant paste (1603–1621); replace_result fait pareil (1882–1892). capture::paste ne reçoit pas de token/génération annulable, y compris après les appels UIA et avant SendInput.",
+      "call_path": "Livraison a pris inner et attend un provider avant le chord → watchdog ou tray ferme la bulle → close_now attend le même lock → provider se débloque alors que la fenêtre/selection source est encore valable → l’ancien worker poursuit le collage derrière une bulle déjà fermée.",
+      "impact": "Une action considérée annulée/fermée peut encore écrire tardivement. SPEC.md:19 demande closing cancels immediately. Une injection déjà envoyée n’est évidemment pas annulable; le problème ici est une injection non encore envoyée.",
+      "recommendation": "Latch d’annulation/génération indépendant du mutex, posé dès force_close/dismiss; recontrôler juste avant l’effet natif après chaque attente. Séparer snapshot, travail provider et commit avec génération, sans autoriser deux transactions concurrentes. En cas de provider indéfiniment pendu, isoler la tâche et ne pas attendre son lock pour une nouvelle session.",
+      "cost_tradeoff": "Élevé pour refonte du protocole; faible/moyen pour latch. spawn_blocking et timeout Rust ne tuent pas un appel COM synchrone. Conserver la fermeture visuelle immédiate actuelle.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [],
+      "source_ids": [
+        "NATIVE-006"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-006",
+        "title": "Fermeture visuelle immédiate sans révocation d’un collage déjà engagé",
+        "original_severity": "P1",
+        "verdict": "confirmé statiquement",
+        "severity": "P1",
+        "proposed_severity": "P1",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "force_close cache la fenêtre et ferme les scopes atomiques, mais close_now attend inner dans un autre thread. Un worker gardant inner pendant UIA peut reprendre et envoyer Ctrl+V après cette fermeture, tant que ses checks cible passent. Le watcher n’est pas une garde externe : il attend lui aussi inner. Aucun token indépendant n’est consulté par paste avant SendInput.",
+        "counter_evidence": "claim_delivery empêche bien les doubles livraisons; pending_dismiss/visible/active sont testés AVANT de prendre la cible. Ces protections marchent si la fermeture obtient le lock avant delivery. Elles ne rendent pas révocable le travail natif déjà engagé. La nouvelle capture est bloquée plutôt qu’une livraison concurrente; il ne faut pas annoncer injection annulable une fois envoyée. Scénario watchdog accessible via try_lock + lock stuck même si main est gelé.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1603,
+              1621
+            ],
+            "evidence": "Checks de début puis paste sous inner."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1882,
+              1892
+            ],
+            "evidence": "Même verrou pour remplacement manuel."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1962,
+              1986
+            ],
+            "evidence": "Hide immédiat, close_now seulement après lock."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              2023,
+              2053
+            ],
+            "evidence": "Watchdog force sur WouldBlock et durée dépassée."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              3073,
+              3086
+            ],
+            "evidence": "Watcher attend le même mutex."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              578,
+              599
+            ],
+            "evidence": "Checks cible mais pas cancellation/latch avant injection."
+          },
+          {
+            "file": "docs/SPEC.md",
+            "lines": [
+              19,
+              19
+            ],
+            "evidence": "Closing cancels immediately."
+          }
+        ],
+        "recommendation": "Poser une génération/latch indépendant dès annulation, relire après attentes et juste avant injection. Ne pas prétendre qu’un timeout tokio tue COM.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "ARCH-01",
+      "title": "Le preflight ne lit pas la configuration effective de Compose",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "server/preflight.py",
+      "lines": [
+        21,
+        55
+      ],
+      "evidence": "load_env_file retire seulement les guillemets et effective_settings choisit les chaînes vides au lieu des défauts ${VAR:-default}. Repro réelle : FAST_PORT=9011 # comment et FAST_PORT=${MY_PORT} lèvent ValueError ; FAST_GPU= donne gpu=\"\". Docker documente commentaires, interpolation et défaut pour une variable vide. server/README.md:8 promet la même précédence et start.ps1:51-52 bloque le lancement sur refus.",
+      "impact": "Une configuration Compose valide peut être refusée ; la réserve GPU peut viser une valeur différente de celle du conteneur. Les lignes simples livrées restent prises en charge.",
+      "recommendation": "Faire résoudre le modèle par docker compose config --format json avec exactement les mêmes -f/--env-file/profiles que start.ps1, puis ne lire que GPU et port effectifs. Ne jamais journaliser le modèle complet, qui peut contenir des secrets. Alternative limitée : annoncer et valider explicitement un sous-ensemble .env, plutôt que prétendre équivalence Compose.",
+      "confidence": "haute",
+      "cost_tradeoff": "Petit changement du préflight/lanceur et fixtures ; un processus Compose supplémentaire, Docker CLI déjà requis. python-dotenv seul ne garantit pas tous les defaults et règles Compose.",
+      "limitations": "Docker absent : comparaison normative avec la documentation, pas exécution du moteur Compose.",
+      "source_ids": [
+        "ARCH-01"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "ARCH-02",
+      "title": "Le parseur SSE Python refuse des événements valides et peut laisser échapper une exception",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "server/evaluate.py",
+      "lines": [
+        60,
+        84
+      ],
+      "evidence": "Le JSON est décodé ligne par ligne plutôt que par événement SSE. Fixture valide à deux lignes data: => success=false/transport-or-stream-error ; choix JSON null => TypeError non intercepté. Fixture monoligne identique => success=true. Appels réels de translate avec urllib remplacé, sans endpoint.",
+      "impact": "Un serveur/proxy SSE conforme utilisant plusieurs lignes produit de faux échecs. Une réponse malformée à choices:null peut interrompre pool.map et empêcher les rapports de la campagne. Ce script est un outil de mesure, pas le serveur de production ni le runtime Rust.",
+      "recommendation": "Conserver urllib pour le petit outil mais accumuler data jusqu’à la ligne vide et valider les types avant accès. Alternative : client OpenAI officiel, pris en charge par vLLM, avec transport sans redirection et aucune journalisation de corps ; conserver contrôle finish_reason=stop, [DONE]/complétude et règles de confidentialité.",
+      "confidence": "haute",
+      "cost_tradeoff": "Correctif local très petit + fixtures ; SDK ajoute dépendance, validation et entretien de transport. Aucune nécessité de FastAPI/proxy maison.",
+      "limitations": "Fréquence de multiline sur vLLM non mesurée ; la fixture montre la compatibilité générique, pas un défaut observé du vLLM livré.",
+      "source_ids": [
+        "ARCH-02"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "ARCH-03",
+      "title": "Les lecteurs de génération ne bornent ni les événements ni les corps d’erreur",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/inference.rs",
+      "lines": [
+        23,
+        68
+      ],
+      "evidence": "SseDecoder étend Vec puis rescane deux fois depuis le début à chaque push ; pas de taille maximale d’événement. ThinkFilter:145-166 conserve tout le raisonnement et recherche le marqueur à chaque delta. stream_within:262 lit response.text() sans borne ni select cancellation. Contraste : probe.rs:419-448 fournit déjà bounded_body cancellable avec 2 MiB.",
+      "impact": "Un endpoint cassé qui envoie des octets sans terminateur, un think non fermé ou un énorme corps HTTP d’erreur peut faire grossir la mémoire ; les recherches répétées sur buffers croissants peuvent être quadratiques. Le read_timeout par silence ne borne pas un serveur qui continue à émettre. Annuler ne coupe pas promptement la lecture de response.text().",
+      "recommendation": "Réutiliser le principe bounded_body de probe pour les erreurs (limite adaptée) et cancellation select. Ajouter une limite par événement SSE et un curseur de scan incrémental ; pour les blocs think, jeter le contenu déjà consommé et ne garder que le suffixe nécessaire au marqueur. Évaluer eventsource-stream sur bytes_stream pour le framing, en gardant une borne explicite et la logique métier de complétude.",
+      "confidence": "haute sur les propriétés statiques ; moyenne sur l’impact terrain",
+      "cost_tradeoff": "Modification localisée, tests fragmentés/bornes ; dépendance SSE éventuelle à qualifier, pas besoin d’un SDK Rust complet.",
+      "limitations": "Cargo absent : aucun repro Rust exécuté et aucune mesure RSS. Ne pas réintroduire timeout global ni max_tokens=4096 : leur retrait est intentionnel dans 744706d29c7898d66c505b1397552be1cb7be8d4.",
+      "source_ids": [
+        "ARCH-03",
+        "SEC-02"
+      ],
+      "merged_details": [
+        {
+          "id": "SEC-02",
+          "title": "Inférence: taille de réponse et durée totale non bornées",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "origin/main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/inference.rs",
+          "lines": [
+            23,
+            24,
+            145,
+            166,
+            199,
+            210,
+            245,
+            262,
+            273,
+            296
+          ],
+          "evidence": "SseDecoder.buffer.extend_from_slice sans plafond; ThinkFilter garde tout un bloc non fermé; result.push_str accumule sans limite; réponse d’erreur .text().await non bornée. Limits ne borne que connect/idle, request_body n’a pas max_tokens. À l’inverse probe.rs borne les corps à 2 MiB. Watchdog lib.rs 2008–2047 expire le silence, réinitialisé par les deltas (1452–1458).",
+          "impact": "Serveur sélectionné malveillant/défaillant peut épuiser mémoire native, CPU et WebView avec un gros événement/erreur ou des deltas continus. Disponibilité locale, pas RCE.",
+          "recommendation": "Réutiliser logique bounded_body de probe pour refus HTTP; plafond par événement SSE, thinking et texte total avant append; limites adaptées à MAX_CHARS=200000, délai global configurable et cancellation pendant lecture d’erreur. max_tokens est complément, jamais défense contre serveur hostile.",
+          "preconditions": "Utilisateur lance une action vers un endpoint configuré compromis, malveillant ou bogué; pas de serveur accessible arbitrairement depuis Internet vers l’app.",
+          "plausible_threat": "Le service auquel l’app accorde confiance envoie des octets sans séparateur ou une génération infinie; TLS ne protège pas d’un serveur authentifié hostile.",
+          "cost_tradeoff": "Modéré, aucune dépendance nouvelle; compromis avec réponses légitimes longues.",
+          "confidence": "high",
+          "limitations": "Chemin statique confirmé; OOM/DoS non déclenché, suite Rust non exécutée (cargo absent).",
+          "source_ids": [
+            "SEC-02"
+          ]
+        }
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-05",
+          "report_refs": [
+            "SEC-02",
+            "ARCH-03"
+          ],
+          "verdict": "nuancé",
+          "title": "Bornage mémoire et cancellation erreurs: risque réel; timeout global/max_tokens retirés intentionnellement",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/inference.rs",
+          "lines": [
+            23,
+            24,
+            145,
+            166,
+            199,
+            209,
+            262,
+            273,
+            296
+          ],
+          "evidence": "Vec SSE sans plafond, rescans depuis début; thinking conserve bloc non fermé; résultat accumulé; response.text().await sans select cancellation. probe.rs:419-448 fournit bounded_body 2 MiB cancellable. idle reqwest 120 s et watchdog silence 150 s existent; i.touch à chaque chunk émis. Commit 744706d29c7898d66c505b1397552be1cb7be8d4 du 2026-10-08 retire explicitement max_tokens=4096 et total timeout.",
+          "impact": "Endpoint configuré hostile/bogué peut fournir événement énorme, erreur énorme ou deltas infinis; coût mémoire/CPU et annulation lente erreur. Le watchdog peut annuler un thinking/no-frame silencieux côté UI, mais ne constitue pas plafond bytes ni arrêt des deltas continus. Pas RCE.",
+          "recommendation": "Réutiliser lecture bornée+cancellable pour erreurs; limite événement/texte compatible 200000 caractères, suffixe seul pour thinking, scan incrémental. Retenir bornage bytes sans réintroduire par défaut deadline globale ou 4096 tokens.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Pas d’OOM/RSS ni tests Rust; risque conditionnel et statique. Un timeout global optionnel est décision produit, non correctif obligatoire."
+        },
+        {
+          "id": "XSEC-12",
+          "report_refs": [
+            "SEC-02",
+            "ARCH-03"
+          ],
+          "verdict": "rejeté",
+          "title": "Absence de timeout global ou max_tokens n’est pas seule un bug à réparer",
+          "severity": "P3",
+          "category": "option",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/inference.rs",
+          "lines": [
+            109,
+            112,
+            199,
+            209
+          ],
+          "evidence": "Intention commit 744706d explicitement vérifiée: permettre longs textes sans deadline totale. Connect et silence bornés restent présents.",
+          "impact": "Assimiler durée non bornée au défaut produit annulerait décision récente. En revanche taille mémoire/corps hostiles et cancellation erreurs sont des risques indépendants confirmés XSEC-05.",
+          "recommendation": "Ne pas restaurer silencieusement ancien plafond; appliquer contrôles ressources compatibilité produit.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Rejet partiel de recommandation SEC-02, pas du constat absence limites bytes."
+        }
+      ],
+      "editorial_decision": "Bornes mémoire et annulation des lectures, pas réintroduction du timeout global ou de max_tokens=4096 intentionnellement retirés.",
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "ARCH-04",
+      "title": "L’orchestration native concentre plusieurs invariants dans lib.rs",
+      "severity": "P2",
+      "category": "dette",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/lib.rs",
+      "lines": [
+        563,
+        805
+      ],
+      "evidence": "AppState/Inner partagés coordonnent apply_settings (684-761 : raccourcis, autostart, disque, diffusion), translate (1330-1559), delivery (1599+), résultat/annulation, fenêtres/setup et probes (2739-2826), watchers (3058+), bootstrap (3195+). Le fichier totalise 4116 lignes, tests inclus ; le problème est le partage des invariants de capture/lifecycle/réglages, pas ce nombre seul.",
+      "impact": "Une évolution de connexion, remplacement ou fermeture oblige à raisonner sur plusieurs zones et leur même verrou ; tests d’orchestration proches de Tauri rendent les variantes délicates. Ce n’est pas une race démontrée ni une violation d’une taille maximale documentée par Overtype.",
+      "recommendation": "Extraire progressivement une responsabilité par modification : session/capture et transitions pures, application transactionnelle des réglages, puis commandes connexion. Garder lib.rs comme assemblage Tauri, garder les IDs/générations, snapshots, verrou et tests de contrats. Alternative acceptable à court terme : carte des invariants et fonctions auxiliaires ciblées, sans migration générale.",
+      "confidence": "haute sur le couplage, jugement architectural sur la priorité",
+      "cost_tradeoff": "Coût moyen en étapes ; tests de contrats avant déplacement, éviter découpage mécanique en modules mutuellement dépendants. Aucun besoin de microservices, CQRS ou DDD cérémoniel.",
+      "limitations": "Pas de suite native, pas d’affirmation de bug concurrent.",
+      "source_ids": [
+        "ARCH-04"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "ARCH-07",
+      "title": "La fin [DONE] du flux ne termine pas la lecture native",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/inference.rs",
+      "lines": [
+        279,
+        325
+      ],
+      "evidence": "Item::Done:285 ne fait que done=true. Le loop attend bytes.next() jusqu’à None ; stop confirmé et [DONE] reçus ne sortent pas de la boucle. Le script Python:66-68 fait au contraire break à [DONE].",
+      "impact": "Un proxy/serveur qui garde le corps SSE ouvert après [DONE] retarde le résultat, puis peut le transformer en timeout ; schedule_auto_delivery attend inference::stream et ne colle donc pas. Un flux qui ferme normalement, comme les fixtures actuelles, fonctionne.",
+      "recommendation": "Terminer la consommation sur la sentinelle terminale en exigeant toujours finish_reason=stop ; rejeter [DONE] prématuré. Fixture locale Rust : stop+[DONE] puis socket maintenue ouverte, et absence de stop ; ne pas supprimer les gardes contre résultat tronqué.",
+      "confidence": "moyenne",
+      "cost_tradeoff": "Petit changement dans boucle + tests HTTP locaux. La politique de terminaison est indépendante du choix de bibliothèque SSE.",
+      "limitations": "Lecture statique seulement, pas de preuve que le vLLM livré maintient la réponse ouverte.",
+      "source_ids": [
+        "ARCH-07"
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-06",
+          "report_refs": [
+            "ARCH-07"
+          ],
+          "verdict": "confirmé",
+          "title": "[DONE] ne termine pas le stream native",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/inference.rs",
+          "lines": [
+            279,
+            285,
+            301,
+            306,
+            310,
+            314
+          ],
+          "evidence": "Item::Done fait seulement done=true; sortie loop uniquement None/cancel/erreur. stop+[DONE] suivi corps qui reste ouvert attend encore et peut produire Timeout; erreur transport après DONE refuse aussi. decoder.finish puis done&&stop et résultat non vide sont requis.",
+          "impact": "Disponibilité/compatibilité d’un proxy endpoint configuré, pas fuite ni attaque Internet sans endpoint hostile. Pas preuve que vLLM livré garde corps ouvert. La propriété du code est certaine, occurrence terrain inconnue.",
+          "recommendation": "Stopper consommation à sentinelle terminale en conservant finish_reason=stop; tester stop+DONE/socket maintenue et DONE sans stop. Clarifier traitement données post-DONE.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Statique seulement, aucune fixture Rust exécutée; ne pas annoncer repro natif réussi."
+        }
+      ],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "BR-02",
+      "title": "La récupération non destructive des réglages illisibles n’a pas été reprise",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/settings.rs",
+      "lines": [
+        184,
+        191
+      ],
+      "evidence": "JSON invalide => Err; clé DPAPI invalide => Err à 217/226; lib.rs:3213 propage au setup. Le backup 0.5 à settings.rs:180-181,264-268 est conservé mais jamais chargé en secours. Ancienne branche 1fcdd21f:settings.rs:198-240 portait load_tolerant + mise à l’écart + notice, et tests fichier tronqué/vide/enum/DPAPI.",
+      "impact": "Une corruption de fichier bloque le démarrage avant l’accueil et la possibilité de réparer dans Réglages; la présence d’une sauvegarde de migration n’aide pas automatiquement.",
+      "recommendation": "Réimplémenter récupération contrôlée sur schéma 0.6 : conserver original, essayer backup validé, sinon accueil avec erreur explicite sans écraser silencieusement les clés. Réutiliser serde/fs/erreurs existants. Coût moyen; attention à ne pas écraser original si rename échoue (ancien WIP ignore cette erreur).",
+      "confidence": "élevée (inspection statique)",
+      "source_ids": [
+        "BR-02"
+      ],
+      "crosscheck": {
+        "id": "BR-02",
+        "title": "Réglages invalides bloquent setup sans récupération",
+        "original_severity": "P2",
+        "verdict": "confirmé statiquement",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "risque",
+        "assessment": "load échoue sur lecture/JSON/décryptage/validate et setup utilise ?. settings.0.5.bak.json sert uniquement à la sauvegarde de migration, jamais fallback de load. La récupération historique load_tolerant n’est pas reprise.",
+        "counter_evidence": "Fail-closed évite d’envoyer une clé à une configuration devinée; save actuel utilise tmp + remplacement plutôt qu’une écriture directe tronquante. Il n’existe pas de preuve de corruption provoquée par le produit. Le backup 0.5 n’est pas une sauvegarde récente universelle : ne pas le restaurer silencieusement au détriment des nouveaux serveurs.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/settings.rs",
+            "lines": [
+              179,
+              191
+            ],
+            "evidence": "Backup et load strict."
+          },
+          {
+            "file": "src-tauri/src/settings.rs",
+            "lines": [
+              217,
+              228
+            ],
+            "evidence": "decrypt_key faillible."
+          },
+          {
+            "file": "src-tauri/src/settings.rs",
+            "lines": [
+              263,
+              273
+            ],
+            "evidence": "Backup créé seulement pour migration, non lu en secours."
+          },
+          {
+            "file": "src-tauri/src/settings.rs",
+            "lines": [
+              324,
+              327
+            ],
+            "evidence": "Save tmp + replace."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              3211,
+              3213
+            ],
+            "evidence": "Erreur bloque setup."
+          },
+          {
+            "file": "origin/wt-050-natif:src-tauri/src/settings.rs",
+            "lines": [
+              198,
+              240
+            ],
+            "evidence": "load_tolerant historique; set_aside ignoré => pas à porter aveuglément."
+          }
+        ],
+        "recommendation": "Sauver original avant secours; recovery explicite, accueil avec notice, pas écrasement silencieux ni désactivation de la protection des clés.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "DEP-001",
+      "title": "vLLM 0.28.0 possède des advisories DoS atteignables par les paramètres des routes texte",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "server/compose.yaml",
+      "lines": [
+        4,
+        37,
+        78,
+        120
+      ],
+      "evidence": "Digest officiel vérifié. GHSA-wpww-v874-ph2p et GHSA-v5gm-qgmv-gc6c affectent <0.29.0, dont 0.28.0 ; upstream décrit cache_salt volumineux et stop_token_ids hors vocabulaire avec min_tokens>0 sur /v1/chat/completions. Pas de PoC GPU exécuté. Le client normal ne transmet pas ces paramètres.",
+      "scenario": "Un autre client local atteignant 127.0.0.1:8001/8002/8003, ou un utilisateur du proxy entreprise autorisé sur chat/completions, forge directement une requête ; contournement de la surface du client Overtype.",
+      "impact": "Latence partagée ou arrêt EngineCore, reprise manuelle (restart:no). Risque local/tenant, pas preuve de compromission distante ou de fuite.",
+      "recommendation": "Garder les ports loopback et les restrictions de proxy déjà documentées. Limiter taille du corps et autoriser les seuls paramètres nécessaires au contrat du client ; pour stop_token_ids, supprimer/refuser ce champ s’il est inutile. Préparer ensuite une image corrigée >=0.29.0 avec digest et recette WSL2/Gemma/MTP, pas une mise à latest aveugle.",
+      "cost_tradeoff": "Faible si proxy déjà présent ; changement moteur à coût moyen (GPU, FP8, speculative decoding et workaround V2 à revalider). Aucune nouvelle bibliothèque du client nécessaire.",
+      "confidence": "élevée sur version et chemin upstream, moyenne sur exploitabilité de cette image/config sans chargement GPU",
+      "scope": "main",
+      "counterexamples": [
+        "Loopback, aucun --trust-remote-code, multimedia general explicitement désactivé, docs/server entreprise exigent proxy et limites. GHSA-25q3-v2hm-8vpf est déjà corrigé en 0.28.0."
+      ],
+      "source_ids": [
+        "DEP-001"
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-01",
+          "report_refs": [
+            "DEP-001"
+          ],
+          "verdict": "confirmé",
+          "title": "Advisories vLLM exacts et version exposée, sous condition de joignabilité",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "server/compose.yaml",
+          "lines": [
+            4,
+            17,
+            37
+          ],
+          "evidence": "GHSA-wpww-v874-ph2p: <0.29.0, patch >=0.29.0, medium; API officielle cve_id=CVE-2026-100647. GHSA-v5gm-qgmv-gc6c: < 0.29.0, patch >= 0.29.0, medium, cve_id=null. Compose v0.28.0 et digest concordant avec artifact registry Docker. cache_salt exige cache préfixe (activé par défaut upstream); stop_token_ids invalide exige min_tokens>0. request_body inference.rs:109-120 ne transmet aucun de ces paramètres.",
+          "impact": "DoS moteur via client HTTP direct local ou proxy partagé autorisé; pas exploitation distante du desktop ni fuite/RCE démontrée. Ports loopback atténuent la surface mais ne filtrent pas les autres clients locaux.",
+          "recommendation": "Conserver loopback, limites corps/champs au proxy; qualifier >=0.29.0 et digest sur matériel cible, sans mise à latest aveugle.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Pas de GPU, image chargée ni test modèle. Le CVE cache_salt est fourni par API repo; extraction HTML laisse sa rubrique CVE vide: ne pas conclure à absence de CVE depuis ce seul rendu."
+        }
+      ],
+      "proof_level": "preuves détaillées du rapport spécialisé; pas validation native globale"
+    },
+    {
+      "id": "DEP-003",
+      "title": "La signature de release dépend d’Actions et d’un compilateur flottants",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": ".github/workflows/release.yml",
+      "lines": [
+        23,
+        42,
+        46,
+        47,
+        59,
+        63
+      ],
+      "evidence": "actions/checkout@v4, setup-node@v4, dtolnay/rust-toolchain@stable, Swatinem/rust-cache@v2 ; job contents:write et étape build possédant la clé updater. CI emploie également des tags. GitHub recommande SHA complet pour une référence immuable. Aucun Action compromis constaté.",
+      "scenario": "Une action amont réécrit son tag ou son comportement et exécute du code avant la signature dans le même job de publication. Le lock npm/Cargo ne fige pas ce code ni rust stable.",
+      "impact": "Surface supply-chain du constructeur qui produit des mises à jour signées ; reproductibilité et traçabilité compiler/actions incomplètes. C’est du durcissement, pas un incident démontré.",
+      "recommendation": "Épingler Actions à SHA vérifiés, conserver le tag en commentaire et une politique de revue ; enregistrer/pinner la toolchain Rust compatible avec MSRV 1.91 et garder actualisations de sécurité explicites. Séparer si possible build et publication à privilèges minimaux, sans prétendre que signer après un build hostile suffit.",
+      "cost_tradeoff": "Faible pour SHA, maintenance récurrente des refresh ; moyen pour séparation de jobs/artefacts et provenance. Pas de nouvelle dépendance applicative.",
+      "confidence": "élevée",
+      "counterexamples": [
+        "npm ci, cargo test --locked, clé obligatoire, signatures updater et digest serveur constituent déjà de bons contrôles."
+      ],
+      "source_ids": [
+        "DEP-003",
+        "SEC-05"
+      ],
+      "merged_details": [
+        {
+          "id": "SEC-05",
+          "title": "Chaîne release à signature: Actions résolues par tags mutables",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "origin/main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": ".github/workflows/release.yml",
+          "lines": [
+            15,
+            16,
+            23,
+            42,
+            46,
+            47,
+            56,
+            63
+          ],
+          "evidence": "checkout@v4, setup-node@v4, rust-toolchain@stable, rust-cache@v2 exécutés dans le même job avec contents:write; plus tard le job reçoit TAURI_SIGNING_PRIVATE_KEY et lance npm/tauri build. Le secret n’est pas passé aux premières étapes, mais elles peuvent modifier workspace/outils utilisés ensuite. npm ci et cargo --locked limitent versions, pas intégrité d’un Action retaggé.",
+          "impact": "Compromission d’un upstream Action/résolution de tag peut modifier code ou outillage puis exfiltrer la clé de signature au build ou faire signer un installateur hostile. Aucune compromission observée. Signature updater ne protège pas d’une build autorisée compromise.",
+          "recommendation": "Épingler Actions aux SHA revus, updates automatisées proposées en PR; permissions par job/étape minimale, séparation build/sign/publication et environnement protégé de release selon politique produit. Conserver lockfiles et refus sans clé.",
+          "preconditions": "Acteur capable de changer un tag/code d’Action utilisé, ou compte upstream compromis; une PR sans accès secrets ne suffit pas en elle-même.",
+          "plausible_threat": "Supply-chain au niveau job de release de confiance, donnant un artefact que les clients accepteront par signature.",
+          "cost_tradeoff": "Faible pour pinning; modéré pour séparation/environnement et friction d’approbation.",
+          "confidence": "medium",
+          "limitations": "Configuration repo examinée; protections GitHub/environnements/permissions réelles et secrets non consultés. Risque conditionnel, pas vulnérabilité exploitable prouvée.",
+          "source_ids": [
+            "SEC-05"
+          ]
+        }
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-09",
+          "report_refs": [
+            "DEP-003",
+            "SEC-05"
+          ],
+          "verdict": "nuancé",
+          "title": "Tags Actions et Rust stable: un seul risque supply-chain conditionnel",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": ".github/workflows/release.yml",
+          "lines": [
+            15,
+            16,
+            23,
+            42,
+            46,
+            47,
+            56,
+            59,
+            63
+          ],
+          "evidence": "Tags checkout/setup-node/rust-cache et stable non SHA dans job contents:write; secret seulement étape build sign, étapes précédentes peuvent modifier workspace. Même cause dans deux rapports. npm ci et cargo --locked présents.",
+          "impact": "Durcissement pipeline de confiance; aucun Action compromis ni clé exposée au constat. Toolchain floating est reproductibilité/qualification, pas CVE en soi. P2 priorité politique, pas incident ou exploit reproduit.",
+          "recommendation": "Pin SHA Actions, outil Rust compatible et qualification; séparation privilèges/provenance/environnement protégé selon politique.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Protections réelles GitHub et secrets non consultés."
+        }
+      ],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "FE-01",
+      "title": "Le dialogue de copie manuelle du journal perd le focus à la fermeture",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/components/controls.tsx",
+      "lines": "317-342",
+      "related_locations": [
+        "src/connection/DiagnosticsPanel.tsx:88-95,129-132"
+      ],
+      "scenario": "Diagnostic → bouton Copier au clavier → refus du presse-papiers → dialogue de copie manuelle → Échap.",
+      "evidence": "Repro Chromium headless sur copie privée : navigator.clipboard.writeText refuse volontairement ; après Échap et fin de sortie, document.activeElement est BODY, pas le bouton Copier. Le wrapper contient Dialog.Root/Content/Close mais aucun Dialog.Trigger et aucune restauration onCloseAutoFocus. La version résolue Radix 1.1.23 empêche sa restauration générique et fait triggerRef.current?.focus().",
+      "impact": "Perte du point de reprise pour la navigation clavier ; l’utilisateur doit retrouver le bouton dans toute la fenêtre. Référence APG retour au déclencheur ; critère à vérifier WCAG 2.4.3 Focus Order.",
+      "recommendation": "Associer le déclencheur avec Dialog.Trigger asChild ou conserver le bouton actif avant ouverture et le refocaliser via Content.onCloseAutoFocus, après prévention du comportement par défaut. Ne pas remplacer Radix par un dialogue maison.",
+      "cost_tradeoff": "Faible : étendre le wrapper et son appelant ; préserver les sorties AnimatePresence et tester Échap/croix/bouton Fermer.",
+      "confidence": "élevée pour le défaut DOM reproduit ; NVDA/WebView2 non testés",
+      "source_ids": [
+        "FE-01"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "FE-02",
+      "title": "Une lecture initiale tardive réadopte des réglages périmés",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/settings/useSettingsStore.ts",
+      "lines": "64-85",
+      "related_locations": [
+        "src/useTranslation.ts:60-63,152",
+        "src/setup/useSetupSettings.ts:42-58"
+      ],
+      "scenario": "La fenêtre Réglages charge getSettings ; pendant son retour IPC un settings-changed plus récent arrive (autre fenêtre/zone de notification), puis le snapshot initial ancien se résout.",
+      "evidence": "Repro hook réel sous React/jsdom : événement langue fr adopté, puis getSettings retardé langue en ; le rendu repasse de fr à en. reload() appelle then(adopt) sans vérifier une révision ou si un état a déjà été adopté. Le setup possède au contraire le garde !latest.current pour sa lecture initiale.",
+      "impact": "La copie périmée devient synced ; une modification ultérieure peut sauver la copie entière et rétablir une préférence récemment changée. Ordonnancement démontré localement, fréquence et trajet IPC Windows non mesurés.",
+      "recommendation": "Pour la lecture initiale, ne pas remplacer un état déjà reçu ; pour reload explicite, employer un ticket/révision invalidé par une édition ou un événement plus récent. Examiner aussi le chargement initial du contrôleur overlay.",
+      "cost_tradeoff": "Faible à moyen : garde local ou compteur de génération + tests des retours hors ordre. Une bibliothèque de cache réseau ne fournit pas à elle seule le contrat IPC multi-fenêtres.",
+      "confidence": "élevée pour la course du hook ; moyenne pour son occurrence native",
+      "source_ids": [
+        "FE-02"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "FE-03",
+      "title": "Field ne relie pas les problèmes et aides au contrôle",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/components/controls.tsx",
+      "lines": "224-235",
+      "related_locations": [
+        "src/connection/ConnectionForm.tsx:78-103",
+        "src/settings/MenuGrid.tsx:61-69"
+      ],
+      "scenario": "Saisir une adresse non valide ou revenir au champ Modèle dont le modèle sauvegardé a disparu.",
+      "evidence": "Repro du wrapper Field + Input réel : label htmlFor fonctionne ; aria-invalid=null, aria-describedby=null et paragraphe role=alert sans id. ConnectionForm ne transmet pas non plus ces attributs aux champs. Les annonces role=alert existent mais ne créent aucune relation durable champ→erreur. Contre-exemple correct : MenuGrid utilise aria-invalid et aria-describedby avec id du problème.",
+      "impact": "En revenant au contrôle, une technologie d’assistance ne dispose pas de son erreur/aide dans sa description accessible ; risque sur WCAG 1.3.1 Info and Relationships et 3.3.1 Error Identification, non-conformité globale non déterminée.",
+      "recommendation": "Générer un id stable de description dans Field, exposer les attributs aux contrôles (props explicites ou contexte ciblé), relier hint/problem via aria-describedby et renseigner aria-invalid quand problem existe. Réutiliser le contrat de MenuGrid.",
+      "cost_tradeoff": "Faible : changement de Field et de ses appels ; ne pas cloner arbitrairement des enfants complexes Radix. role=alert peut être conservé pour l’annonce initiale.",
+      "confidence": "élevée pour la structure DOM ; impact lecteur d’écran à valider sur NVDA",
+      "source_ids": [
+        "FE-03"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "NATIVE-003",
+      "title": "Le changement global du presse-papiers est attribué à la copie de la source sans provenance",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/clipboard_guard.rs",
+      "lines": [
+        177,
+        214
+      ],
+      "evidence": "take_copy accepte toute modification de séquence; settle_and_swap lit puis remplace sous OpenClipboard mais ne compare jamais le propriétaire à source_window. Son API ne reçoit pas la source. late_copy_is_ours (243–249) assimile absence d’input à provenance. Le contrôle des marques sensitive n’est appliqué qu’au repli Fresh (capture.rs:343), pas au texte de take_copy.",
+      "call_path": "Copie synthétique de A lente/inefficace → un gestionnaire ou autre processus B écrit du texte, éventuellement sensible, pendant l’attente sans changer le foreground → texte B accepté comme CaptureOrigin::Copy et ancien snapshot remis à sa place. Un writer autonome tardif peut aussi être écrasé par watch_late sans input utilisateur.",
+      "impact": "Texte d’un autre producteur potentiellement envoyé au modèle et contenu nouveau perdu. Verrouiller OpenClipboard rend le swap atomique, pas son attribution correcte.",
+      "recommendation": "Transporter l’identité de la source dans la transaction; vérifier owner/process attendu et marques sensibles dans la même session de lecture. Avec broker/OLE non attribuable, refuser la capture remplaçable et surtout la restauration destructive. Garder la protection contre les nouveaux writers.",
+      "cost_tradeoff": "Moyen : owners OLE/brokers imposent exceptions explicites, fixtures de copies multiséances et delayed rendering. GetClipboardOwner seul n’est pas universel.",
+      "confidence": "élevée pour absence de preuve; moyenne pour fréquence/exploitabilité Windows",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "PR6 clipboard_guard::copied_text:62–81 vérifie PID source/propriétaire; main n’a pas conservé ce contrôle."
+      ],
+      "source_ids": [
+        "NATIVE-003"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-003",
+        "title": "Attribution des changements clipboard : risque concurrent, pas fuite reproduite",
+        "original_severity": "P1",
+        "verdict": "à nuancer",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "risque",
+        "assessment": "take_copy attribue un changement global à la copie synthétique et settle_and_swap restaure sans vérifier le producteur. watch_late assimile absence de nouvel input à provenance. Un writer autonome peut donc être pris pour la source et écrasé. Le verrou exclut un writer PENDANT la lecture/restauration, pas celui qui précède sa prise.",
+        "counter_evidence": "Après put_text, restore_ours vérifie bien GetClipboardOwner sous OpenClipboard : le constat ne doit pas être élargi à toute restauration. Le foreground est vérifié avant la capture puis après, et des writers récents sont conservés sur le chemin paste. Les marques sensibles ne sont garanties par le contrat actuel que pour une copie Fresh; refuser tous les opt-outs de copies synthétiques pourrait interdire des éditeurs légitimes. Une fuite vers un modèle exige writer concurrent, capture acceptée et action/inférence; aucun de ces effets Windows n’est reproduit. PID/owner seul est insuffisant avec OLE/broker.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/clipboard_guard.rs",
+            "lines": [
+              177,
+              214
+            ],
+            "evidence": "Séquence puis lecture/restauration sans identité source."
+          },
+          {
+            "file": "src-tauri/src/clipboard_guard.rs",
+            "lines": [
+              243,
+              266
+            ],
+            "evidence": "Late copy dépend du tick input, pas du owner/PID."
+          },
+          {
+            "file": "src-tauri/src/clipboard_guard.rs",
+            "lines": [
+              368,
+              384
+            ],
+            "evidence": "Contre-garde réelle : restore_ours exige owner == notre fenêtre."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              339,
+              359
+            ],
+            "evidence": "Sensitive check Fresh et foreground après la capture."
+          },
+          {
+            "file": "docs/BRIDGE.md",
+            "lines": [
+              248,
+              248
+            ],
+            "evidence": "Contrat des marques : copie fraîche utilisateur."
+          }
+        ],
+        "recommendation": "Tester un writer autonome; transporter provenance et politique brokers dans take_copy/watch_late; ne pas présenter GetClipboardOwner comme solution universelle.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-004",
+      "title": "Le repli TextOnly détruit silencieusement les formats non conservables",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/clipboard_guard.rs",
+      "lines": [
+        123,
+        155
+      ],
+      "evidence": "Snapshot refuse certains formats, un budget supérieur à 64 Mio, un format non lisible etc. (85–118). Keeper::take avale toute erreur et passe à TextOnly. formats ne rend que Unicode, voire None. Après EmptyClipboard et collage/copie, les formats originaux manquants ne reviennent pas. capture.rs ignore aussi restored dans Copied::Taken (416) et restore_ours (596,602,626).",
+      "call_path": "Presse-papiers image seule > budget, objet propriétaire/Office non duplicable, ou mélange texte+format propriétaire → raccourci/collage Overtype → Snapshot Err → TextOnly → transaction destructrice → restauration texte seul ou aucune restauration.",
+      "impact": "Perte de l’image, des formats riches ou du contenu complet, non signalée. Le commentaire promettant la remise du presse-papiers (capture.rs:593–594) ne couvre pas ce cas.",
+      "recommendation": "Rendre la conservation faillible avant toute modification, ou demander un opt-in explicite pour dégradation. Reprendre le principe de refus sans perte de PR6. Retourner/diagnostiquer la restauration échouée avec raison non sensible; ne jamais restaurer par-dessus un writer plus récent.",
+      "cost_tradeoff": "Faible à moyen : certaines copies/pastes refusées avec fallback Copier; un support OLE/format spécialisé complet coûterait nettement plus.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "PR6 Snapshot::capture est une précondition stricte de synthetic_copy/replace_paste; main l’a remplacée par un fallback permissif."
+      ],
+      "source_ids": [
+        "NATIVE-004"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-004",
+        "title": "Dégradation TextOnly réelle, explicitement assumée dans le code",
+        "original_severity": "P2",
+        "verdict": "à nuancer",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "Un échec Snapshot devient TextOnly et peut perdre tous les formats autres que Unicode lors d’une copie/collage. TextOnly(None) ne restaure rien : la phrase « aucune restauration » est plus juste que « restaure un presse-papiers vide ». Le défaut d’information utilisateur et la perte possible restent P2.",
+        "counter_evidence": "Le repli est documenté (Keeper et synthetic_copy), non une régression mystérieuse; allocations avant EmptyClipboard et checks owner/sequence existent. Les bitmaps avec DIB/DIBV5 ne sont PAS tous perdus : ils sont sauvegardés via leurs formats mémoire. Il faut un format refusé, un budget dépassé ou une autre erreur Snapshot. La recommandation de refus strict diminue la couverture produit et nécessite arbitrage, pas portage automatique de PR6.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/clipboard_guard.rs",
+            "lines": [
+              85,
+              119
+            ],
+            "evidence": "Formats non duplicables et budget; bitmap récupérable via DIB."
+          },
+          {
+            "file": "src-tauri/src/clipboard_guard.rs",
+            "lines": [
+              123,
+              155
+            ],
+            "evidence": "Dégradation explicite; None => aucune remise."
+          },
+          {
+            "file": "src-tauri/src/clipboard_guard.rs",
+            "lines": [
+              186,
+              214
+            ],
+            "evidence": "Restored retourné; transaction copie peut restaurer uniquement Unicode."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              387,
+              416
+            ],
+            "evidence": "Commentaire admet texte seul; restored ignoré."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              586,
+              626
+            ],
+            "evidence": "Paste utilise Keeper et ignore résultat de restore_ours."
+          }
+        ],
+        "recommendation": "Signaler la dégradation avant modification, ou refuser sans perte avec fallback clair. Conserver les garde-fous contre nouveaux writers.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-007",
+      "title": "La copie ne libère pas les touches après SendInput partiel, contrairement au collage et à PR6",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/host.rs",
+      "lines": [
+        1202,
+        1213
+      ],
+      "evidence": "Si 0 < sent < 4, send_copy_chord retourne Err sans key-up compensatoire. send_paste_chord/undo le font (1219–1255). origin/codex/multi-editor-replacement:host.rs:680–684 contient explicitement le nettoyage Ctrl/Insert absent de main.",
+      "call_path": "SendInput accepte Ctrl-down et éventuellement Insert-down mais pas les relâchements → capture échoue → Ctrl/Insert restent logiquement pressés jusqu’à une autre libération.",
+      "impact": "Saisie ultérieure transformée en raccourcis, fausses collisions/état held. Une injection partielle est un cas documenté par le compteur retourné, pas une réussite binaire.",
+      "recommendation": "Extraire un helper de batch avec libération best-effort des touches réellement injectées et résultat sent. Adapter le petit correctif PR6, sans changement de protocole de remplacement.",
+      "cost_tradeoff": "Faible : même pattern déjà dans paste/undo; fixture d’injection partielle nécessaire et Windows pour effet réel.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "PR6 head 86b3b23f217b4e26976815fca253397012a6cd4b, src-tauri/src/host.rs:680–684."
+      ],
+      "source_ids": [
+        "NATIVE-007"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-007",
+        "title": "SendInput partiel copy sans key-up compensatoire",
+        "original_severity": "P2",
+        "verdict": "confirmé statiquement",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "send_copy_chord retourne Err sans cleanup si sent != 4. Paste et Undo ont bien une libération best-effort; aucune garde appelante ne libère Ctrl/Insert injectés. L’asymétrie est confirmée.",
+        "counter_evidence": "Le cas demande 0 < sent < 4; un refus total UIPI ne laisse pas de touche nouvellement pressée. Le risque n’est pas une touche bloquée systématiquement après chaque échec. Le cleanup lui-même n’offre pas de garantie absolue si Windows refuse également ses key-up.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/host.rs",
+            "lines": [
+              1202,
+              1213
+            ],
+            "evidence": "Erreur immédiate copy."
+          },
+          {
+            "file": "src-tauri/src/host.rs",
+            "lines": [
+              1219,
+              1255
+            ],
+            "evidence": "Key-up compensatoire paste/undo."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              408,
+              421
+            ],
+            "evidence": "Appelant remonte erreur, pas cleanup."
+          }
+        ],
+        "recommendation": "Réutiliser le cleanup best-effort du paste pour Ctrl/Insert; fixture injection partielle et validation Windows.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-008",
+      "title": "Une liste actions vide fait paniquer le démarrage avant validate",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/settings.rs",
+      "lines": [
+        201,
+        209
+      ],
+      "evidence": "Un PersistedSettings valide avec actions:[] produit un Vec vide, puis default_action_id utilise actions[0]. validate vient seulement ligne 263. run appelle store.load()? en setup (lib.rs:3213); profil release panic=abort (Cargo.toml:80).",
+      "call_path": "Prendre un fichier de réglages synthétique valide, remplacer uniquement actions par [] → Store::load → index hors bornes avant garde de validation → processus release abort avant création du tray.",
+      "impact": "Application impossible à ouvrir/réparer par son UI sur un état JSON partiellement invalide. C’est une preuve statique d’un panic, non un crash Windows exécuté ici.",
+      "recommendation": "first().ok_or(...) avant calcul du défaut puis récupération du chargement avec mise à l’écart non destructive et notice. Adapter la garde existante dans wt-050-natif (settings.rs:162–167) au schéma actuel 0.6.",
+      "cost_tradeoff": "Faible pour garde; moyen pour récupération et tests DPAPI/migration. Ne pas restaurer les anciens profils fast/quality de la branche.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "wt-050-natif SHA 1fcdd21f0aadd5a36978e47e6530b9fe9f1c74bd contient garde et test empty actions; absents de main."
+      ],
+      "source_ids": [
+        "NATIVE-008",
+        "BR-01"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-008",
+        "title": "actions:[] panique avant validation, mais état invalide non produit normalement",
+        "original_severity": "P1",
+        "verdict": "confirmé statiquement",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "Avec actions:[], le filter(defaultActionId) échoue quel que soit l’id et unwrap_or_else indexe actions[0]. Aucun garde/migration n’existe avant cette expression. load en setup propage normalement les erreurs, pas un panic; release panic=abort.",
+        "counter_evidence": "Le JSON est structurellement désérialisable, pas un réglage VALIDE métier. save appelle validate et refuse les actions vides. Aucune preuve que l’UI normale ou une migration supportée crée ce fichier. P1 startup crash est excessif sans incident/fréquence : P2 robustesse pour fichier édité/corrompu. Même finding que BR-01, à compter une seule fois.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/settings.rs",
+            "lines": [
+              184,
+              209
+            ],
+            "evidence": "Actions Option<Vec>, fallback uniquement pour None; index Vec vide."
+          },
+          {
+            "file": "src-tauri/src/settings.rs",
+            "lines": [
+              257,
+              278
+            ],
+            "evidence": "Migrations/validate après index; save valide avant écriture."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              3211,
+              3213
+            ],
+            "evidence": "load durant setup."
+          },
+          {
+            "file": "src-tauri/Cargo.toml",
+            "lines": [
+              76,
+              81
+            ],
+            "evidence": "panic=abort release."
+          },
+          {
+            "file": "src-tauri/src/actions.rs",
+            "lines": [
+              377,
+              378
+            ],
+            "evidence": "validate refuse explicitement zéro action : état non sauvable via save normal."
+          }
+        ],
+        "recommendation": "first().ok_or avant calcul du défaut, puis récupération non destructive; fixture Rust à exécuter dans environnement équipé.",
+        "related_ids": [
+          "BR-01"
+        ],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "merged_details": [
+        {
+          "id": "BR-01",
+          "title": "La garde contre une liste d’actions vide a été laissée sur wt-050-natif",
+          "severity": "P2",
+          "category": "bug",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/settings.rs",
+          "lines": [
+            201,
+            209
+          ],
+          "evidence": "main conserve actions[0] dans unwrap_or_else, avant validate. Avec un fichier valide structurellement contenant actions: [] et defaultActionId absent/invalide, l’indexation panique. wt-050-natif@1fcdd21f:settings.rs:162-167 utilise first().ok_or_else et son test an_empty_action_list_is_refused_instead_of_panicking. Startup appelle store.load()? en lib.rs:3213.",
+          "impact": "Un fichier incohérent, édité ou migré avec zéro action peut arrêter l’application plutôt que renvoyer une erreur contrôlée. Pas de preuve que l’UI normale puisse écrire ce fichier.",
+          "recommendation": "Adapter le first().ok_or_else au schéma serveurs actuel; test fixture SettingsStore::load avec actions:[] et defaultActionId absent/invalide. Coût faible, aucune dépendance; ne pas copier la struct 0.4.",
+          "confidence": "élevée sur le chemin statique; pas de repro Rust exécutée",
+          "source_ids": [
+            "BR-01"
+          ],
+          "crosscheck": {
+            "id": "BR-01",
+            "title": "Doublon NATIVE-008 : garde liste vide absente",
+            "original_severity": "P2",
+            "verdict": "confirmé statiquement",
+            "severity": "P2",
+            "proposed_severity": "P2",
+            "branch": "main",
+            "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+            "category": "bug",
+            "assessment": "Le first().ok_or de wt-050-natif n’existe pas sur main; index panique pour actions:[] avant validate. Le correctif historique est petit et adaptable.",
+            "counter_evidence": "Même défaut que NATIVE-008, pas un second bug. Le fichier doit être incohérent; save valide la collection avant écriture. La reprise globale du schéma 0.5 est injustifiée.",
+            "proofs": [
+              {
+                "file": "src-tauri/src/settings.rs",
+                "lines": [
+                  201,
+                  209
+                ],
+                "evidence": "Index avant validate."
+              },
+              {
+                "file": "src-tauri/src/settings.rs",
+                "lines": [
+                  263,
+                  278
+                ],
+                "evidence": "validate tardif load, précoce save."
+              },
+              {
+                "file": "origin/wt-050-natif:src-tauri/src/settings.rs",
+                "lines": [
+                  162,
+                  168
+                ],
+                "evidence": "first().ok_or_else au lieu d’index."
+              },
+              {
+                "file": "src-tauri/src/actions.rs",
+                "lines": [
+                  377,
+                  378
+                ],
+                "evidence": "validate refuse explicitement zéro action : état non sauvable via save normal."
+              }
+            ],
+            "recommendation": "Conserver P2 de branches, fusionner avec NATIVE-008 dans la synthèse.",
+            "related_ids": [
+              "NATIVE-008"
+            ],
+            "confidence": "élevée sur le code; impact Windows non exécuté",
+            "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+          }
+        }
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-009",
+      "title": "L’historique optionnel est une condition obligatoire de démarrage",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/lib.rs",
+      "lines": [
+        3234,
+        3234
+      ],
+      "evidence": "HistoryStore::new(&root)? s’exécute quelle que soit history_enabled, avant AppState/tray. new ouvre SQLite, configure WAL/schema et prune, toute erreur remonte (history.rs:20–45). run finit sur .expect (3439).",
+      "call_path": "historyEnabled=false mais history.sqlite3 synthétique corrompu/incompatible/occupé en erreur → initialisation échoue → setup Tauri échoue → pas d’application utilisable ni de réglages pour désactiver/réparer.",
+      "impact": "La panne d’une fonction désactivée bloque capture et traduction; un stockage optionnel devient point de défaillance global.",
+      "recommendation": "Chargement paresseux ou état HistoryUnavailable avec erreur locale et notice; récupération/backup explicite non destructive. Réutiliser rusqlite; adapter l’intention HistoryStore::recover de wt-050-natif, pas son rename best-effort base/WAL/SHM tel quel.",
+      "cost_tradeoff": "Moyen : protéger la cohérence du trio SQLite/WAL/SHM et conserver les données avant création d’une base neuve. Les erreurs de history.add sont actuellement ignorées (1518), à rendre visibles sans exposer de texte.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [
+        "wt-050-natif history.rs:22–46 ajoute recover; main retourne à new obligatoire."
+      ],
+      "source_ids": [
+        "NATIVE-009"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-009",
+        "title": "Historique désactivé néanmoins initialisé obligatoirement",
+        "original_severity": "P2",
+        "verdict": "confirmé statiquement",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "HistoryStore::new s’exécute inconditionnellement avant app.manage. Open/schema/migration/prune faillibles propagent leur erreur au setup. La panne SQLite d’une fonctionnalité opt-in peut donc empêcher l’app de démarrer.",
+        "counter_evidence": "Ce n’est pas une fuite de contenu : disabled n’implique aucun history.add. Un historique chiffré DPAPI illisible dans une ligne ne provoque pas nécessairement cette panne au démarrage, car new ne déchiffre pas les lignes. Le cas démontrable statiquement est DB/schema/WAL/prune en erreur, pas toute ancienne clé DPAPI.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              3226,
+              3261
+            ],
+            "evidence": "HistoryStore::new sans test history_enabled."
+          },
+          {
+            "file": "src-tauri/src/history.rs",
+            "lines": [
+              20,
+              49
+            ],
+            "evidence": "Erreurs d’ouverture/init/migration/prune."
+          },
+          {
+            "file": "docs/SPEC.md",
+            "lines": [
+              31,
+              31
+            ],
+            "evidence": "Historique optionnel, off par défaut."
+          }
+        ],
+        "recommendation": "État HistoryUnavailable ou init paresseuse; ne pas copier la récupération historique best-effort WAL/SHM sans cohérence.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-010",
+      "title": "confirmed=true peut signaler un collage qui n’a rien changé",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/capture.rs",
+      "lines": [
+        527,
+        530
+      ],
+      "evidence": "readback_confirms fait canonical(field).contains(canonical(value)). Dans paste, cette preuve sort immédiatement confirmed=true (609–611); unwritten n’est évalué qu’avec !confirmed (620). Aucune comparaison before/after ou plage n’est requise pour le flag.",
+      "call_path": "Document contient déjà le résultat ailleurs, sélection de texte différent dans une portion non écrivable/provider donnant un faux editable → Ctrl+V ignoré → le document inchangé contient toujours value → success confirmed=true, bypass de ReadOnly.",
+      "impact": "Fausse coche « Sélection remplacée » et diagnostics read back alors que l’action n’a pas été appliquée. Ce n’est pas la politique assumed explicite; c’est une preuve positive incorrecte.",
+      "recommendation": "Comparer d’abord absence de changement (sauf original==result) puis vérifier le résultat dans la plage/caret attendus, ou patch du document borné quand provider fiable. Réutiliser pasted::locate comme preuve locale tout en gardant l’état « envoyé non confirmé » pour les champs illisibles.",
+      "cost_tradeoff": "Moyen : certains providers déplacent le caret; distinguer confirmation positive, échec prouvé et absence de preuve. PR6 compare le document attendu mais sa contrainte whole-document ne doit pas devenir universelle.",
+      "confidence": "élevée (preuve statique; Windows non exécuté)",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [],
+      "source_ids": [
+        "NATIVE-010"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-010",
+        "title": "Contains peut confirmer un document inchangé",
+        "original_severity": "P2",
+        "verdict": "confirmé statiquement",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "bug",
+        "assessment": "readback_confirms examine la présence de value n’importe où dans field. La boucle sort confirmed=true avant unwritten, lequel est conditionné par !confirmed. Si le résultat existe déjà ailleurs et l’éditeur bloque paste, le flag est une fausse confirmation. locate_pasted ultérieur ne rétrograde pas Delivery.",
+        "counter_evidence": "Un collage non lisible confirmed=false est expressément autorisé; ce constat n’impose PAS de document relisible pour coller. original==result est un succès légitime sans changement : l’exemple fautif doit employer deux textes différents. Le refus initial read-only limite les providers fiables, mais Copy est toujours editable=true et un handler paste web peut annuler indépendamment de cette propriété.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              527,
+              530
+            ],
+            "evidence": "Contains document-wide."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              584,
+              628
+            ],
+            "evidence": "Before acquis mais !confirmed saute unwritten."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              645,
+              648
+            ],
+            "evidence": "Cas identique remplacé/value exclu à juste titre."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              1624,
+              1669
+            ],
+            "evidence": "locate ne révise pas outcome/confirmed."
+          }
+        ],
+        "recommendation": "Écarter la confirmation si absence de changement prouvée et résultat différent; confirmer localement si possible, sinon rester assumed sans rendre le document obligatoire.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "NATIVE-012",
+      "title": "La capture UIA ignore les plages supplémentaires d’une sélection multiple",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/capture.rs",
+      "lines": [
+        61,
+        87
+      ],
+      "evidence": "selection prend get_selection().into_iter().next sans vérifier cardinalité (65–70). validate_target et pasted::caret font pareil. Microsoft précise une plage par sélection non contiguë. PR6:selection refuse ranges.len()!=1, mais son fallback doit également être examiné avant portage.",
+      "call_path": "Éditeur/provider expose deux plages non contiguës → seule la première devient le texte de l’action et la preuve d’identité → Ctrl+V peut être appliqué par l’éditeur à plusieurs carets/plages.",
+      "impact": "Traitement incomplet ou remplacement de plusieurs plages par un résultat calculé pour une seule. Dépend du support multi-range et de la sémantique du provider; pas affirmé pour Word/Outlook sans test.",
+      "recommendation": "Refus explicite des sélections multiples avant toute copie/écriture ou contrat multi-range complet. Un refus de cardinalité ne doit pas se transformer en fallback Copy remplaçable. Conserver le texte en lecture seule uniquement si le produit le veut.",
+      "cost_tradeoff": "Faible pour refus; élevé pour support réel multi-range et Undo.",
+      "confidence": "élevée pour première plage seulement; moyenne pour conséquences selon éditeur",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [],
+      "source_ids": [
+        "NATIVE-012"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-012",
+        "title": "Seule première plage UIA capturée et validée",
+        "original_severity": "P2",
+        "verdict": "confirmé statiquement",
+        "severity": "P2",
+        "proposed_severity": "P2",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "risque",
+        "assessment": "get_selection().into_iter().next() ignore les autres plages. La même fonction sert à revalidation. L’API Microsoft fournit une plage par sélection disjointe; aucune cardinalité SupportedTextSelection n’est contrôlée avant capture remplaçable.",
+        "counter_evidence": "GetSelection n’est pas toujours multi-range : sans sélection, il renvoie une plage dégénérée que le code refuse correctement. L’effet « plusieurs insertions » dépend ensuite du Ctrl+V de l’éditeur; non établi sur Word/Outlook/Monaco ici. Le fait statique certain est l’action calculée pour la première plage sans déclarer l’incomplétude.",
+        "proofs": [
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              61,
+              87
+            ],
+            "evidence": "Première plage seulement."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              262,
+              305
+            ],
+            "evidence": "Peut devenir target Uia remplaçable."
+          },
+          {
+            "file": "src-tauri/src/capture.rs",
+            "lines": [
+              461,
+              463
+            ],
+            "evidence": "Revalidation réutilise selection."
+          },
+          {
+            "file": "src-tauri/src/pasted.rs",
+            "lines": [
+              113,
+              118
+            ],
+            "evidence": "Caret première plage aussi."
+          }
+        ],
+        "recommendation": "Refuser la cardinalité multiple dans tout le parcours; ne pas convertir ce refus en Copy remplaçable. Fixture provider multi-range avant qualifier l’impact éditeur.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "QA-01",
+      "title": "Le test de démarrage serveur Windows est toujours sauté dans la CI déclarée",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": ".github/workflows/ci.yml",
+      "lines": [
+        27,
+        35
+      ],
+      "evidence": "Le seul job unittest est evaluation-harness sur ubuntu-latest. server/test_evaluation.py:67 protège le test start.ps1 par os.name == \"nt\" + powershell. Job windows:36-55 et release:50-53 ne lancent pas unittest. Exécution Linux: 6 découverts, 5 passent, 1 skip. Historique -S: d5ecd2a/8281476 introduisent bien ce test de non-régression.",
+      "impact": "Une régression PowerShell au premier démarrage ou sur service arrêté laisse tous les jobs déclarés verts; le scénario réel concerné est précisément celui régressé auparavant.",
+      "recommendation": "Ajouter setup-python 3.13 et unittest au job Windows existant, sur fixtures docker.cmd/python.cmd sans GPU. Garder le test Linux pour le streaming et la politique endpoint.",
+      "confidence": "haute",
+      "limitations": "Test Windows non exécuté sur cette VM; absence de câblage établie statiquement.",
+      "cost_tradeoff": "faible",
+      "source_ids": [
+        "QA-01"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "QA-02",
+      "title": "La publication ne dépend pas des checks E2E ni du harness serveur",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": ".github/workflows/release.yml",
+      "lines": [
+        4,
+        9,
+        50,
+        53,
+        100
+      ],
+      "evidence": "Release est déclenchée indépendamment par tag, dispatch ou package.json sur main. Elle exécute npm test/build/cargo test puis publie; aucune dépendance/attente de ci.yml, aucun Playwright/unittest/Compose dans release.",
+      "impact": "Un tag ou dispatch peut produire une release malgré une régression UI d’intégration qui échoue au job frontend, ou malgré un test serveur rouge. Pas de publication défectueuse observée ici.",
+      "recommendation": "Factoriser les validations existantes en workflow réutilisable ou les faire précéder dans le même graphe la publication via needs; vérifier le SHA exact à publier. Éviter un needs entre workflows distincts, qui ne crée pas de dépendance.",
+      "confidence": "haute",
+      "limitations": "Protections de branche et historique distant de runs non consultés; les protections de merge ne couvrent pas à elles seules tag/dispatch.",
+      "cost_tradeoff": "moyen: temps E2E sur release; pas de nouvelle bibliothèque",
+      "source_ids": [
+        "QA-02"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "QA-03",
+      "title": "La voie CI native ne valide pas le remplacement réel d’un éditeur",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": ".github/workflows/ci.yml",
+      "lines": [
+        36,
+        55
+      ],
+      "evidence": "Windows lance cargo test et NSIS, pas de parcours sélection→SendInput→éditeur→relecture. e2e/native-fixture.ts:50-115 recopie le placement Rust et :165+ simule les commandes. scripts/probe-native-ui.mjs:24 exclut explicitement capture réelle et collage réel. Une voie réelle existe dans origin/codex/multi-editor-replacement@86b3b23f (ci.yml:52-54, scripts/test-replacement-windows.mjs), mais pas sur main.",
+      "impact": "Les assertions navigateur vérifient le consommateur TS, pas UIA, le presse-papiers riche, la cible réelle du collage ni Ctrl+Z dans Edge. Ces risques concernent la fonction principale et ne sont pas levés par le build natif.",
+      "recommendation": "Adapter à l’API actuelle un petit sous-ensemble du test Edge de cette branche sur desktop Windows dédié: sélection Unicode, champ readonly, cible changée, nouveau propriétaire clipboard, collage bloqué. Réutiliser Playwright déjà présent; ne pas fusionner une ancienne branche entière.",
+      "confidence": "haute",
+      "limitations": "Absence de couverture automatique native ≠ bug de collage prouvé; aucune exécution Windows revendiquée.",
+      "cost_tradeoff": "moyen/élevé: desktop interactif Windows et coût de maintien; suite séparée bornée",
+      "source_ids": [
+        "QA-03",
+        "BR-03"
+      ],
+      "merged_details": [
+        {
+          "id": "BR-03",
+          "title": "La matrice de remplacement native Edge de PR6 reste utile mais non reprise",
+          "severity": "P3",
+          "category": "dette",
+          "branch": "codex/multi-editor-replacement",
+          "sha": "86b3b23f217b4e26976815fca253397012a6cd4b",
+          "file": "scripts/test-replacement-windows.mjs",
+          "lines": [
+            65,
+            128
+          ],
+          "evidence": "86b3b23f contient vérification du champ entier avant/après, insertFromPaste, format b/i, Ctrl+Z, iframe, Shadow DOM, Unicode, concurrence presse-papiers, refus doublon. scripts/test-replacement-windows.mjs et replacement_tests.rs absents main; recherche insertFromPaste/replacement_desktop/rich clipboard vide. scripts/capture-matrix.mjs main teste capture, pas ces invariants complets du collage.",
+          "impact": "Le moteur main a changé et des tests Rust/frontend existent; cela n’établit pas un bug, mais la recette automatisée bout-en-bout rich-edit/undo a perdu une couverture utile.",
+          "recommendation": "Porter fixtures et assertions sur capture::paste/Delivery main dans un test Windows isolé, intégrer à CI Windows. Garder preuve du texte autour et clipboard, mais accepter confirmed:false là où le contrat permet un collage non relisible. Playwright déjà présent; coût moyen, runners bureau requis. Ne pas exécuter ce driver historique sans adaptation.",
+          "confidence": "élevée (inspection statique)",
+          "source_ids": [
+            "BR-03"
+          ],
+          "crosscheck": {
+            "id": "BR-03",
+            "title": "Matrice Edge historique : couverture absente, pas bug prouvé",
+            "original_severity": "P3",
+            "verdict": "confirmé statiquement",
+            "severity": "P3",
+            "proposed_severity": "P3",
+            "branch": "main",
+            "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+            "category": "dette",
+            "assessment": "Le script et replacement_tests.rs sont absents de main. Script PR6 vérifie insertFromPaste, surrounding text, formats b/i, undo natif, iframe/shadow, clipboard concurrency, duplicate delivery. capture-matrix main observe capture/clipboard/UI, pas ces invariants de remplacement.",
+            "counter_evidence": "Main garde des unit tests clipboard/capture/state et tests frontend, ainsi qu’une CI Windows cargo test : « aucun test natif » serait faux. Le driver historique utilise anciens contrats et le refus si document modifié (lignes 95–103), incompatible avec la priorité produit sans lecture obligatoire. Le Ctrl+Z du script teste l’undo ÉDITEUR; pas directement le nouveau bouton Undo de l’app. Le script ne prouve pas que sa matrice passe aujourd’hui.",
+            "proofs": [
+              {
+                "file": "origin/codex/multi-editor-replacement:scripts/test-replacement-windows.mjs",
+                "lines": [
+                  66,
+                  122
+                ],
+                "evidence": "Assertions navigateur + driver SendInput réel; critères document/focus/selection historiques."
+              },
+              {
+                "file": "scripts/capture-matrix.mjs",
+                "lines": [
+                  68,
+                  94
+                ],
+                "evidence": "Capture, original, clipboard; pas lecture du champ après replacement."
+              },
+              {
+                "file": ".github/workflows/ci.yml",
+                "lines": [
+                  36,
+                  51
+                ],
+                "evidence": "CI Windows avec cargo test existante."
+              },
+              {
+                "file": "src-tauri/src/capture.rs",
+                "lines": [
+                  692,
+                  847
+                ],
+                "evidence": "Unit tests existants."
+              }
+            ],
+            "recommendation": "Porter les assertions utiles, pas le moteur ni le critère document inchangé; tests Windows interactifs séparés, ne pas exécuter sur Linux.",
+            "related_ids": [],
+            "confidence": "élevée sur le code; impact Windows non exécuté",
+            "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+          }
+        }
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "SEC-01",
+      "title": "Effacement SQLite: secure_delete ne couvre pas les connexions qui suppriment",
+      "severity": "P2",
+      "category": "bug",
+      "branch": "origin/main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/src/history.rs",
+      "lines": [
+        27,
+        28,
+        48,
+        49,
+        66,
+        76,
+        113,
+        125
+      ],
+      "evidence": "new() règle secure_delete=ON sur sa connexion; connection() rouvre ensuite sans ce PRAGMA. libsqlite3-sys 0.35.0 bundled ne définit pas SQLITE_SECURE_DELETE. Repro avec son amalgamation 3.50.2, SHA du crate vérifié: connexion initiale=1, réouverture=0, COUNT(*)=0 après DELETE mais marqueurs du payload synthétique et du nom d’action présents dans le fichier. Contrôle ON à chaque connexion: marqueurs absents.",
+      "impact": "Suppression et rétention sont logiques, pas effacement des restes sur disque. Payload reste chiffré DPAPI, mais récupérable par le même utilisateur Windows; métadonnées action/server/date en clair. Pas une fuite de texte clair prouvée ni une garantie d’effacement SSD.",
+      "recommendation": "Initialiser secure_delete sur chaque Connection dans connection(); tester après close/reopen les suppressions et prune. Définir politique de checkpoint WAL/TRUNCATE pour purge complète, traiter busy explicitement; ne pas promettre effacement des backups/SSD.",
+      "preconditions": "Historique précédemment activé, entrée supprimée/purgée, accès aux fichiers de la base.",
+      "plausible_threat": "Récupération forensique d’une donnée que l’utilisateur pense avoir supprimée, par un opérateur autorisé au compte ou une sauvegarde conservant les pages.",
+      "cost_tradeoff": "Faible: rusqlite/SQLite déjà présents; un peu plus d’I/O et coordination pour checkpoint.",
+      "confidence": "high",
+      "limitations": "Amalgamation exacte et options bundled compilées sur Linux; SQL du cycle réel reproduit, pas le Rust ni DPAPI Windows. Fixture ciphertext artificiel, aucune donnée utilisateur.",
+      "source_ids": [
+        "SEC-01"
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-03",
+          "report_refs": [
+            "SEC-01"
+          ],
+          "verdict": "nuancé",
+          "title": "secure_delete oublié à la réouverture: repro exact SQLite, pas preuve du binaire rusqlite livré",
+          "severity": "P2",
+          "category": "bug",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/history.rs",
+          "lines": [
+            20,
+            28,
+            48,
+            49,
+            59,
+            66,
+            76,
+            81,
+            113
+          ],
+          "evidence": "new active ON puis ferme; connection ouvre sans ON; prune startup est donc protégée, prune add/list/maintain et delete ne le sont pas par défaut. Crate libsqlite3-sys 0.35.0 hash 133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f vérifié au Cargo.lock; C extrait identique à fixture initiale. Compilation indépendante C SQLite 3.50.2: réouverture=0, COUNT=0 mais ciphertext/action synthétiques présents; ON par connexion les retire du main. Build avec SQLITE_SECURE_DELETE=1: réouverture=1 et résidus absents, contre-exemple réel. build.rs upstream autorise LIBSQLITE3_FLAGS et override pkg-config.",
+          "impact": "Rétention logique ≠ nettoyage pages; action/server/date clair, payload chiffré. P2 conditionnel à accès fichiers et historique opt-in. Pas de texte clair ni blob DPAPI entier récupéré/déchiffré prouvé.",
+          "recommendation": "ON dans chaque ouverture; test rusqlite Windows de close/reopen et suppressions/prune, plus coordination checkpoint WAL. Aucun besoin de remplacer rusqlite.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "La fixture utilise ctypes pour piloter C, NON sqlite3 Python, NON Rust lié, NON DPAPI. Builds C n’émulent pas toutes options du build Cargo. Flags/environnement exacts du binaire installé inconnus; aucun défaut garantit tous binaires."
+        },
+        {
+          "id": "XSEC-04",
+          "report_refs": [
+            "SEC-01"
+          ],
+          "verdict": "confirmé",
+          "title": "secure_delete ON ne suffit pas à purger un WAL maintenu par lecteur",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/history.rs",
+          "lines": [
+            28,
+            113,
+            125
+          ],
+          "evidence": "Fixture avec ON par connexion, insertion et snapshot lecteur conservés: COUNT=0, marqueurs absents main, ciphertext/action encore dans -wal. Sans lecteur retenu, fixture ON nettoie main. Résultat dans crosscheck-security-sqlite.log.",
+          "impact": "Fenêtre de résidus sur WAL; pas promesse de récupération après chaque fermeture ni conservation systématique du WAL. Backups/SSD restent hors garantie.",
+          "recommendation": "Politique purge explicite checkpoint/TRUNCATE avec busy reconnu; ne pas annoncer effacement physique absolu.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Snapshot lecteur synthétique local, pas concurrence native de l’app mesurée."
+        },
+        {
+          "id": "XSEC-11",
+          "report_refs": [
+            "SEC-01",
+            "SEC-06"
+          ],
+          "verdict": "rejeté",
+          "title": "Déduire de DPAPI que les résidus deviennent nécessairement inutilisables",
+          "severity": "P3",
+          "category": "option",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/crypto.rs",
+          "lines": [
+            13,
+            19,
+            43,
+            49
+          ],
+          "evidence": "CryptProtectData utilise contexte utilisateur, UI_FORBIDDEN et aucune entropy additionnelle. Pas clé par ligne détruite à DELETE/rename. Microsoft: normalement mêmes identifiants et même ordinateur. Crate features bundled ≠ SQLCipher et ne prouvent pas crypto-erasure.",
+          "impact": "Un autre compte ne peut normalement pas déchiffrer, et un blob partiel peut échouer MAC; cela ne rend pas toute rétention inoffensive: metadata clair et récupération possible blob entier sous contexte autorisé. Ne pas affirmer toute page résiduelle permet récupérer texte.",
+          "recommendation": "Conserver qualification encryption/metadata/contexte/complétude distincte, aucune nouvelle crypto ad hoc.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Aucun déchiffrement Windows exécuté. Rejet d’un contre-argument, pas nouveau défaut confirmé."
+        }
+      ],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "ARCH-05",
+      "title": "Une erreur d’écriture de réglages reste française sous une interface anglaise",
+      "severity": "P3",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/settings/messages.ts",
+      "lines": [
+        3,
+        38
+      ],
+      "evidence": "describeRefusal fait un mapping de phrases exactes puis retourne la phrase brute inconnue. settings.rs:325-326 émet Impossible d’enregistrer les paramètres. ; useSettingsStore:106-108 la conserve et SettingsWindow utilise describeRefusal. Appel Node réel : connu => EN:shortcuts.taken ; erreur stockage => chaîne française intacte.",
+      "impact": "Le contrat de français/anglais complets ne couvre pas ce parcours d’échec ; changer une ponctuation Rust peut aussi casser une traduction. Les événements d’inférence à ErrorCode sont au contraire déjà structurés.",
+      "recommendation": "Court terme : mapper les erreurs stockage existantes. Évolution : refus IPC {code,message} stable pour save_settings et autres commandes, traduire le code côté React ; ne pas envoyer les erreurs OS brutes. Réutiliser ErrorCode/Refusal existants, pas ajouter i18next pour corriger ce défaut.",
+      "confidence": "haute",
+      "cost_tradeoff": "Très faible pour mapping ciblé ; petit coût transversal pour erreurs typées et adaptation v4.",
+      "limitations": "Repro du formatter seulement ; panne disque Windows non provoquée.",
+      "source_ids": [
+        "ARCH-05"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "BR-04",
+      "title": "Le verre Afficher le résultat n’a pas repris la persistance des erreurs",
+      "severity": "P3",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/GlassOverlay.tsx",
+      "lines": [
+        294,
+        300,
+        349,
+        382
+      ],
+      "evidence": "settled inclut phase error à 240; budget readingBudget à 349 et held à 361 n’excluent pas error; timer 298 efface tous les feedback après 3 s. wt-050-verre@c5345af:GlassOverlay ajoute failed, budget null, held, tone danger non effaçable. Le parcours ilot/result main est distinct et ne constitue pas une correction de ce chemin.",
+      "impact": "Avec un raccourci « Afficher le résultat », erreur réseau/modèle puis pointeur éloigné, la raison et l’accès Réessayer disparaissent au budget automatique. Une erreur de collage dans le verre perd son texte après 3 s. Le parcours Îlot par défaut ne suffit pas à généraliser ce constat.",
+      "recommendation": "Décider explicitement la durée des erreurs du verre actuel; si elles doivent rester actionnables, exclure error et feedback danger du budget. Ajouter test fake timers/browser : erreur sans hover reste jusqu’à Échap/nouvelle capture. Coût faible; garder auto-close des succès. Ne pas importer tokens Graphite ni overlay-ipc redondant.",
+      "confidence": "élevée sur timers; comportement produit à confirmer, pas de test navigateur exécuté",
+      "source_ids": [
+        "BR-04"
+      ],
+      "crosscheck": {
+        "id": "BR-04",
+        "title": "Erreurs du verre : timers réels, persistance obligatoire non établie",
+        "original_severity": "P2",
+        "verdict": "à nuancer",
+        "severity": "P3",
+        "proposed_severity": "P3",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "risque",
+        "assessment": "Pour le parcours GlassSession direct/display, phase error est settled; budget normal puis fermeture automatique sauf hover/focus/pin/etc. Le feedback des commandes copy/replace expire après 3 s. La branche wt-050-verre faisait persister les erreurs, mais cette décision de branche ne suffit pas à imposer une exigence actuelle.",
+        "counter_evidence": "L’erreur réseau state.error n’est PAS effacée par le timer feedback : elle demeure dans error-copy ou subtle-warning jusqu’à fermeture du verre. AutoClose=never, présence pointeur, clavier et menu peuvent empêcher la fermeture; BR-04 n’est donc pas général. UI-DECISIONS:10 maintient auto-close du mode Afficher le résultat et :46 demande erreurs visibles/claires sans durée illimitée. L’Îlot a son propre parcours. Persistance mérite arbitrage P3, pas bug P2 démontré. Le commentaire historique:306–308 revendique « décisions du 17/09, Q6 »; cette attribution n’a pas été retrouvée dans les contrats actuels examinés. Ne pas affirmer que Lucas a rejeté la persistance : la priorité documentaire reste à clarifier.",
+        "proofs": [
+          {
+            "file": "src/GlassOverlay.tsx",
+            "lines": [
+              148,
+              151
+            ],
+            "evidence": "Routes IlotStage/GlassSession distinctes."
+          },
+          {
+            "file": "src/GlassOverlay.tsx",
+            "lines": [
+              190,
+              190
+            ],
+            "evidence": "Auto-close selon réglage."
+          },
+          {
+            "file": "src/GlassOverlay.tsx",
+            "lines": [
+              237,
+              240
+            ],
+            "evidence": "error settled."
+          },
+          {
+            "file": "src/GlassOverlay.tsx",
+            "lines": [
+              294,
+              300
+            ],
+            "evidence": "Timer feedback seulement."
+          },
+          {
+            "file": "src/GlassOverlay.tsx",
+            "lines": [
+              347,
+              382
+            ],
+            "evidence": "Budget et garde held."
+          },
+          {
+            "file": "src/GlassOverlay.tsx",
+            "lines": [
+              512,
+              543
+            ],
+            "evidence": "Retry et state.error restent distincts du feedback."
+          },
+          {
+            "file": "origin/wt-050-verre:src/GlassOverlay.tsx",
+            "lines": [
+              71,
+              74
+            ],
+            "evidence": "Ancienne politique de persistance."
+          },
+          {
+            "file": "docs/UI-DECISIONS.md",
+            "lines": [
+              10,
+              10
+            ],
+            "evidence": "Auto-close conservé display."
+          },
+          {
+            "file": "docs/UI-DECISIONS.md",
+            "lines": [
+              46,
+              46
+            ],
+            "evidence": "Visibilité/clarté sans durée explicitée."
+          },
+          {
+            "file": "origin/wt-050-verre:src/GlassOverlay.tsx",
+            "lines": [
+              304,
+              322
+            ],
+            "evidence": "failed exclu du budget et ajouté à held; commentaire revendique décision 17/09 Q6."
+          }
+        ],
+        "recommendation": "Demander décision produit spécifique au verre direct; si erreurs persistantes voulues, ajouter tests timers, ne pas généraliser à Îlot.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "BR-05",
+      "title": "Le type-check des tests Playwright de wt-050-atelier est absent du build",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "tsconfig.json",
+      "lines": [
+        1,
+        4
+      ],
+      "evidence": "References uniquement app/node. tsconfig.app inclut src, node inclut vite.config.ts. Aucun tsconfig.test.json main. Branche 5b5f6a:tsconfig.test.json inclut e2e/visual-tests/src/env.d.ts et son tsconfig racine référence ce projet.",
+      "impact": "Les tests navigateur exécutent TypeScript transpilé sans faire partie du tsc -b; une erreur de types dans e2e peut ne pas être détectée par le build actuel. Les unit tests sous src restent bien couverts, ils ne sont pas concernés.",
+      "recommendation": "Ajouter un projet noEmit actuel pour e2e et visual-tests et un check explicite en CI. Réutiliser TypeScript déjà présent. Coût faible à moyen suivant dette types découverte; ne pas reprendre les anciennes assertions de spinner ou thème graphite.",
+      "confidence": "élevée (inspection statique)",
+      "source_ids": [
+        "BR-05"
+      ],
+      "crosscheck": {
+        "id": "BR-05",
+        "title": "Type-check e2e non inclus dans build",
+        "original_severity": "P3",
+        "verdict": "confirmé statiquement",
+        "severity": "P3",
+        "proposed_severity": "P3",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "dette",
+        "assessment": "tsc -b référence uniquement app/node; includes src/vite.config. E2E/visual-tests ne sont pas racines et tsconfig.test.json historique est absent. CI build puis playwright n’ajoute pas un typecheck de ces tests.",
+        "counter_evidence": "Les tests sous src sont bien couverts; les erreurs d’exécution e2e sont encore testées par Playwright. Absence de compilation des types de tests n’établit ni types actuellement cassés ni panne utilisateur. Le coût peut inclure des imports/types Node ambiants à adapter.",
+        "proofs": [
+          {
+            "file": "tsconfig.json",
+            "lines": [
+              1,
+              4
+            ],
+            "evidence": "Seulement app/node."
+          },
+          {
+            "file": "tsconfig.app.json",
+            "lines": [
+              20,
+              20
+            ],
+            "evidence": "include src."
+          },
+          {
+            "file": "tsconfig.node.json",
+            "lines": [
+              15,
+              15
+            ],
+            "evidence": "include vite.config.ts."
+          },
+          {
+            "file": "package.json",
+            "lines": [
+              13,
+              14
+            ],
+            "evidence": "build tsc -b && vite build."
+          },
+          {
+            "file": ".github/workflows/ci.yml",
+            "lines": [
+              17,
+              21
+            ],
+            "evidence": "Pas de typecheck tests séparé."
+          },
+          {
+            "file": "origin/wt-050-atelier:tsconfig.test.json",
+            "lines": [
+              20,
+              24
+            ],
+            "evidence": "Projet historique include e2e/visual-tests/env."
+          }
+        ],
+        "recommendation": "Ajouter un projet noEmit et check CI avec TypeScript existant; pas besoin de reprendre les assertions UI historiques.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "DEP-002",
+      "title": "Les locks npm conservent deux advisories de la chaîne build/test, sans exploit desktop démontré",
+      "severity": "P3",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "package-lock.json",
+      "lines": [
+        3065
+      ],
+      "related_locations": [
+        {
+          "file": "design-lab/reglages/package-lock.json",
+          "line": 2836
+        },
+        {
+          "file": "design-lab/reglages/package-lock.json",
+          "line": 4267
+        }
+      ],
+      "evidence": "npm audit: app 1 entrée high, ancien labo 0, reglages 5 entrées high issues de 2 advisories, non 5 vulnérabilités indépendantes. GHSA-68fv-2mgg-jv7q : source-map-js 1.2.1, correctif 1.2.2 ; GHSA-vfj7-8cjw-p6xm : braces 3.0.3, aucun correctif publié. Les 16 locks npm historiques racine ont aussi une entrée high.",
+      "scenario": "Traitement de sourcemaps indexées ou de motifs glob malveillants dans tooling local ; root/source-map-js atteint via postcss (chaîne Vite), labo/braces via Tailwind CLI -> @parcel/watcher -> micromatch. Aucun chemin depuis texte corrigé/serveur vers ces parsers démontré.",
+      "impact": "DoS potentiel de build/test sur entrées hostiles. N’est pas une vulnérabilité à distance du binaire Overtype.",
+      "recommendation": "Mise à jour ciblée future du lock vers source-map-js 1.2.2 compatible, puis builds/tests. Pour braces sans correctif, surveiller upstream et restreindre les motifs de build ; ne pas appliquer aveuglément npm audit fix (propose Tailwind CLI 4.3.0 contre 4.3.3). Ajouter contrôle advisory avec triage par scope.",
+      "cost_tradeoff": "Faible pour source-map-js, coût moyen et compromis fonctionnels pour remplacement du watcher ; ne pas migrer une bibliothèque UI majeure pour cette alerte tooling.",
+      "confidence": "élevée pour présence et ranges, faible pour un attaquant réel contrôlant ces entrées",
+      "scope": "main",
+      "source_ids": [
+        "DEP-002"
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-02",
+          "report_refs": [
+            "DEP-002"
+          ],
+          "verdict": "confirmé",
+          "title": "source-map-js et braces: advisories exacts, tooling et non faille desktop prouvée",
+          "severity": "P3",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "package-lock.json",
+          "lines": [
+            3065
+          ],
+          "evidence": "GHSA-68fv-2mgg-jv7q / CVE-2026-93749: >=1.0.0,<1.2.2; fix 1.2.2; lock 1.2.1. GHSA-vfj7-8cjw-p6xm / CVE-2026-93687: <=3.0.3; first_patched_version=null; lock prototype braces 3.0.3. Sources GitHub Reviewed et API officielle enregistrées. Chaîne source-map-js via postcss; braces via micromatch et @parcel/watcher. Aucun import de ces parsers dans src.",
+          "impact": "DoS sur sourcemap indexée/glob hostile consommé par tooling. Le flag dev absent dans lock racine vient aussi de Vite en dependencies: il ne prouve pas reachability WebView. Cinq entrées audit du prototype ne sont pas cinq advisories distincts.",
+          "recommendation": "Fix source-map-js ciblé 1.2.2 et tests/build; pour braces surveiller patch et contrôler entrée de patterns. Ne pas présenter braces 3.0.3 comme fix de cet avis ni rétrograder Tailwind selon audit fix.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Pas de nouveau npm audit/build exécuté; locks et artifacts locaux réexaminés. Pas de preuve de contrôle attaquant sur les entrées réelles."
+        }
+      ],
+      "proof_level": "preuves détaillées du rapport spécialisé; pas validation native globale"
+    },
+    {
+      "id": "DEP-004",
+      "title": "Le script de captures du prototype résout Playwright depuis un checkout personnel absolu",
+      "severity": "P3",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "design-lab/reglages/scripts/shots.mjs",
+      "lines": [
+        10,
+        11
+      ],
+      "related_locations": [
+        {
+          "file": "design-lab/reglages/scripts/demo-shots.mjs",
+          "line": 10
+        },
+        {
+          "file": "design-lab/reglages/scripts/demo-chaos.mjs",
+          "line": 13
+        }
+      ],
+      "evidence": "Après npm ci des trois packages, npm run shots échoue exit 1 MODULE_NOT_FOUND sur <checkout-Windows-absolu>/node_modules/@playwright/test. Repro Linux joinne ce chemin au cwd ; sur Windows un autre disque/checkout ne possède pas non plus <checkout-Windows-absolu>.",
+      "scenario": "Nouvel environnement ou autre checkout Windows du labo, puis commande documentée de captures.",
+      "impact": "Les preuves visuelles du prototype ne sont pas rejouables via la commande documentée hors du poste d’origine. App release non affectée.",
+      "recommendation": "Résoudre Playwright relativement au repository/root package (déjà @playwright/test 1.63.0), ou déclarer une devDependency propre si labo doit être autonome ; reprendre le paramètre PLAYWRIGHT_MODULE du premier labo. Utiliser dossier de sortie fourni/plancher relatif au labo.",
+      "cost_tradeoff": "Faible sans ajout de lib ; déclarer localement Playwright augmente taille installation/browsers, réutiliser root nécessite documenter npm ci root.",
+      "confidence": "élevée",
+      "scope": "main",
+      "source_ids": [
+        "DEP-004",
+        "ARCH-06"
+      ],
+      "merged_details": [
+        {
+          "id": "ARCH-06",
+          "title": "Le contrôle anti-dérive du labo dépend du disque D: du développeur",
+          "severity": "P3",
+          "category": "bug",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "design-lab/reglages/scripts/demo-check.mjs",
+          "lines": [
+            7,
+            8
+          ],
+          "evidence": "La commande documentée README:23 utilise resolve(\"<checkout-Windows-absolu>\",p). Exécutée depuis design-lab/reglages sur ce clone : code 1, ENOENT sur D:/.../src/halo/HaloWindow.tsx. build.mjs:33 trouve déjà src relativement à import.meta.url.",
+          "impact": "La protection des valeurs recopiées app/labo ne fonctionne pas sur un autre clone ou CI, y compris un autre chemin Windows. Aucun impact direct sur l’app installée.",
+          "recommendation": "Résoudre racine du dépôt depuis import.meta.url (node:url/node:path), comme build.mjs. Garder le labo et le check ciblé ; à terme exporter les constantes pures réellement communes plutôt que copier le pont Tauri.",
+          "confidence": "haute",
+          "cost_tradeoff": "Quelques lignes, stdlib Node déjà utilisée ; aucun nouveau package.",
+          "limitations": "Build complet et captures du labo non lancés ; le check a échoué avant de comparer les constantes.",
+          "source_ids": [
+            "ARCH-06"
+          ]
+        }
+      ],
+      "crosscheck_security": [],
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "FE-04",
+      "title": "La copie réussie du résultat ne change jamais son message de statut",
+      "severity": "P3",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/GlassOverlay.tsx",
+      "lines": "478-488,533-544",
+      "scenario": "Afficher un résultat terminé puis activer Copier la traduction.",
+      "evidence": "Chromium sur lab-frame scenario=short : bouton data-copied=true (1 occurrence) mais .sr-only[role=status] reste « Translation complete ». À la ligne 544, phase complete && !replacing précède copied et reste vraie pendant toute la copie ; la branche glass.copied est donc masquée.",
+      "impact": "La coche purement décorative indique le succès visuellement, mais la région de statut ne fournit aucune confirmation de copie. Référence WCAG 4.1.3 Status Messages ; lecture vocale réelle non testée.",
+      "recommendation": "Faire prioriser copied devant complete ou utiliser une région de statut dédiée à la copie ; garder les noms et messages i18n existants.",
+      "cost_tradeoff": "Très faible ; tester copie répétée et expiration de copied (1600 ms), sans annoncer le résultat en double.",
+      "confidence": "élevée, repro navigateur et chemin conditionnel concordants",
+      "source_ids": [
+        "FE-04"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "reproduction ciblée synthétique; limites détaillées dans le rapport spécialisé"
+    },
+    {
+      "id": "FE-05",
+      "title": "La mécanique de persistance des Réglages et de l’accueil est dupliquée",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src/settings/useSettingsStore.ts",
+      "lines": "47-85,91-143,169-175",
+      "related_locations": [
+        "src/setup/useSetupSettings.ts:29-99"
+      ],
+      "scenario": "Faire évoluer la politique de sauvegarde différée, les échos settings-changed, flush ou la restauration d’un raccourci refusé.",
+      "evidence": "Les deux hooks possèdent latest/synced, inFlight, timer, file Promise, adoption conditionnée aux éditions, flush et rollback du raccourci. Ils diffèrent déjà sur le garde de chargement initial (FE-02) et le délai de frappe (300/400 ms). Ce dernier peut être intentionnel : il ne prouve pas un bug.",
+      "impact": "Toute correction de l’invariant de persistance doit être portée deux fois ; risque de divergence déjà visible. Il ne s’agit pas de reprocher useState/useRef ou de demander Redux.",
+      "recommendation": "Extraire seulement le noyau de sauvegarde séquentielle/adoption/flush dans un hook partagé, avec délai et validation configurables ; conserver dans les adaptateurs l’historique, les statuts UX, reset et les règles de raccourcis.",
+      "cost_tradeoff": "Moyen : contrats comportementaux d’abord, refactorisation après les bugs. Aucune nouvelle dépendance requise ; ne pas uniformiser de force les différences produit.",
+      "confidence": "élevée sur la duplication ; jugement de maintenabilité, pas défaut utilisateur supplémentaire",
+      "source_ids": [
+        "FE-05"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "preuves détaillées du rapport spécialisé; pas validation native globale"
+    },
+    {
+      "id": "NATIVE-011",
+      "title": "Les capabilities ne cloisonnent pas les commandes métier entre WebViews",
+      "severity": "P3",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "src-tauri/build.rs",
+      "lines": [
+        1,
+        3
+      ],
+      "evidence": "build.rs ne déclare pas AppManifest::commands; capabilities/default.json couvre cinq labels mais seulement core permissions. Tauri documente que invoke_handler app est accessible à toutes les WebViews par défaut. save_settings ne prend pas de fenêtre appelante (lib.rs:665–671), contrairement à get_settings qui masque les clés selon label (593–595).",
+      "call_path": "Code exécuté dans halo/demo/overlay invoque save_settings/reset ou commandes d’historique plutôt que via le bridge normal → mêmes droits métier que settings; le masquage des clés en lecture n’empêche pas la modification ni une invocation directe.",
+      "impact": "Surface de privilèges excessive si une page est compromise ou fait une erreur. Aucun XSS/RCE démontré; CSP script-src self et absence de remote IPC diminuent l’exposition et doivent rester.",
+      "recommendation": "Déclarer les commandes d’app dans AppManifest et leurs permissions par label; vérifier en Rust le caller pour les opérations sensibles. Utiliser les ACL Tauri existantes, pas un pseudo-RBAC TS. Tests de refus depuis halo/demo/overlay et autorisation depuis settings/setup.",
+      "cost_tradeoff": "Moyen : inventaire et matrice des commandes. Le bridge typed et les events ciblés sont utiles mais ne remplacent pas une autorisation native.",
+      "confidence": "élevée sur le comportement ACL; exploitabilité non démontrée",
+      "verification": "Analyse statique; scénario Windows proposé, non exécuté.",
+      "related": [],
+      "source_ids": [
+        "NATIVE-011",
+        "SEC-03"
+      ],
+      "crosscheck": {
+        "id": "NATIVE-011",
+        "title": "Commandes métier partagées : durcissement ACL, pas vulnérabilité établie",
+        "original_severity": "P2",
+        "verdict": "à nuancer",
+        "severity": "P3",
+        "proposed_severity": "P3",
+        "branch": "main",
+        "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+        "category": "risque",
+        "assessment": "build.rs ne fournit pas AppManifest::commands. Les capabilities limitent certains plugins/core APIs, pas ces commandes app autorisées par défaut selon Tauri. save_settings ne contrôle pas le label appelant. Le constat technique est juste.",
+        "counter_evidence": "Certaines commandes sensibles ont déjà une garde KEYED (lecture clés, sonde/journal); CSP script self, pages locales et absence de remote capability restreignent l’exposition. Une app possédant plusieurs vues d’un même bundle ne requiert pas nécessairement séparation complète métier. Aucune compromission frontend, navigation hostile ou violation démontrée; traiter comme P3 défense en profondeur, pas P2 incident/accès distant.",
+        "proofs": [
+          {
+            "file": "src-tauri/build.rs",
+            "lines": [
+              1,
+              3
+            ],
+            "evidence": "tauri_build::build sans app_manifest."
+          },
+          {
+            "file": "src-tauri/capabilities/default.json",
+            "lines": [
+              5,
+              15
+            ],
+            "evidence": "Labels et permissions core."
+          },
+          {
+            "file": "src-tauri/capabilities/settings.json",
+            "lines": [
+              5,
+              15
+            ],
+            "evidence": "Permissions spécifiques fenêtre, pas commandes métier."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              584,
+              595
+            ],
+            "evidence": "KEYED garde/masquage existants."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              664,
+              671
+            ],
+            "evidence": "save_settings sans caller."
+          },
+          {
+            "file": "src-tauri/tauri.conf.json",
+            "lines": [
+              63,
+              65
+            ],
+            "evidence": "CSP locale restrictive."
+          },
+          {
+            "file": "src-tauri/src/lib.rs",
+            "lines": [
+              2725,
+              2726
+            ],
+            "evidence": "connection_window garde KEYED; contre-exemple à absence générale d’autorisation."
+          }
+        ],
+        "recommendation": "Définir d’abord la frontière de confiance attendue entre vues; utiliser AppManifest/ACL pour writes sensibles, sans inventer exploit.",
+        "related_ids": [],
+        "confidence": "élevée sur le code; impact Windows non exécuté",
+        "verification": "Analyse statique indépendante; aucun repro Windows ni test Rust exécuté."
+      },
+      "merged_details": [
+        {
+          "id": "SEC-03",
+          "title": "Les commandes sensibles custom ne suivent pas toutes l’isolation par fenêtre",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "origin/main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/lib.rs",
+          "lines": [
+            584,
+            595,
+            664,
+            671,
+            2725,
+            2726,
+            2841,
+            2847,
+            3390,
+            3436
+          ],
+          "evidence": "get_settings filtre les clés hors settings/setup; probe_connection, diagnostics et try_model contrôlent connection_window. save_settings, get_history/delete_history et install_update (update.rs 109–123) ne reçoivent pas/contrôlent la fenêtre. build.rs appelle tauri_build::build() sans AppManifest::commands. Tauri documente que les commandes invoke_handler sont accessibles à toutes fenêtres par défaut; capabilities/default.json ne restreint donc pas ces commandes applicatives.",
+          "impact": "Si une fenêtre locale peu privilégiée est compromise, elle peut lire l’historique déchiffré, modifier endpoint+historique+autostart et déclencher un update signé en attente. save_settings permet de changer la destination des prochaines sélections sans lire la clé existante. Aucune compromission frontend ni XSS depuis sortie modèle démontrée; ce n’est pas une RCE.",
+          "recommendation": "Appliquer côté Rust les mêmes gardes de labels à save_settings, history et updater, ou AppManifest::commands + permissions par fenêtre; garder les commandes d’usage overlay séparées. Tests de refus avec vraies fenêtres/labels Tauri.",
+          "preconditions": "Exécution de JavaScript non autorisé dans une fenêtre BUNDLED (overlay/halo/demo) déjà compromise; une page distante ordinaire n’a pas ce droit.",
+          "plausible_threat": "Extension du rayon d’impact d’un bug frontend futur au journal privé et à la configuration réseau, malgré l’intention déclarée KEYED.",
+          "cost_tradeoff": "Faible à modéré; primitives Tauri déjà présentes. Ne pas ajouter shell/fs ni casser actions overlay légitimes.",
+          "confidence": "high",
+          "limitations": "Absence de garde et contrat Tauri vérifiés; IPC natif non exercé. CSP restrictive et rendu React texte sont des contre-exemples utiles, aucune entrée XSS prouvée.",
+          "source_ids": [
+            "SEC-03"
+          ]
+        }
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-07",
+          "report_refs": [
+            "SEC-03"
+          ],
+          "verdict": "confirmé",
+          "title": "Isolation fenêtres des commandes custom réellement partielle",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/lib.rs",
+          "lines": [
+            584,
+            595,
+            665,
+            671,
+            2842,
+            2846
+          ],
+          "evidence": "get_settings filtre clés selon KEYED; save_settings/get_history/delete_history sans WebviewWindow ni garde. update.rs:110 install_update aussi. build.rs ne fournit pas AppManifest::commands. Docs Tauri déclarent explicitement invoke_handler autorisé à toutes fenêtres/webviews par défaut.",
+          "impact": "Après compromission JS préalable d’une fenêtre locale bundled, lecture historique déchiffré et modification destination. Ce n’est ni XSS prouvé ni accès d’une page web distante quelconque. install_update reste signature contrôlée: pas téléchargement/exécution arbitraire depuis argument libre.",
+          "recommendation": "Garde Rust sur commandes administratives ou manifest permissions Tauri par fenêtre, garder actions overlay permises.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "IPC natif non exécuté. CSP et rendu texte atténuent; absence de vecteur frontend démontré."
+        }
+      ],
+      "editorial_decision": "Durcissement inter-WebViews, conditionné à une compromission JS non démontrée. P3 retenu malgré le P2 du volet sécurité.",
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "QA-04",
+      "title": "Les échecs fonctionnels sensibles à la charge n’ont pas de trace conservée",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "playwright.config.ts",
+      "lines": [
+        10,
+        15
+      ],
+      "evidence": "La config fonctionnelle ne conserve que screenshot only-on-failure; pas trace ni video. Run complet à 6 workers (simultané à une tentative visuelle et temporairement Vitest): 226 passent, 24 échouent, 0 retry automatique. Recheck des 24, seul à 2 workers: 24 passent. Erreurs: timeouts, html sans data-ui, clock.pauseAt vers le passé, région intermédiaire; qa-e2e-failures.json + e2e-highparallel/ gardent les premières preuves.",
+      "impact": "Une capture finale et le contexte ne reconstruisent pas l’ordre des événements IPC/rAF, ni la requête qui recharge la page. Le passage au second essai ne rend pas le premier run vert; il faut diagnostiquer avant de qualifier un bug produit.",
+      "recommendation": "Activer trace retain-on-failure dans la config fonctionnelle, réutiliser upload-artifact existant. Reproduire à concurrence maîtrisée, figer l’horloge avant navigation quand possible et remplacer les attentes temporelles arbitraires par des conditions. Ne pas traiter les retries comme correctif.",
+      "confidence": "haute",
+      "limitations": "La concurrence/charge est un facteur associé observé, pas une cause racine prouvée; aucune flakiness en CI distante démontrée.",
+      "cost_tradeoff": "faible pour traces; coût artifacts; diagnostic moyen",
+      "source_ids": [
+        "QA-04"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "preuves détaillées du rapport spécialisé; pas validation native globale"
+    },
+    {
+      "id": "QA-05",
+      "title": "Les comparaisons visuelles Windows ne sont pas une gate CI",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": ".github/workflows/ci.yml",
+      "lines": [
+        17,
+        21,
+        48,
+        51
+      ],
+      "evidence": "npm run ui:check n’est appelé dans aucun workflow. playwright.visual.config.ts:7 distingue {platform}; seules références win32 versionnées. README:20-31 précise Îlot non approuvé et :48-65 documente v4 périmé. Sur Linux sans génération: 14 tests échouent avec snapshot absent, 1 interrompu volontairement, 37 non exécutés.",
+      "impact": "Les références ne détectent pas automatiquement une dérive visuelle dans les releases actuelles; leurs succès historiques n’attestent pas l’approbation esthétique ni Windows natif.",
+      "recommendation": "Après revue humaine des références Îlot, ajouter ui:check --grep @ilot sur un runner Windows cohérent avec leur Chromium. Maintenir v4 en lane séparée ou le retirer selon décision produit. Ne pas copier les baselines win32 en linux ni générer des images pour verdir.",
+      "confidence": "haute",
+      "limitations": "Les erreurs Linux sont un manque de baseline applicable, pas 14 défauts visuels produit. Pas de comparaison Windows exécutée.",
+      "cost_tradeoff": "moyen: revue références et stabilité environnement",
+      "source_ids": [
+        "QA-05"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "QA-06",
+      "title": "Le générateur de kit d’essai n’est plus utilisable tel quel pour 0.6.2",
+      "severity": "P3",
+      "category": "bug",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "scripts/package-test-kit.ps1",
+      "lines": [
+        24,
+        30,
+        49,
+        62
+      ],
+      "evidence": "Le script prend version package.json puis exige docs/ESSAIS-$version.md et docs/evaluation/$EvaluationVersion/README.md. Probe kit-paths: docs/ESSAIS-0.6.2.md et docs/evaluation/0.6.2/README.md absents. Il écrit encore Ctrl+Alt+T et le repli en onglet, alors que décisions UI:72 et :77 décrivent Ctrl+Alt+Space/Îlot.",
+      "impact": "Après fourniture de l’installateur, Copy-Item de la notice courante échoue; même une adaptation des chemins distribuerait des instructions de test obsolètes. Écart limité à un outil manuel historique, non au workflow NSIS/release.",
+      "recommendation": "Choisir explicitement une notice actuelle et une version d’évaluation disponible, ou marquer le script archive 0.1.x; actualiser le parcours simulé Îlot. Garder la distinction réponse synthétique/capture réelle.",
+      "confidence": "haute",
+      "limitations": "PowerShell non exécuté; chemins manquants et interpolation établis sur le snapshot.",
+      "cost_tradeoff": "faible",
+      "source_ids": [
+        "QA-06"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "QA-07",
+      "title": "Capture-matrix consigne les divergences sans les transformer en échec",
+      "severity": "P3",
+      "category": "risque",
+      "branch": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "scripts/capture-matrix.mjs",
+      "lines": [
+        82,
+        89,
+        124,
+        129
+      ],
+      "evidence": "textMatches et clipboardAfter sont enregistrés sans assertion. status DONE dépend uniquement de !c.error; shoot peut rendre kind=nothing. Même status ERRORS n’impose pas explicitement une sortie non nulle (erreurs absorbées par cas). Outil manuel de collecte, non utilisé par les workflows.",
+      "impact": "Un consommateur qui lit DONE ou exit 0 comme preuve de capture/preservation obtient un faux positif. Le JSON conserve toutefois les champs négatifs: la preuve n’est pas fabriquée ni perdue.",
+      "recommendation": "Renommer DONE en collecte_complete et séparer verdicts par scénario, ou ajouter assertions adaptées aux cas puis code de sortie non nul sur violations. Ne pas exiger textMatches=true pour le scénario notice attendu.",
+      "confidence": "haute",
+      "limitations": "Pas d’exécution de la matrice native ni de capture défaillante observée; risque de mauvaise interprétation, pas régression runtime.",
+      "cost_tradeoff": "faible",
+      "source_ids": [
+        "QA-07"
+      ],
+      "crosscheck_security": [],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "SEC-04",
+      "title": "La documentation assure encore un refus HTTP distant qui n’existe plus",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "origin/main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "file": "docs/ENDPOINTS.md",
+      "lines": [
+        27,
+        29,
+        104,
+        108
+      ],
+      "evidence": "docs/ENDPOINTS.md et DEPLOYMENT.md:46 annoncent HTTPS obligatoire hors loopback. settings.rs 535–548 accepte HTTP distant avec insecure=true; commentaire explicite choix Lucas 30/09 et introduction 9418959. UI InsecureNotice + chip http présents. Exécution fonction frontend: http://192.0.2.10:8000 accepté insecure=true; 21 vecteurs valides et 9 invalides passés.",
+      "impact": "Une personne appliquant le guide peut croire que l’app empêchera transport en clair. En HTTP distant, sélection et Authorization Bearer sont visibles à un observateur sur le trajet; ce support est intentionnel, pas un bypass TLS automatique.",
+      "recommendation": "Actualiser ENDPOINTS/DEPLOYMENT avec décision 0.6, avertissement clair, recommandation HTTPS hors loopback; distinguer certificat confiance Windows et chiffrement. Option organisationnelle HTTPS-only seulement si besoin explicite, pas retour forcé sur décision produit.",
+      "preconditions": "Endpoint distant HTTP choisi/configuré et trafic sur réseau observé.",
+      "plausible_threat": "Interception réseau du texte et de la clé sous une garantie documentaire erronée.",
+      "cost_tradeoff": "Faible, correction documentaire; laisser fonctionnement LAN voulu.",
+      "confidence": "high",
+      "limitations": "Repro frontend de normalisation sans réseau; comportement Rust confirmé statiquement et test unitaire existant non exécuté.",
+      "source_ids": [
+        "SEC-04"
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-08",
+          "report_refs": [
+            "SEC-04"
+          ],
+          "verdict": "confirmé",
+          "title": "Document TLS obsolète, HTTP distant voulu",
+          "severity": "P3",
+          "category": "dette",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "docs/ENDPOINTS.md",
+          "lines": [
+            27,
+            29,
+            31
+          ],
+          "evidence": "ENDPOINTS prétend HTTPS obligatoire et total timeout 120 s. settings.rs:541-548 accepte explicitement HTTP any host depuis 0.6; insecure flag 535. inference ajoute bearer lorsque clé autorisée. Commit limites retire délai total.",
+          "impact": "Risque interception si HTTP distant choisi; pas bypass certificat ni régression accidentelle. Dette documentaire contient aussi délais et contrat endpoints historiques.",
+          "recommendation": "Actualiser docs vers HTTP averti et timeout silence; recommander HTTPS sans forcer suppression support LAN voulu.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Normalisation Rust statique, pas réseau."
+        }
+      ],
+      "scope": "main",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    },
+    {
+      "id": "SEC-06",
+      "title": "Branche WIP: archives de récupération de l’historique hors purge",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/wt-050-natif",
+      "sha": "1fcdd21f0aadd5a36978e47e6530b9fe9f1c74bd",
+      "file": "src-tauri/src/history.rs",
+      "lines": [
+        29,
+        46
+      ],
+      "evidence": "origin/wt-050-natif ajoute recover(): toute erreur de new() renomme history.sqlite3, -wal, -shm en history.illisible-<date>.sqlite3*, puis crée nouvelle base. get/list/delete/prune ne ciblent que history.sqlite3. Chemin relié à startup dans lib.rs. Pas dans main; commit 1fcdd21 est WIP interrompu.",
+      "impact": "Après corruption/erreur d’ouverture, anciens textes DPAPI et métadonnées sont archivés indéfiniment et ne sont plus visés par 'vider historique' ni la rétention 7 jours/100. Ne pas fusionner la récupération sans politique d’archives. Pas fuite de données actuelles affirmée.",
+      "recommendation": "Avant reprise de branche, enregistrer/montrer les archives de récupération, appliquer plafond/rétention et purge explicite sur ces fichiers; distinguer corruption des erreurs d’accès/verrouillage avant renommage. Garder fail-soft sans supprimer silencieusement les données.",
+      "preconditions": "Exécution de cette branche WIP, historique auparavant activé, erreur d’initialisation et renommage effectivement possible.",
+      "plausible_threat": "Opérateur/backup du compte récupère données conservées hors politique annoncée après demande de suppression.",
+      "cost_tradeoff": "Modéré: helper fichiers/rusqlite existants; balance récupération vs confidentialité.",
+      "confidence": "high",
+      "limitations": "Revue diff et git show seulement. Branche non déployée selon mission; aucune corruption ni archivage provoqué, pas une régression main.",
+      "source_ids": [
+        "SEC-06"
+      ],
+      "crosscheck_security": [
+        {
+          "id": "XSEC-10",
+          "report_refs": [
+            "SEC-06"
+          ],
+          "verdict": "confirmé",
+          "title": "Archives WIP hors rétention: branche uniquement",
+          "severity": "P2",
+          "category": "risque",
+          "branch": "origin/wt-050-natif",
+          "sha": "1fcdd21f0aadd5a36978e47e6530b9fe9f1c74bd",
+          "file": "src-tauri/src/history.rs",
+          "lines": [
+            29,
+            46
+          ],
+          "evidence": "git show origin/wt-050-natif: recover renomme base/-wal/-shm en history.illisible-<stamp> puis new; chemins delete/prune visent uniquement history.sqlite3. Fonction absente main. Erreur open quelconque, rename best-effort.",
+          "impact": "Conservation hors politique si branche reprise et rename possible. DPAPI n’est pas invalidé par changement de nom. Métadonnées récupérables indépendamment du déchiffrement. Une base corrupt peut avoir payload illisible, mais toutes erreurs new ne signifient pas tous blobs inutilisables.",
+          "recommendation": "Avant reprise, politique archives/purge/rétention visible et distinction erreur accès/corruption, sans fusion automatique.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Pas corruption/renommage runtime provoqué; P2 dormant non additionné à main."
+        },
+        {
+          "id": "XSEC-11",
+          "report_refs": [
+            "SEC-01",
+            "SEC-06"
+          ],
+          "verdict": "rejeté",
+          "title": "Déduire de DPAPI que les résidus deviennent nécessairement inutilisables",
+          "severity": "P3",
+          "category": "option",
+          "branch": "main",
+          "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+          "file": "src-tauri/src/crypto.rs",
+          "lines": [
+            13,
+            19,
+            43,
+            49
+          ],
+          "evidence": "CryptProtectData utilise contexte utilisateur, UI_FORBIDDEN et aucune entropy additionnelle. Pas clé par ligne détruite à DELETE/rename. Microsoft: normalement mêmes identifiants et même ordinateur. Crate features bundled ≠ SQLCipher et ne prouvent pas crypto-erasure.",
+          "impact": "Un autre compte ne peut normalement pas déchiffrer, et un blob partiel peut échouer MAC; cela ne rend pas toute rétention inoffensive: metadata clair et récupération possible blob entier sous contexte autorisé. Ne pas affirmer toute page résiduelle permet récupérer texte.",
+          "recommendation": "Conserver qualification encryption/metadata/contexte/complétude distincte, aucune nouvelle crypto ad hoc.",
+          "confidence": "élevée sur code/source; limitée sur exécution native",
+          "limitations": "Aucun déchiffrement Windows exécuté. Rejet d’un contre-argument, pas nouveau défaut confirmé."
+        }
+      ],
+      "scope": "branche-historique-seulement",
+      "proof_level": "inspection-statique/documentation; comportement natif non exécuté"
+    }
+  ]
+}

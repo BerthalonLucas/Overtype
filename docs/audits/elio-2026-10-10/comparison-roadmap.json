@@ -1,0 +1,653 @@
+{
+  "role": "comparison-roadmap",
+  "main_sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+  "branch": "origin/application-chatgpt-like-interne",
+  "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+  "merge_base": "deb9f0d581e256a8f00e0fd65be6d6e89234ae50",
+  "scope": "Comparaison bornée de documents exploratoires, pas audit d’une implémentation chat.",
+  "reviewed_files": [
+    {
+      "file": "AGENTS.md",
+      "lines": 18,
+      "coverage": "contenu main lu intégralement + unique ajout de branche examiné",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/01-vision.md",
+      "lines": 69,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/02-surfaces-et-gestes.md",
+      "lines": 103,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/03-architecture.md",
+      "lines": 115,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/04-modeles.md",
+      "lines": 77,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/05-confidentialite-et-passerelles.md",
+      "lines": 98,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/06-cas-usage.md",
+      "lines": 76,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/07-trajectoire.md",
+      "lines": 47,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/KANBAN.md",
+      "lines": 102,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/README.md",
+      "lines": 36,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/recherches/2026-10-10-anonymisation-passerelles.md",
+      "lines": 211,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/recherches/2026-10-10-briques-techniques.md",
+      "lines": 205,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/recherches/2026-10-10-entrees-windows.md",
+      "lines": 254,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    },
+    {
+      "file": "docs/roadmap/recherches/2026-10-10-paysage-ux.md",
+      "lines": 219,
+      "coverage": "lecture intégrale du document",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d"
+    }
+  ],
+  "reviewed_main_files": [
+    {
+      "file": "AGENTS.md",
+      "coverage": "intégral"
+    },
+    {
+      "file": "docs/UI-DECISIONS.md",
+      "coverage": "intégral"
+    },
+    {
+      "file": "docs/BRIDGE.md",
+      "coverage": "passages contrats commandes/événements, isolation fenêtres, données et 0.6"
+    },
+    {
+      "file": "src-tauri/src/lib.rs",
+      "coverage": "93-147,570-615,1415-1445,3188-3205"
+    },
+    {
+      "file": "src-tauri/src/inference.rs",
+      "coverage": "1-28,40-130,195-215,220-265,275-380; diff main/ref intégral"
+    },
+    {
+      "file": "src/useTranslation.ts",
+      "coverage": "1-90"
+    },
+    {
+      "file": "src-tauri/src/history.rs",
+      "coverage": "1-100"
+    },
+    {
+      "file": "src-tauri/Cargo.toml",
+      "coverage": "intégral"
+    },
+    {
+      "file": "src-tauri/tauri.conf.json",
+      "coverage": "50-85"
+    },
+    {
+      "file": "src-tauri/Cargo.lock",
+      "coverage": "blocs reqwest/rustls/updater seulement"
+    },
+    {
+      "file": "package.json",
+      "coverage": "intégral"
+    },
+    {
+      "file": "src/App.tsx",
+      "coverage": "1-80"
+    },
+    {
+      "file": "src-tauri/src/probe.rs",
+      "coverage": "extraits modèles, requêtes/tests; 392-404,450-483,677-766 notamment"
+    },
+    {
+      "file": "src-tauri/src/host.rs",
+      "coverage": "310-378,520-554 et extraits hook"
+    },
+    {
+      "file": "src-tauri/src/types.rs",
+      "coverage": "410-425,500-518 et extraits historique/UI"
+    },
+    {
+      "file": "src-tauri/build.rs",
+      "coverage": "intégral"
+    }
+  ],
+  "reviewed_branches": [
+    {
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "type": "documentation exploratoire"
+    },
+    {
+      "branch": "origin/main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "type": "contre-vérification ciblée"
+    }
+  ],
+  "coverage_counts": {
+    "changed_files": 14,
+    "roadmap_documents": 13,
+    "research_documents": 4,
+    "roadmap_lines": 1612,
+    "added_lines": 1613
+  },
+  "checks": [
+    {
+      "command": "git rev-parse origin/application-chatgpt-like-interne",
+      "result": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "exit_code": 0,
+      "log_path": null
+    },
+    {
+      "command": "git diff --stat / --name-status e202cd1f8831abc0f69435b9e2d0d96dd491e841...1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "result": "14 fichiers, 1613 insertions, zéro suppression; 13 nouveaux documents dont quatre recherches + unique ajout AGENTS.",
+      "exit_code": 0,
+      "log_path": null
+    },
+    {
+      "command": "git merge-base e202cd1f8831abc0f69435b9e2d0d96dd491e841 1cabc9537f1fd76f05d6de335ea02879ea05358d; git log --oneline e202cd1f8831abc0f69435b9e2d0d96dd491e841..1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "result": "deb9f0d581e256a8f00e0fd65be6d6e89234ae50; un commit propre documentaire 1cabc95.",
+      "exit_code": 0,
+      "log_path": null
+    },
+    {
+      "command": "git show 1cabc9537f1fd76f05d6de335ea02879ea05358d:<chaque document>; git show e202cd1f8831abc0f69435b9e2d0d96dd491e841:<fichiers ciblés>; git diff e202cd1f8831abc0f69435b9e2d0d96dd491e841 1cabc9537f1fd76f05d6de335ea02879ea05358d -- src-tauri/src/inference.rs",
+      "result": "Documents lus intégralement, extraits tronqués repris; différences baseline confirmées, pas checkout ni modification dépôt.",
+      "exit_code": 0,
+      "log_path": "AUDIT_LOCAL/cache/terminal-output/out-1791597217-293980-7820.log"
+    },
+    {
+      "command": "Analyse JSON architecture/frontend/dependencies/security/native",
+      "result": "Constats et strengths lus/agrégés, IDs croisés sans compter nouveaux bugs du main.",
+      "exit_code": 0,
+      "log_path": null
+    },
+    {
+      "command": "web_extract 13 pages officielles + urllib 4 sources code officielles ciblées",
+      "result": "Succès extraction; alias OWUI et submit vérifiés code figé; contre-exemples window-state, async-openai, Aho-Corasick, Presidio et Edge établis.",
+      "exit_code": 0,
+      "log_path": null
+    },
+    {
+      "command": "git show e202cd1:src-tauri/src/http.rs / network.rs",
+      "result": "Chemins exploratoires absents, exit 128; inspection poursuivie via imports inference.rs et probe.rs, pas conclusion d’absence de client.",
+      "exit_code": 128,
+      "log_path": null
+    }
+  ],
+  "findings": [
+    {
+      "id": "ROAD-01",
+      "title": "Rebaser les constats historiques avant de planifier",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/03-architecture.md",
+      "lines": "3,10-23",
+      "evidence": "La branche ajoute uniquement 14 fichiers documentaires depuis merge-base deb9f0d581e256a8f00e0fd65be6d6e89234ae50. Main est 0.6.2, recherche lit refonte-reglages 0.6.0. Main inference.rs:109-120 n’a plus max_tokens=4096; :199-210 définit idle=120s, non total. Cargo.lock:3220-3260 a déjà reqwest 0.12.28 et 0.13.4. probe.rs:711 fait un seul user, max_tokens=60, température 0 et stream=false: duplication partielle de construction/compatibilité, pas même requête.",
+      "impact": "Un refactor peut réintroduire un plafond retiré ou une migration/de-duplication inutile; le refus de flux partiel reste à préserver.",
+      "recommendation": "Actualiser chaque constat avec SHA main et motif du comportement. Séparer bornes transport idle, deadline facultative par usage, budget sortie et limite mémoire. Ne pas fusionner la branche entière: ses différences deux-dot incluent du code ancien hérité.",
+      "confidence": "élevée",
+      "source_ids": [],
+      "related_audit_ids": [
+        "ARCH-03",
+        "SEC-02",
+        "ARCH-07"
+      ],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-02",
+      "title": "Statut « exploration » et cartes « décidé sur le fond » à harmoniser",
+      "severity": "P3",
+      "category": "dette",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/KANBAN.md",
+      "lines": "3,16-29",
+      "evidence": "README:3 et AGENTS ajout déclarent rien décidé; KANBAN:16 présente OT-001 à OT-008 comme décidés sur le fond. 07:37-47 attend les choix de Lucas. La colonne Origine Lucas trace la demande rapportée, pas une validation de ts-rs, stockage ou calendrier.",
+      "impact": "Une proposition peut être traitée comme exigence et devenir un faux défaut de main.",
+      "recommendation": "Distinguer demande utilisateur, principe proposé, choix technique recommandé, carte prête à discussion et ADR/release effectivement validé. Aucun choix nouveau réputé accepté dans cette revue.",
+      "confidence": "élevée",
+      "source_ids": [],
+      "related_audit_ids": [],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-03",
+      "title": "Persistance automatique, titres en clair et secrets: expliciter le contrat",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/03-architecture.md",
+      "lines": "97-106",
+      "evidence": "02:51 dit conversation jamais perdue; 03:106 recommande titres en clair; recherche briques:171 affirme clés ne quittent jamais Rust. Main AGENTS:9 impose historique explicitement opt-in/chiffré; lib.rs:584-595 renvoie bien les clés à settings/setup. history.rs:29-32,53-61 chiffre source/résultat mais conserve métadonnées.",
+      "impact": "Titre auto peut contenir client/personne/projet; persistence chat peut rendre ambigu le consentement existant et créer une nouvelle rétention de pièces jointes/pseudonymes.",
+      "recommendation": "Choisir consentement distinct ou commun chat/historique, TTL et suppression de toutes tables/pièces/correspondances. Préférer titres chiffrés + scan borné tant qu’un titre public n’est pas choisi explicitement. Restreindre exposition des clés aux éditeurs nécessaires, sans prétendre zéro secret en React.",
+      "confidence": "élevée",
+      "source_ids": [],
+      "related_audit_ids": [
+        "SEC-01"
+      ],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-04",
+      "title": "« Interne » décrit le point d’entrée, pas toute la chaîne provider",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/04-modeles.md",
+      "lines": "33-47,64-77",
+      "evidence": "05:13-16 considère interne sans masquage. Doc officielle Open WebUI offre des modèles OpenAI/Ollama/Functions et des outils serveur; un endpoint ATE peut relayer à un fournisseur externe ou activer une recherche distante. 04:22 permet surcharge utilisateur des rôles, tandis que OT-033 promet politiques admin.",
+      "impact": "Badge interne pourrait autoriser envoi non masqué à un backend réellement externe; surcharge utilisateur pourrait neutraliser la politique annoncée.",
+      "recommendation": "Déclarer destination et rétention en bout de chaîne par modèle/provider, outils et filtres; inconnu doit rester inconnu. Politique machine contraignante avec précédence explicite et refus backend, distincte des préférences surchargables. Valider API keys, droits, SSE, annulation et champs étendus sur instance ATE avant intégration.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S5",
+        "S7",
+        "S12"
+      ],
+      "related_audit_ids": [],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-05",
+      "title": "Passerelles URL: pas de garantie de temporarité ni de contrôle DLP",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/05-confidentialite-et-passerelles.md",
+      "lines": "20-35,76-87",
+      "evidence": "La roadmap reconnaît liens SaaS non documentés et q dans historique/proxy. La doc Open WebUI récupérée confirme auto-submit par défaut mais ne documente pas submit=false; le code figé le confirme. Purview documente un contrôle collage spécifique ainsi que d’autres activités: q évite ce chemin collage, sans prouver contournement de toute DLP ni inspection Edge assurée dans chaque tenant. README:13 dit encore ChatGPT sans fuite.",
+      "impact": "URL contient une copie durable même pour destination interne; case conversation temporaire ne prouve pas activation SaaS ni absence de logs/rétention. Seuils 7000/12000 sont marges proposées, pas limites contractuelles.",
+      "recommendation": "Préférer copier-ouvrir sans prompt dans URL pour textes sensibles, soumis à politique IT; afficher destination exacte, copie presse-papiers et incertitudes. Tester submit/temporary sur la version déployée, login/redirections/proxy compris. Supprimer wording sans fuite/anonymisé; conserver aperçu, rappel par type et mesure documents sans fuite sans garantie.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S6",
+        "S8",
+        "S13"
+      ],
+      "related_audit_ids": [],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-06",
+      "title": "Le dictionnaire Unicode et la ré-identification exigent plus qu’Aho-Corasick",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/recherches/2026-10-10-anonymisation-passerelles.md",
+      "lines": "114,139-145,179",
+      "evidence": "Aho-Corasick est présenté insensible casse/accents; API n’offre que ASCII case folding. Normaliser accents change offsets octets/caractères. Coréférence par nom de famille peut confondre deux Dupont; restauration tolérante pourrait réinsérer une mauvaise valeur. Presidio sans reconnaisseurs FR spécifiques est résumé en aucun français, alors que sa doc décrit moteurs et reconnaisseurs multi-langues configurables.",
+      "impact": "Masque incorrect, entité manquée, ou ré-identification erronée lors de la future implémentation; exclusion d’un benchmark serveur sur prémisse trop large.",
+      "recommendation": "Garder regex/Aho-Corasick comme briques; définir normalisation Unicode et map offsets vers original, bornes lexicales et chevauchements. Token opaque unique par session + table exacte, ne pas fusionner personnes sur seul patronyme; ambiguïtés soumises à aperçu. Presidio reste candidat serveur de comparaison, pas runtime client requis. Valider règles gitleaks/checksums et faux négatifs plutôt que simple compilation.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S10",
+        "S11"
+      ],
+      "related_audit_ids": [],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-07",
+      "title": "Deux alternatives établies sont écartées sur des limites configurables",
+      "severity": "P3",
+      "category": "option",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/recherches/2026-10-10-briques-techniques.md",
+      "lines": "31,90-94",
+      "evidence": "window-state est rejeté car sauve toutes positions/tailles, mais Builder offre with_state_flags, denylist, filter, skip_initial_state. async-openai est dit imposer rustls; Cargo officiel main propose native-tls. Main Cargo.lock contient déjà deux reqwest liés à usages légitimes. Ce ne sont pas des raisons d’adopter automatiquement les libs.",
+      "impact": "Réinvention future non justifiée ou montée globale de dépendances prématurée; slogan une seule techno confondu avec une version transitive unique.",
+      "recommendation": "Comparer persistance taille seule maison vs plugin Rust filtré chat/SIZE: code ajouté, comportement show/restore, coût dépendance. Garder client reqwest actuel est raisonnable pour compatibilité/replis; benchmarker API SDK avec TLS natif si expansion justifie migration. Ne monter rusqlite/reqwest que sur besoin/compatibilité/advisory prouvé, pas latest.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S2",
+        "S14"
+      ],
+      "related_audit_ids": [
+        "DEP-001",
+        "ARCH-03"
+      ],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-08",
+      "title": "Tests verts et capture réutilisée « telle quelle » ne suffisent pas",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/03-architecture.md",
+      "lines": "25,80-91",
+      "evidence": "Le lot 0 demande tests existants verts; 07:21-25 ajoute vraie fenêtre/captures et corpus, utile mais pas tests contractuels multi-session. Audit natif relève des limites concrètes de revalidation/provenance/collage et blocages UI; générer types ne produit pas permissions Tauri. build.rs main:1-3 appelle seulement tauri_build::build(). ts-rs ne traduit qu’une partie des attributs serde.",
+      "impact": "Chat peut conserver une vieille cible remplaçable, abonnement Channel après recharge peut perdre/rejouer deltas, nouvelles surfaces peuvent appeler commandes non autorisées; stabilité des tests historiques ne démontre aucun de ces invariants.",
+      "recommendation": "Avant refactor: fixture HTTP/SSE fragmentation Unicode, DONE sans EOF, erreurs bornées, délais/cancel; 2 sessions concurrentes, stale IDs, rechargement/reconnexion Channel et snapshot; pont sérialisation Option/enums et CI export types; appels IPC autorisés/refusés selon fenêtre; migration/reprise sans duplication, consentement/purge; Windows focus/DPI/UIPI/Office/Edge et clips multiformats. Réutiliser modules natifs après traitement des constats parent, pas recopier leur état.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S1",
+        "S3",
+        "S15"
+      ],
+      "related_audit_ids": [
+        "NATIVE-001",
+        "NATIVE-002",
+        "NATIVE-003",
+        "NATIVE-005",
+        "SEC-03",
+        "NATIVE-011",
+        "ARCH-04"
+      ],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-09",
+      "title": "Extension et geste souris: coût/scope et modèle de confiance à fixer",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/02-surfaces-et-gestes.md",
+      "lines": "73-90",
+      "evidence": "Recherche passerelles:67 écarte extension, surfaces:74 et recherche Windows phase1 la recommandent, KANBAN:60 la laisse à explorer. Main host.rs:319-335 n’arme WH_MOUSE_LL que pendant marques; :347-365 observation/CallNextHookEx, pas geste permanent consommé. Policy Edge confirme host HKCU interdit si NativeMessagingUserLevelHosts=false.",
+      "impact": "Geste disponible au repos nécessite lifecycle différent; vrai contextMenus coûte host/framing/relay + content script distinct, hors règle React seul affichage. Surface non fiable supplémentaire vers IPC/fichiers/providers.",
+      "recommendation": "Réconcilier extension dédiée geste navigateur vs extension passerelle; ADR coûts séparés, pas dépendance obligatoire du chat. Native messaging allowed_origins précis + schéma, limites app inférieures limites protocole, chemins canonisés, pas argv/shell arbitraire, source/contenu non fiables et destination admin. Tests down+up, exclusions, retries hook sans bloquer callback; validation policies sur parc réel. Sparse package/Copilot: preuve Windows avant promesse.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S9"
+      ],
+      "related_audit_ids": [
+        "NATIVE-005"
+      ],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    },
+    {
+      "id": "ROAD-10",
+      "title": "Outils serveur/MCP: même consentement que la boucle locale",
+      "severity": "P2",
+      "category": "risque",
+      "branch": "origin/application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "file": "docs/roadmap/07-trajectoire.md",
+      "lines": "25",
+      "evidence": "Recherche briques:119 dit MCP pas en v1, trajectoire le place 1.0. Vision:59 exige confirmation de toute action à effet de bord; recherche briques:115 propose toujours autoriser, schéma 03:101 décision auto. Open WebUI peut exécuter tool_ids côté serveur sans carte locale de chaque opération. Spec MCP traite annotations readOnlyHint non fiables hors serveurs de confiance.",
+      "impact": "Une permission générale ou outil distant peut exécuter effet de bord non présenté, même si aucune boucle shell autonome n’est livrée.",
+      "recommendation": "Clarifier V1/release et périmètre tools. Préférer intégration RAG seule d’abord; si outils serveur, vérifier protocole d’approbation ou désactiver effets de bord non interceptables. Autorisation attachée serveur+outil+schéma+arguments+conversation; approbation spécifique pour écritures, limites itérations/durée/taille, cancellation et résultats non fiables. Pas d’approbation dérivée d’une annotation seule.",
+      "confidence": "élevée",
+      "source_ids": [
+        "S5",
+        "S12"
+      ],
+      "related_audit_ids": [],
+      "applies_to": "document exploratoire / critères du futur projet, pas défaut nouveau de main"
+    }
+  ],
+  "decisions": [
+    {
+      "topic": "Demandes explicites rapportées",
+      "status": "besoins utilisateur consignés, pas acceptance technique",
+      "evidence": "README:5; 05:7-9; KANBAN colonne Origine",
+      "description": "chat local, barre, passerelles ChatGPT/Open WebUI avec masquage, gestes Windows/clic droit, usages bureautiques/logs. La dictée « Hermès Sophie final » reste interprétation incertaine, non exigence produit vérifiée."
+    },
+    {
+      "topic": "Contrats main à conserver",
+      "status": "actuels, code et AGENTS/UI-DECISIONS",
+      "evidence": "main AGENTS:8-15; lib.rs:584-595; useTranslation.ts:47-58",
+      "description": "Revalidation de cible, presse-papiers, pas de contenu dans journaux, historique opt-in DPAPI, composants établis, preuve vraie fenêtre Windows. Rendu en bloc Îlot intentionnel pour limiter resize natif, non bug streaming."
+    },
+    {
+      "topic": "Principes nouveaux",
+      "status": "proposés",
+      "evidence": "01:3,51-59; 03:3,45-78",
+      "description": "Trois surfaces/un moteur, rôles, jamais repli externe silencieux, aperçu pour sortie externe, confirmation des effets de bord; Rust réseau/données et React affichage. Aucun ADR accepté fourni."
+    },
+    {
+      "topic": "Choix de briques et calendrier",
+      "status": "recommandations, pas engagements",
+      "evidence": "03:65-91; 07:3,19-25; KANBAN:16-29",
+      "description": "ts-rs, Channel, markdown, migrations, montée rusqlite, registre modèles, MCP et phases 0.7→1.0 proposés. Carte « prêt à planifier » ne valide pas release."
+    },
+    {
+      "topic": "Arbitrages Lucas",
+      "status": "ouverts explicitement",
+      "evidence": "02:96-103; 03:104-108; 07:37-47",
+      "description": "Noms, focus/Alt+Tab, raccourci, geste souris, matière, stockage/recherche et titres, mémoire des fenêtres, ordre chat/passerelles, destinations et démarches IT."
+    },
+    {
+      "topic": "Cas d’usage et performances",
+      "status": "hypothèses à mesurer",
+      "evidence": "06:3-5,72-76; recherches paysage §3",
+      "description": "Pastilles local et recommandation taille/contexte 14B/64k ne sont pas benchmarks. Mesurer correction/extraction FR+EN, JSON, logs, OCR, NER et outils sur modèles effectivement déployés; taille paramètres n’est pas garantie de fiabilité."
+    }
+  ],
+  "solutions": [
+    {
+      "choice": "Radix + Motion + Lucide + cmdk; CSS/tokens existants",
+      "assessment": "Convergence forte avec FE: primitives déjà réellement réutilisées. Pas de motif pour migrer vers Tailwind/HeroUI du prototype.",
+      "tradeoff": "Garder comportements accessibles; corriger focus/Field/store selon FE plutôt que remplacer framework."
+    },
+    {
+      "choice": "reqwest + Tokio + serde + client SSE existant",
+      "assessment": "Convergence: TLS natif entreprise et replis provider déjà précieux. Un module LLM est opportunité, pas obligation de SDK.",
+      "tradeoff": "La généralisation doit traiter limites SSE/DONE du main, fragments tool_calls, reasoning et budgets par usage; async-openai native-tls est alternative, non rustls obligé."
+    },
+    {
+      "choice": "ts-rs + Tauri Channel",
+      "assessment": "Bon candidat: unique source shapes et flux ordonnés; docs Tauri confirment Channel adapté au streaming.",
+      "tradeoff": "ts-rs n’exporte pas automatiquement noms/args de commandes/événements, permissions, defaults ni tous attributs serde. Conserver enveloppes IDs et tests de contrat; snapshot/reconnexion/session au-delà du transport."
+    },
+    {
+      "choice": "react-markdown + remark-gfm; remend; Shiki moteur JS",
+      "assessment": "Briques établies de rendu React et coloration sans WASM; remend option de réparation de markdown incomplet, non contrôle sécurité.",
+      "tradeoff": "HTML/images externes désactivés, URL/protocoles et ouverture contrôlés en Rust; tests injection, CSP et coût parsing. Flux chat seulement d’abord; ne pas changer geste Îlot sans choix produit. Streamdown écarté pour adéquation produit, pas vulnérabilité prouvée."
+    },
+    {
+      "choice": "rusqlite + DPAPI + migrations user_version",
+      "assessment": "Convergence avec stockage existant. FTS sur texte chiffré par ligne ne procure pas recherche du plaintext; scan borné raisonnable pour petit volume.",
+      "tradeoff": "Nouvelle version non requise par simple nouvelle table. Titres chiffrés vs recherche indexée SQLCipher: arbitrage performance/build/rétention, pas ajout systématique. Une seconde base de recherche est suggestion recherche, cible une seule base dans 03."
+    },
+    {
+      "choice": "regex + Aho-Corasick; détecteur LLM interne",
+      "assessment": "Briques pertinentes sans nouveau runtime; prompts entités validés littéralement et aperçu sont bons garde-fous.",
+      "tradeoff": "Unicode/spans/coréférence et faux négatifs à tester. Presidio benchmark serveur possible; GLiNER/camembert/ONNX options lourdes, chiffres tiers non transposables et non revalidés ici."
+    },
+    {
+      "choice": "windows-rs OCR + calamine/pdf-extract + zip/quick-xml",
+      "assessment": "Réutilisation Windows existante et parseurs spécialisés préférables à extraction entièrement maison. panic=abort main confirme utilité du sous-processus.",
+      "tradeoff": "Processus séparé n’est pas sandbox. Bornes mémoire/temps/archive/XML, files allowlist et permissions minimales à définir; extraction DOCX « 80 lignes » ne couvre pas tableaux/headers/notes. Aucun parseur installé ni fichier hostile testé."
+    },
+    {
+      "choice": "Open WebUI back-office/provider, vLLM direct pour geste court",
+      "assessment": "Bonne réduction de réinvention RAG/admin; composition base /api + /v1 routes confirmée par code OWUI figé et main.",
+      "tradeoff": "API expérimentale, permissions et latence, filtres et provider final; simple URL correcte ne valide pas streaming, citations ou gouvernance tools."
+    },
+    {
+      "choice": "rmcp client Rust et garde d’approbation",
+      "assessment": "SDK officiel préférable à réimplémenter protocole MCP, quand besoin validé.",
+      "tradeoff": "Maturité/versions et budget migration à vérifier au jalon; auth/SSRF/stdio/policies/approval restent à l’app. Pas de service MCP, serveur local ou installation automatique requise maintenant."
+    },
+    {
+      "choice": "window-state; contextMenus/native messaging; sparse package",
+      "assessment": "Alternatives idiomatiques pour persistance et intégrations natives.",
+      "tradeoff": "window-state se filtre; extension = deuxième frontend/host et parc géré; sparse = certificat/COM/déploiement Windows. Ne pas transposer menus fichier à sélection texte universelle; absence API globale reste conclusion architecturale, pas théorème vérifié par test."
+    }
+  ],
+  "limitations": [
+    "Aucun test runtime exécuté dans cette mission documentaire; pas de build/installation, pas de service, GPU, modèle téléchargé ou endpoint personnel contacté. Les checks ci-dessous sont lectures/diffs/extractions réels, pas benchmark.",
+    "Pas de test natif Windows/Office/WebView2, coût mémoire, hook, installation sparse, OCR ou native messaging; tous exigent pilote sur parc ATE.",
+    "Pas de session SaaS authentifiée ni mesure de liens q/temporary/longueur; pas de corpus sensible reçu ni anonymisation garantie. Aucune analyse juridique ni avis légal fourni.",
+    "Versions récentes, F1 NER, popularité/stars et fonctionnalités de tous concurrents ne sont pas revalidés exhaustivement; éléments rapportés dans paysage restent inspiration, pas preuve de compatibilité.",
+    "Autres branches et audit complet main restent rôle du parent/spécialistes; ici seulement branche nouvelle et contre-vérifications ciblées. Findings parents cités pour convergence, pas reproduits runtime par cette mission.",
+    "Exclusions de bibliothèques sont jugements produit. Sources docs.rs/latest et main tierces sont mutables; captures de leur capacité ici ne prouvent pas API de chaque version citée dans roadmap. OWUI contre-vérifié sur commit 8bd8b4fa."
+  ],
+  "strengths": [
+    "Statut exploratoire visible; sources datées distinguant CODE/ANNONCÉ/RAPPORTÉ/DÉDUIT et limites méthodologiques.",
+    "Convergence avec audits: limites par session et refactor lib.rs; primitives Radix/Motion et Rust réseau/données; préserver UIA/clipboard/DPAPI plutôt que les réécrire.",
+    "Corpus FR+EN, rappel par entité et taux document sans fuite, preview humain, pas fallback cloud silencieux et absence de promesse NER sont bonnes directions.",
+    "Réutiliser Open WebUI gouverné et parseurs/OCR établis; outils et ONNX différés; calculs déterministes dans app plutôt que modèle."
+  ],
+  "sources": [
+    {
+      "id": "S1",
+      "url": "https://v2.tauri.app/develop/calling-frontend/",
+      "result": "Tauri recommande Channel pour flux rapides/ordonnés; événements JSON sans ACL fine du contenu.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S2",
+      "url": "https://docs.rs/tauri-plugin-window-state/latest/tauri_plugin_window_state/struct.Builder.html",
+      "result": "Builder window-state configurable: flags, denylist, filter, skip_initial_state.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S3",
+      "url": "https://github.com/remarkjs/react-markdown",
+      "result": "react-markdown: rendu React, HTML brut non interprété par défaut; plugins et URL personnalisées restent à sécuriser.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S4",
+      "url": "https://shiki.style/guide/regex-engines",
+      "result": "Shiki propose moteur RegExp JavaScript sans WASM; contrôler grammaires et cible WebView2.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S5",
+      "url": "https://docs.openwebui.com/reference/api-endpoints/",
+      "result": "API Open WebUI expérimentale; authentification, RAG, outils MCP et filtres disponibles; doc expose routes /api sans prouver tous alias /api/v1.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S6",
+      "url": "https://docs.openwebui.com/features/chat-conversations/chat-features/url-params/",
+      "result": "q soumis automatiquement par défaut; temporary-chat documenté; submit=false non retrouvé dans cette page récupérée.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S7",
+      "url": "https://raw.githubusercontent.com/open-webui/open-webui/8bd8b4fa/backend/open_webui/main.py",
+      "result": "Code figé 8bd8b4fa: alias /api/v1/models et /api/v1/chat/completions confirmés lignes 897-898,1108-1109.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S8",
+      "url": "https://raw.githubusercontent.com/open-webui/open-webui/8bd8b4fa/src/lib/components/chat/Chat.svelte",
+      "result": "Code figé 8bd8b4fa: submit=false inhibe envoi à 2246; temporary-chat traité à 2038.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S9",
+      "url": "https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/nativemessaginguserlevelhosts",
+      "result": "Politique Edge officielle confirme blocage des hosts natifs HKCU si NativeMessagingUserLevelHosts désactivée.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S10",
+      "url": "https://microsoft.github.io/presidio/analyzer/languages/",
+      "result": "Presidio extensible à plusieurs langues avec moteur NLP et reconnaisseurs adaptés; absence de détecteurs FR spécifiques ≠ impossibilité de traiter FR.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S11",
+      "url": "https://docs.rs/aho-corasick/latest/aho_corasick/struct.AhoCorasickBuilder.html",
+      "result": "ascii_case_insensitive ne traite que lettres ASCII; pas de normalisation accents/Unicode intégrée.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S12",
+      "url": "https://modelcontextprotocol.io/specification/latest/server/tools",
+      "result": "Approbation humaine et validation; annotations outils non fiables hors serveurs de confiance.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S13",
+      "url": "https://learn.microsoft.com/en-us/purview/endpoint-dlp-learn-about",
+      "result": "Paste to supported browsers est un contrôle spécifique; autres contrôles upload/domaines existent. Pas de preuve de contournement général ou blocage garanti de q.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S14",
+      "url": "https://raw.githubusercontent.com/64bit/async-openai/main/async-openai/Cargo.toml",
+      "result": "Cargo.toml officiel main async-openai: rustls par défaut mais native-tls optionnel. Ref mutable, pas une certification du paquet 0.42.2.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    },
+    {
+      "id": "S15",
+      "url": "https://docs.rs/ts-rs/latest/ts_rs/",
+      "result": "ts-rs serde-compat traduit une liste bornée d’attributs; skip_serializing_if a des contraintes, skip_deserializing ignoré et attributs non pris en charge avertis.",
+      "consulted_date": "2026-10-10",
+      "scope": "contre-vérification ciblée, pas audit complet de la bibliothèque"
+    }
+  ],
+  "agency_guides_used": [
+    "testing/testing-tool-evaluator.md",
+    "engineering/engineering-software-architect.md"
+  ],
+  "publication": "aucune publication par ce sous-agent; fichiers seuls destinés au parent"
+}

@@ -1,0 +1,452 @@
+{
+  "main_sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+  "initial_count": 35,
+  "addendum_count": 2,
+  "count": 37,
+  "classification_initial": {
+    "ancêtre": 17,
+    "partiellement repris": 5,
+    "patch-equivalent/squash": 10,
+    "abandonné historique": 2,
+    "travail unique restant": 1
+  },
+  "branches": [
+    {
+      "name": "chore/ui-iteration-workbench",
+      "sha": "afec21d4d9faec4856cb106832ab0543444b8876",
+      "ahead": 0,
+      "behind": 213,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor afec21d4d9faec4856cb106832ab0543444b8876 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "claude/great-keller-6dwrqd",
+      "sha": "488eae22a879f19d51bac38c40479e2c0d18d765",
+      "ahead": 0,
+      "behind": 178,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 488eae22a879f19d51bac38c40479e2c0d18d765 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "codex/multi-editor-replacement",
+      "sha": "86b3b23f217b4e26976815fca253397012a6cd4b",
+      "ahead": 9,
+      "behind": 191,
+      "classification": "partiellement repris",
+      "assessment": "PR6 : garde multiformat et Ctrl+V repris par 2404ed2b4e5d82c83112d9e8664d97e5d45d3011, renforcés en 4e1dfa7c376d54c81944648612e3c98f02bd8c27. La preuve du document entier et copied_range ne sont volontairement plus préconditions du collage (UI-DECISIONS:21-24). La matrice Edge réelle, iframe/Shadow DOM, Unicode, texte autour, insertFromPaste et Ctrl+Z reste absente. Préserver les cas, pas le moteur strict ancien.",
+      "evidence": [
+        "src-tauri/src/capture.rs:215-315,556-637; src-tauri/src/clipboard_guard.rs; docs/UI-DECISIONS.md:19-25; scripts/capture-matrix.mjs"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "da-ilot",
+      "sha": "26aaa399c12337ebd64b50c7b9e1ac022b6b449f",
+      "ahead": 0,
+      "behind": 42,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 26aaa399c12337ebd64b50c7b9e1ac022b6b449f e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "design/glass-reader",
+      "sha": "7d67ab5c34ad78d5a6be8a4f20815f0848f076d3",
+      "ahead": 0,
+      "behind": 246,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 7d67ab5c34ad78d5a6be8a4f20815f0848f076d3 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/actions-shortcuts-settings",
+      "sha": "3f2aee15710d31118a1b2e885f23d3866e11dff3",
+      "ahead": 0,
+      "behind": 192,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 3f2aee15710d31118a1b2e885f23d3866e11dff3 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/actions-that-work",
+      "sha": "e8df897a3b11dd285cc6e3b3d32eb07c9078a495",
+      "ahead": 0,
+      "behind": 186,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor e8df897a3b11dd285cc6e3b3d32eb07c9078a495 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/direct-capture",
+      "sha": "74aefa69027d48441d3428493a9ce4a8fab03385",
+      "ahead": 0,
+      "behind": 207,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 74aefa69027d48441d3428493a9ce4a8fab03385 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/frontend",
+      "sha": "d4681e439123f0b91e64734d14e8c67391eb5f85",
+      "ahead": 0,
+      "behind": 279,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor d4681e439123f0b91e64734d14e8c67391eb5f85 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/frontend-primitives",
+      "sha": "b9d6eb42e8d1f8692bacc4bdce07ec0e525fd23b",
+      "ahead": 1,
+      "behind": 255,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: b9d6eb42e8d1f8692bacc4bdce07ec0e525fd23b = 26cd43183ca1592798dd8894d72797437b0b1a03"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/glass-frontend",
+      "sha": "170f96f7e26da3c0b6a15909764a9da6c251d41a",
+      "ahead": 1,
+      "behind": 246,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 170f96f7e26da3c0b6a15909764a9da6c251d41a = 2d09e260e8a8e39b036d0fd97002b778faad27bb"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/glass-material",
+      "sha": "058d348979239a401f619abfec09a75630a92ef5",
+      "ahead": 1,
+      "behind": 237,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 058d348979239a401f619abfec09a75630a92ef5 = 421541dcb624b8803e8da19c53f6deaf1636d4b2"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/glass-native",
+      "sha": "f742599122bbeb5df9b542ca02457192ef0bd832",
+      "ahead": 2,
+      "behind": 246,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: b8ab47b8f2c293fb5f69d4b6d77b03d1616ff28e = 2a698953627f4dbf2bdf3a11477139c061655dee",
+        "patch-id --stable: f742599122bbeb5df9b542ca02457192ef0bd832 = a24f19e3b507f8ece28509a04b479ad544fbf132"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/glass-native-polish",
+      "sha": "02b1fe8d47f0322e3f580369b5de386a1f984828",
+      "ahead": 1,
+      "behind": 237,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 02b1fe8d47f0322e3f580369b5de386a1f984828 = b5dbe0ba8be63ae88d097c457a6dce29bec8fbcd"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/glass-reader",
+      "sha": "5005b026de73de235ea140f2dd1d8eb3f766e09e",
+      "ahead": 0,
+      "behind": 233,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 5005b026de73de235ea140f2dd1d8eb3f766e09e e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/native",
+      "sha": "0dc02bbf1bbdfcb2ebfedbfe121c48bacdc4d9ca",
+      "ahead": 0,
+      "behind": 265,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 0dc02bbf1bbdfcb2ebfedbfe121c48bacdc4d9ca e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/reading-band",
+      "sha": "a1d903190e8c65abfd502b1435fffb0a730c16a2",
+      "ahead": 0,
+      "behind": 203,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor a1d903190e8c65abfd502b1435fffb0a730c16a2 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/release-and-endpoints",
+      "sha": "83ebebb91f6c0d4c8a55556dff06c55e54c644cd",
+      "ahead": 0,
+      "behind": 200,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 83ebebb91f6c0d4c8a55556dff06c55e54c644cd e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "feat/0.5.0-design-1.0",
+      "sha": "3ea09e6c2a2047b5c40133482dd0e151ee01db40",
+      "ahead": 4,
+      "behind": 185,
+      "classification": "abandonné historique",
+      "assessment": "Documents, tokens et prototypes Graphite & Surligneur, pas une implémentation runtime 0.5. REPRISE déclare que le portage n’a jamais été fusionné, trois unités WIP non vérifiées. Les décisions du 24/09 remplacent ce plan par Îlot puis Porcelaine 0.6. Le renommage Verso et changement de bundle ID sont périmés; main garde com.flowtranslate.desktop pour les données.",
+      "evidence": [
+        "branche docs/0.5.0/REPRISE.md; main AGENTS.md:8-9; docs/UI-DECISIONS.md:51-84; src/theme.css"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "fix/compact-draggable-bubble",
+      "sha": "99a019d3a77eaf4ee15de354e09990e51d4a6bb5",
+      "ahead": 0,
+      "behind": 247,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 99a019d3a77eaf4ee15de354e09990e51d4a6bb5 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "fix/native-window",
+      "sha": "28e2f0eac7a2a9bb662bdbe4b3716ad362ecff01",
+      "ahead": 2,
+      "behind": 259,
+      "classification": "partiellement repris",
+      "assessment": "544f6c28 patch-identique à 11b94bfb. Le deuxième commit est non équivalent, mais son intention est reprise : clamp et manual_position_stays_in_offset_work_area_after_resize existent sur main; compensate_pointer_drag et start_drag traitent le déplacement retardé, sans réintroduire son crochet souris global. Aucun correctif de drag actuellement manquant démontré.",
+      "evidence": [
+        "src-tauri/src/placement.rs:45-62,202-218; src-tauri/src/host.rs:652; src-tauri/src/lib.rs:2618-2670",
+        "patch-id --stable: 544f6c28ef60062795b2510f385cbc45289c447c = 11b94bfb447f2bc9b9dbf2b22a9b2e866f45d4f2"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "fix/scoped-drag",
+      "sha": "fcb5c0196468258f62c11bf6f96d730e04cb8bc8",
+      "ahead": 2,
+      "behind": 252,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 119f51d1d108ce40d44e5b7b2a26aa429f90f586 = d920a5fc83ec23c60126dbd17e2b6212846e56f8",
+        "patch-id --stable: fcb5c0196468258f62c11bf6f96d730e04cb8bc8 = ec71d1416da13deea11152dd32753314597d09e4"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "fix-endpoint-tls",
+      "sha": "dd4b218be9b432b734853e841179ac9762318ec5",
+      "ahead": 0,
+      "behind": 37,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor dd4b218be9b432b734853e841179ac9762318ec5 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "main",
+      "sha": "e202cd1f8831abc0f69435b9e2d0d96dd491e841",
+      "ahead": 0,
+      "behind": 0,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor e202cd1f8831abc0f69435b9e2d0d96dd491e841 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "refonte-reglages",
+      "sha": "deb9f0d581e256a8f00e0fd65be6d6e89234ae50",
+      "ahead": 0,
+      "behind": 4,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor deb9f0d581e256a8f00e0fd65be6d6e89234ae50 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "release/frontend-0.1.5",
+      "sha": "127fb7fb70b7c0cd830379855bfd7339597ed91e",
+      "ahead": 1,
+      "behind": 233,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 127fb7fb70b7c0cd830379855bfd7339597ed91e = bdd05ea7794300f04d88c2616db94cdbc57c8e68"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "release/guide-0.1.5",
+      "sha": "81f850333e7884b4497a6dd147ae00d1d409d54a",
+      "ahead": 1,
+      "behind": 228,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 81f850333e7884b4497a6dd147ae00d1d409d54a = 269ad73bfe5034a5664b63c66b38d3a1b428cac8"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "release/native-0.1.5",
+      "sha": "efe3abd5c9d73f9a748880e75a55cb4f9096d27b",
+      "ahead": 1,
+      "behind": 233,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: efe3abd5c9d73f9a748880e75a55cb4f9096d27b = 0c730aba031e91c110164f5c5483167e62f20890"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "release/server-0.1.5",
+      "sha": "8281476d4bcac7d74305532d26bd3cf2cf46c8da",
+      "ahead": 3,
+      "behind": 233,
+      "classification": "patch-equivalent/squash",
+      "assessment": "Tous les commits non-ancêtres ont un patch-id stable identique à un commit main. Aucun delta manquant par identité de patch; les modifications ultérieures main et décisions actuelles priment sur le snapshot historique.",
+      "evidence": [
+        "patch-id --stable: 1c65bd1d36c7d096c5038efa2e0d6b083fa969e2 = 4dea4e286b506ca528b4000c8f866b50c0a042fe",
+        "patch-id --stable: 5d20a3a50302c971ecd5fd21a7b47bcf629be1ab = 30cf40fac140423d985ca78e02ff6398ef4c7a54",
+        "patch-id --stable: 8281476d4bcac7d74305532d26bd3cf2cf46c8da = d5ecd2a85d78347bf4c0da2fda7f092d5d918464"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "release/0.1.5",
+      "sha": "2f83abc75f19a68c28eea6ee408265592bd08347",
+      "ahead": 0,
+      "behind": 225,
+      "classification": "ancêtre",
+      "assessment": "Tip égal à main ou accessible depuis main : aucun delta de branche non intégré par ascendance. Cela ne garantit pas que chaque comportement historique a été conservé après les refontes.",
+      "evidence": [
+        "git merge-base --is-ancestor 2f83abc75f19a68c28eea6ee408265592bd08347 e202cd1f8831abc0f69435b9e2d0d96dd491e841 => 0"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "wt-050-atelier",
+      "sha": "5b5f6a56962f59202d2ea127daf52cedf0439ba5",
+      "ahead": 4,
+      "behind": 185,
+      "classification": "travail unique restant",
+      "assessment": "Atelier à scénarios Réglages séparés, thème système (ancienne règle), signal settings-ready borné, captures et tsconfig.test.json. Main a un labo Îlot/résultat/halo, thème explicite dans URL et des visual-tests : pas besoin de restaurer le labo entier ni d’interdire ses thèmes forcés. Le contrôle TypeScript des e2e/visual-tests est une petite amélioration autonome réellement absente du graphe build main.",
+      "evidence": [
+        "branche tsconfig.test.json:1-24, tsconfig.json; main tsconfig.json:1-4, tsconfig.app.json:20, tsconfig.node.json:15, package.json:13; src/lab/frame.tsx:87-129"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "wt-050-marque",
+      "sha": "1e2c6097d66573e20e2a002b3d8ada1ceb1abcd8",
+      "ahead": 3,
+      "behind": 185,
+      "classification": "abandonné historique",
+      "assessment": "Icônes graphite jaunes et six variantes tray + générateur Chromium/encodeur PNG/ICO/contrôle. Assets et scripts uniques mais liés au design rejeté, pas une dette fonctionnelle du produit actuel. Ne pas importer les encodeurs PNG/ICO maison simplement parce qu’ils existent. Les ressources tray attendues par wt-050-natif ne rendent pas cette branche intégrable seule.",
+      "evidence": [
+        "branche scripts/build-icons.mjs:1-160, scripts/check-icons.mjs; main AGENTS.md:8-9; src-tauri/icons; src-tauri/src/lib.rs"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "wt-050-natif",
+      "sha": "1fcdd21f0aadd5a36978e47e6530b9fe9f1c74bd",
+      "ahead": 2,
+      "behind": 185,
+      "classification": "partiellement repris",
+      "assessment": "Route ciblée vers Réglages, copie de l’historique par identifiant, retours connexion et sauvegarde de migration ont des successeurs main, mais la récupération des paramètres illisibles et la garde actions.first() n’ont pas été reprises. schemaVersion, réconciliation Run et tray thème séparé restent du WIP; ni build ni test historiques confirmés par cet audit. Schéma profils fast/quality ancien incompatible avec les serveurs 0.6; reprendre uniquement les comportements de récupération et leurs tests adaptés.",
+      "evidence": [
+        "branche src-tauri/src/settings.rs:162-167,198-240,453-635; main src-tauri/src/settings.rs:184-274; src-tauri/src/lib.rs:3204-3234; src/bridge.ts; src-tauri/src/legacy_autostart.rs"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "wt-050-reglages",
+      "sha": "5da6010e2af1516c29bb1ff0e0281ef8f8778b6b",
+      "ahead": 4,
+      "behind": 185,
+      "classification": "partiellement repris",
+      "assessment": "Fenêtre Actions/Lecture/Moteurs/Confidentialité, draft d’adresse validé au blur, sérialisation des saves, ciblage settings-target et nouveaux e2e. Main livre d’autres pages, serveurs multiples, form/probe et interface bilingue à travers 9418959,658de210,4e2e9f81; donc les anciens moteurs fast/quality et libellés FR ne sont pas des features manquantes. Le startup notice de récupération est perdu avec le backend natif. Tests historiques non exécutés : ne pas cherry-pick tout le front.",
+      "evidence": [
+        "branche src/settings/EnginesPage.tsx:55-84, src/settings/SettingsWindow.tsx, e2e/settings*.ts; main src/settings/pages/Server.tsx, src/settings/useSettingsStore.ts, src/connection; docs/PLAN-0.6.md"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "wt-050-verre",
+      "sha": "c5345af95ec9fa6ac00cdea1444aba09cd4ba375",
+      "ahead": 2,
+      "behind": 185,
+      "classification": "partiellement repris",
+      "assessment": "Tokens Graphite, icônes, étiquette action, erreur persistante hors budget et open_settings ciblé via overlay-ipc. Apparence rejetée; défauts UX/erreurs ont des successeurs dans ilot/result, mais le GlassOverlay actuel conserve le budget même pour phase error et efface toute erreur de feedback après 3 s. Ne pas assimiler le parcours Îlot au verre « Afficher le résultat ». splitReason sur ponctuation est moins solide que les erreurs structurées main.",
+      "evidence": [
+        "branche src/GlassOverlay.tsx:208-350, src/overlay-ipc.ts, src/useTranslation.ts; main src/GlassOverlay.tsx:240,294-300,349-382; src/ilot/result; src/bridge.ts"
+      ],
+      "integration_policy": "Aucune fusion/suppression. Si reprise demandée ultérieurement : transplant de comportement/tests sur main, pas remplacement par le snapshot de branche."
+    },
+    {
+      "name": "audit/claude-code-flow-9-sous-agents",
+      "sha": "aa2a23e0d6f1f8ab7476d8d70fce7b41f5cd116b",
+      "classification": "audit externe ajouté pendant mission",
+      "evidence": "AUDIT.md, 765 lignes lues, 118 IDs classés; voir comparison-claude.md"
+    },
+    {
+      "name": "application-chatgpt-like-interne",
+      "sha": "1cabc9537f1fd76f05d6de335ea02879ea05358d",
+      "classification": "roadmap ajoutée pendant mission",
+      "evidence": "14 fichiers de delta, 13 documents lus; voir comparison-roadmap.md"
+    }
+  ]
+}

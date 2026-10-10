@@ -640,6 +640,17 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     void fadeCorner(element, false, motionNow.current.tokens, motionNow.current.reduced).then(faded);
   };
   hideRef.current = hide;
+  // A corner that takes its place at once while the shape still springs carries the shape as it
+  // is painted now (MorphSurface's box): until it rests, every width it paints hangs from that one
+  // corner, between this one and its own; in the margin its left edge reaches past the place's
+  // meanwhile. The region holds that box too, until the spring's end settles it.
+  const carried = (box: IlotShapeBox): IlotShapeBox[] => {
+    const element = springing.current ? cornerRef.current?.querySelector('[data-ilot-shape]') : null;
+    const now = element?.getBoundingClientRect();
+    return now && now.width > 0 && now.height > 0
+      ? [{ width: now.width, height: now.height, shift: box.shift, dy: box.dy }]
+      : [];
+  };
   // Out of sight: a shape that kept its left edge past the window's edge (blocked, above) comes
   // back in it, where its slide holds it.
   const snapHome = () => {
@@ -647,7 +658,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     if (!side || !size) return;
     const home = boxOf(size);
     if ((home.shift ?? 0) === cornerAt.current.x && (home.dy ?? 0) === cornerAt.current.y) return;
-    span.current = [...span.current.map((shape) => boxOf(shape)), home];
+    span.current = [...span.current.map((shape) => boxOf(shape)), home, ...carried(home)];
     void publish(ilotRegion(presentation, side, ...span.current));
     moveCorner({ x: home.shift ?? 0, y: home.dy ?? 0 }, 'instant');
   };
@@ -686,14 +697,14 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     if (!moving.current) settle();
   };
   // Out of sight: the corner takes its place at once, the region with it (the boxes painted since
-  // the surface last rested, at the new place).
+  // the surface last rested, at the new place, and the shape still on its spring, carried).
   const jump = (place: IlotPlace | null, pillSide: PillSide | null) => {
     const size = shapeNow.current;
     if (!side || !size) return;
     placed.current = place;
     placedSide.current = pillSide;
     const box = boxOf(size);
-    span.current = [...span.current.map((shape) => boxOf(shape)), box];
+    span.current = [...span.current.map((shape) => boxOf(shape)), box, ...carried(box)];
     void publish(ilotRegion(presentation, side, ...span.current));
     moveCorner({ x: box.shift ?? 0, y: box.dy ?? 0 }, 'instant');
     settle();

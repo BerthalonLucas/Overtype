@@ -913,24 +913,71 @@ fn selection_changed(
     }
 }
 
-/// How a paste ended: the field read the result back (`confirmed`), or the chord went
-/// through and nothing could read the field (assumed, like Wispr Flow).
+/// How a paste ended: the field read back proves it (`confirmed`), or the chord went through
+/// and nothing proves it (assumed, like Wispr Flow: nothing could read the field, or it reads
+/// no change that proves the paste).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Delivery {
     pub confirmed: bool,
 }
 
 /// Line endings and the non-breaking spaces Chromium makes of boundary spaces in a
-/// contenteditable: the readback proof only, never the identity checks.
+/// contenteditable: the readback and copy proofs only, never the identity checks.
 pub fn canonical(text: &str) -> String {
     text.replace("\r\n", "\n")
         .replace('\r', "\n")
         .replace('\u{a0}', " ")
 }
 
-/// Whether a field's readback shows the pasted value (None: nothing readable).
-pub fn readback_confirms(field_text: Option<&str>, value: &str) -> Option<bool> {
-    field_text.map(|text| canonical(text).contains(&canonical(value)))
+/// Whether the field's readback proves the paste (NATIVE-010). None: nothing can read the field
+/// now. True only when the field reads otherwise than before the paste, and the difference is the
+/// captured selection turned into the result in one place: the text before and after it as it
+/// was. The result found anywhere in the field proved nothing (it may have been there already,
+/// beside a paste the page blocked); a field that could not be read before proves nothing either.
+pub fn readback_confirms(
+    before: Option<&str>,
+    after: Option<&str>,
+    replaced: &str,
+    value: &str,
+) -> Option<bool> {
+    let after: Vec<char> = canonical(after?).chars().collect();
+    let Some(before) = before else {
+        return Some(false);
+    };
+    let before: Vec<char> = canonical(before).chars().collect();
+    let replaced: Vec<char> = canonical(replaced).chars().collect();
+    let value: Vec<char> = canonical(value).chars().collect();
+    Some(replaced_in_place(&before, &after, &replaced, &value))
+}
+
+/// Whether `after` is `before` with `replaced` turned into `value` at one place `s`: the same
+/// text before `s`, `replaced` then `value` at `s`, the same text after them. `s` can only lie
+/// between the end of the common tail and the end of the common head: a few places in a real
+/// text. A text so repetitive that thousands of places remain proves nothing (assumed).
+fn replaced_in_place(before: &[char], after: &[char], replaced: &[char], value: &[char]) -> bool {
+    const PLACES: usize = 4_096;
+    if before == after
+        || replaced.len() > before.len()
+        || after.len() + replaced.len() != before.len() + value.len()
+    {
+        return false;
+    }
+    let head = before.iter().zip(after).take_while(|(b, a)| b == a).count();
+    let tail = before
+        .iter()
+        .rev()
+        .zip(after.iter().rev())
+        .take_while(|(b, a)| b == a)
+        .count();
+    // after[..s] == before[..s] needs s <= head; after[s + value..] == before[s + replaced..]
+    // needs the common tail to cover what follows the result.
+    let first = after.len().saturating_sub(tail + value.len());
+    let last = head.min(before.len() - replaced.len());
+    if first > last || last - first >= PLACES {
+        return false;
+    }
+    (first..=last)
+        .any(|s| before[s..s + replaced.len()] == *replaced && after[s..s + value.len()] == *value)
 }
 
 /// Reads the focused field: UI Automation first (its value, else its document), then
@@ -1032,16 +1079,24 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     }
     let started = Instant::now();
     let mut readable = true;
+    // NATIVE-010: only a change proves the paste. Nothing read before it, or a result that is
+    // the replaced text itself, can prove nothing: no long wait for a proof that cannot come.
+    let provable = before.is_some() && canonical(&target.selected_text) != canonical(value);
     let mut after;
     let confirmed = loop {
         after = field_text(target.native_window);
-        match readback_confirms(after.as_deref(), value) {
+        match readback_confirms(
+            before.as_deref(),
+            after.as_deref(),
+            &target.selected_text,
+            value,
+        ) {
             Some(true) => break true,
             Some(false) => {}
             None => readable = false,
         }
         let elapsed = started.elapsed();
-        if (!readable && elapsed >= PASTE_SETTLE) || elapsed >= PASTE_CONFIRM {
+        if ((!readable || !provable) && elapsed >= PASTE_SETTLE) || elapsed >= PASTE_CONFIRM {
             break false;
         }
         std::thread::sleep(Duration::from_millis(40));
@@ -1568,19 +1623,86 @@ mod tests {
 
     #[test]
     fn the_readback_proof_tolerates_line_endings_and_editor_spaces_only() {
+        let proof = |before: &str, after: &str, replaced: &str, value: &str| {
+            readback_confirms(Some(before), Some(after), replaced, value)
+        };
         assert_eq!(
-            readback_confirms(Some("Début\u{a0}équipe\r\nfin"), "Début équipe\nfin"),
+            proof(
+                "Début café\r\nfin",
+                "Début\u{a0}équipe\r\nfin",
+                "café",
+                "équipe"
+            ),
             Some(true)
         );
         assert_eq!(
-            readback_confirms(Some("avant équipe après"), "équipe"),
+            proof("avant café après", "avant équipe après", "café", "équipe"),
             Some(true)
         );
         assert_eq!(
-            readback_confirms(Some("deux  espaces"), "deux espaces"),
+            proof("deux  espaces", "deux  espaces!", "espaces", "espaces!"),
+            Some(true),
+            "a result that starts like what it replaced"
+        );
+        assert_eq!(
+            proof("a café b", "a équipe b", "café", "deux  équipe"),
+            Some(false),
+            "two spaces are not one"
+        );
+        assert_eq!(readback_confirms(None, None, "x", "y"), None);
+    }
+
+    #[test]
+    fn a_paste_is_confirmed_only_by_a_change_in_place_never_by_a_result_found_elsewhere() {
+        let proof = |before: &str, after: &str, replaced: &str, value: &str| {
+            readback_confirms(Some(before), Some(after), replaced, value)
+        };
+        // NATIVE-010: the result was already in the field and the page blocked the paste.
+        let blocked = "équipe 🚀 — Début 🚀 café 😀 fin";
+        assert_eq!(proof(blocked, blocked, "café 😀", "équipe 🚀"), Some(false));
+        // The same paste that went through: proved.
+        assert_eq!(
+            proof(
+                blocked,
+                "équipe 🚀 — Début 🚀 équipe 🚀 fin",
+                "café 😀",
+                "équipe 🚀"
+            ),
+            Some(true)
+        );
+        // Inserted at the caret instead of replacing (VS Code without a selection): not proved.
+        assert_eq!(
+            proof(
+                "seconde ligne à garder",
+                "secondeRÉSULTAT ligne à garder",
+                "seconde ligne à garder\n",
+                "RÉSULTAT"
+            ),
             Some(false)
         );
-        assert_eq!(readback_confirms(None, "x"), None);
+        assert_eq!(
+            proof("Début café fin", "Début équipecafé fin", "café", "équipe"),
+            Some(false),
+            "the result beside the selection, which is still there"
+        );
+        // Something else changed, the result nowhere in place.
+        assert_eq!(
+            proof("Début café fin", "Début cafe fin", "café", "équipe"),
+            Some(false)
+        );
+        // Nothing read before the paste: nothing to compare with, assumed.
+        assert_eq!(
+            readback_confirms(None, Some("Début équipe fin"), "café", "équipe"),
+            Some(false)
+        );
+        // The result is the text it replaced: no change can prove it.
+        assert_eq!(proof("a café b", "a café b", "café", "café"), Some(false));
+        // A result whose head and tail repeat around it (the place is found all the same).
+        assert_eq!(proof("Pxab", "Pxaab", "x", "xa"), Some(true));
+        assert_eq!(proof("aaaa", "aaaaa", "a", "aa"), Some(true));
+        // A text so repetitive that thousands of places remain: assumed, never confirmed.
+        let long = "a".repeat(10_000);
+        assert_eq!(proof(&long, &format!("{long}a"), "a", "aa"), Some(false));
     }
 
     #[test]

@@ -225,6 +225,9 @@ export const errorCodes = [
   'protected_window',
   // 0.6: a shortcut pressed while the first-run setup (or its demo) is in front.
   'setup_open',
+  // Lot C (NATIVE-004): the clipboard cannot be kept whole (an Office picture beside its text):
+  // nothing is copied or pasted over it, nothing is lost.
+  'clipboard_unkeepable',
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.

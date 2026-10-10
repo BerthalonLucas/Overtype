@@ -158,7 +158,7 @@ type HaloEvent = { generation: number; phase: 'menu'|'work'|'marks'|'leave'|'cle
 type MenuKey = { captureId: string; key: string; shiftKey: boolean }; type MenuRepeat = { captureId: string };
 type ShortcutConflict = { altGr: boolean; character?: string };
 type CaptureTarget = { captureId: string; canReplace: boolean }; type CaptureNotice = { message: string; code?: ErrorCode };
-type ErrorCode = 'unreachable'|'timeout'|'unauthorized'|'model_not_found'|'bad_endpoint'|'busy'|'length'|'stream_broken'|'paste_blocked'|'target_changed'|'not_editable'|'too_long'|'cancelled'|'server_error'|'no_selection'|'protected_field'|'keys_held'|'settings_open'|'nothing_recent'|'internal'|'read_only'|'protected_window'|'setup_open';
+type ErrorCode = 'unreachable'|'timeout'|'unauthorized'|'model_not_found'|'bad_endpoint'|'busy'|'length'|'stream_broken'|'paste_blocked'|'target_changed'|'not_editable'|'too_long'|'cancelled'|'server_error'|'no_selection'|'protected_field'|'keys_held'|'settings_open'|'nothing_recent'|'internal'|'read_only'|'protected_window'|'setup_open'|'clipboard_unkeepable';
 type ShortcutStatus = { bindingId: string; shortcut: string; state: 'registered'|'taken'|'failed'|'disabled' };
 type ResultDelivery = { requestId: string; status: 'applied'|'fallback'; confirmed: boolean; message: string; code?: ErrorCode; pastedRects?: Rect[]; undoable?: boolean };
 type PillTarget = { x: number; y: number; side: 'below'|'above'|'margin'; inside: boolean; estimated: boolean; clear: boolean };
@@ -280,3 +280,10 @@ Types in `src/types.ts`, wrappers in `src/bridge.ts`, preview in `src/bridge.moc
 - `install_update` downloads, verifies, then starts the NSIS installer in passive mode with `/UPDATE`: the app quits (`std::process::exit`), the installer restarts it. It answers only on failure.
 - The release workflow signs with the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets (`--config src-tauri/tauri.updater.conf.json`) and publishes `latest.json` beside the installer; without the secret no release is made. Local and CI builds stay unsigned.
 - Browser preview: `?update=0.9.0` shows a waiting version; `install_update` refuses.
+
+## Lot C: paste integrity (Lucas, 10/10)
+
+Nothing is written over a selection the app cannot prove, and no clipboard content is lost in silence. The real replacement bench (`npm run test:replacement`, `scripts/test-replacement-windows.mjs`) holds one scenario per rule.
+
+- **Keys.** A copy chord that `SendInput` cut part-way releases Insert and Ctrl, as the paste and Undo chords do (NATIVE-007), and the user's clipboard still comes back (QA-03-C: Ctrl+Insert copies on its key down); what that chord copied is not taken.
+- **A clipboard that cannot be kept whole** (an Office picture's metafile beside its text, a GDI, private or owner-rendered format, a block that cannot be read): nothing is copied or pasted over it (NATIVE-004, decision 3). The former fallback that kept the text alone is gone. Code `clipboard_unkeepable` (family `paste`): as a capture notice « Can’t save clipboard — copy, then retry » (the user copies the text himself and presses the shortcut again: his clipboard then holds that text alone, which can be kept); as a refusal of the paste « Can’t save clipboard — not replaced » with Copy result. A clipboard another application holds open stays `paste_blocked` at the paste.

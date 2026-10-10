@@ -29,8 +29,6 @@ const EXPECTED_FAIL = {
   'annulation-ctrl-z-contenteditable': 'QA-03-B',
   'uia-muette-revalidation': 'NATIVE-001',
   'vscode-ligne-sans-selection': 'NATIVE-002',
-  'presse-papiers-non-conservable-collage': 'NATIVE-004',
-  'presse-papiers-non-conservable-copie': 'NATIVE-004',
   'fermeture-urgence-collage-engage': 'NATIVE-006',
   'collage-bloque-resultat-deja-present': 'NATIVE-010',
   'writer-selection-multiple': 'NATIVE-012',

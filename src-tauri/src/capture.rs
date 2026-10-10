@@ -547,6 +547,12 @@ pub(crate) fn clipboard_capture(
         ),
     };
     let text = copied_text(text).map_err(|mut error| {
+        // NATIVE-004: the copy was never sent, the user's clipboard could not be kept whole.
+        if error.kind == ErrorKind::NoSelection
+            && matches!(copied, Err(CLIPBOARD_UNKEEPABLE | CLIPBOARD_BUSY))
+        {
+            error = unkeepable_capture();
+        }
         // For the real capture matrix only (FLOWTRANSLATE_CAPTURE_TRACE): which step of
         // the synthetic copy gave up and how old the user's last copy is. Never any text.
         if error.kind == ErrorKind::NoSelection
@@ -598,12 +604,46 @@ pub(crate) fn clipboard_capture(
     })
 }
 
+/// The steps of a synthetic copy that give up before any key is sent (NATIVE-004): the user's
+/// clipboard cannot be kept whole (a copy would lose the rest of it), or another application
+/// holds it open.
+const CLIPBOARD_UNKEEPABLE: &str = "clipboard unkeepable";
+const CLIPBOARD_BUSY: &str = "clipboard busy";
+
+/// The capture's notice when the clipboard cannot be kept whole: nothing was copied, nothing
+/// lost; the user copies the text himself, then presses the shortcut again (Lucas, 10/10).
+fn unkeepable_capture() -> AppError {
+    AppError::new(
+        ErrorKind::ClipboardUnkeepable,
+        "Le presse-papiers ne peut pas être conservé en entier : rien n’a été copié ni perdu. \
+         Copiez le texte vous-même, puis relancez.",
+    )
+}
+
+/// The paste's refusal when the clipboard cannot be kept whole (nothing is written over it:
+/// Copy result is the user's own choice), or is held open by another application.
+fn unkept_paste(unkept: crate::clipboard_guard::Unkept) -> AppError {
+    match unkept {
+        crate::clipboard_guard::Unkept::Unkeepable => AppError::new(
+            ErrorKind::ClipboardUnkeepable,
+            "Le presse-papiers ne peut pas être conservé en entier : rien n’a été remplacé ni \
+             perdu; utilisez Copier.",
+        )
+        .because(CLIPBOARD_UNKEEPABLE),
+        crate::clipboard_guard::Unkept::Busy => AppError::new(
+            ErrorKind::PasteBlocked,
+            "Le presse-papiers est occupé : rien n’a été remplacé; utilisez Copier.",
+        )
+        .because(CLIPBOARD_BUSY),
+    }
+}
+
 /// Sends the copy chord to the source window, reads what it copied and puts the previous
-/// clipboard back (every format when Windows lets us keep them, else the text), within one
-/// clipboard session once the copy has finished: whatever the source wrote, in however many
-/// steps, the user's clipboard comes back (0.6: it used not to, see clipboard_guard.rs). A
-/// copy that lands after the wait is still undone, as long as the user did nothing meanwhile.
-/// The error names the step that gave up, for the matrix and the journal.
+/// clipboard back (every format), within one clipboard session once the copy has finished:
+/// whatever the source wrote, in however many steps, the user's clipboard comes back (0.6: it
+/// used not to, see clipboard_guard.rs). A copy that lands after the wait is still undone, as
+/// long as the user did nothing meanwhile. A clipboard that cannot be kept whole is never
+/// copied over. The error names the step that gave up, for the matrix and the journal.
 fn synthetic_copy(source_window: isize) -> Result<String, &'static str> {
     if source_window == 0 || crate::host::foreground() != source_window {
         return Err("source window lost");
@@ -620,11 +660,15 @@ fn synthetic_copy(source_window: isize) -> Result<String, &'static str> {
 }
 
 /// One copy chord to the window in front: what it copied (None: a copy without text), the
-/// clipboard put back; `Err`: nothing was copied in time (watched a little longer).
+/// clipboard put back; `Err`: nothing was copied in time (watched a little longer), or the
+/// clipboard could not be kept whole and no key was sent.
 fn copy_and_restore() -> Result<Option<String>, &'static str> {
-    use crate::clipboard_guard::{self, Copied, Keeper};
+    use crate::clipboard_guard::{self, Copied, Keeper, Unkept};
     clipboard_guard::settle_late(crate::host::last_input_tick);
-    let keeper = Keeper::take(read_clipboard);
+    let keeper = Keeper::take().map_err(|unkept| match unkept {
+        Unkept::Unkeepable => CLIPBOARD_UNKEEPABLE,
+        Unkept::Busy => CLIPBOARD_BUSY,
+    })?;
     crate::host::suppress_clipboard_tracking(OWN_TRAFFIC);
     let before = crate::host::clipboard_sequence();
     if let Err(sent) = crate::host::send_copy_chord() {
@@ -730,6 +774,10 @@ fn control_copy(target: &TargetIdentity) -> Result<(), AppError> {
             )
             .because("control copy refused"))
         }
+        Err(CLIPBOARD_UNKEEPABLE) => {
+            return Err(unkept_paste(crate::clipboard_guard::Unkept::Unkeepable))
+        }
+        Err(CLIPBOARD_BUSY) => return Err(unkept_paste(crate::clipboard_guard::Unkept::Busy)),
         Err(_) => None,
     };
     same_copy(copied.as_deref(), &target.selected_text)
@@ -870,11 +918,13 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     // was not written (0.6: a PDF in a browser used to end on the check of a success).
     let before = field_text(target.native_window);
     crate::clipboard_guard::settle_late(crate::host::last_input_tick);
-    let mut keeper = crate::clipboard_guard::Keeper::take(read_clipboard);
+    // NATIVE-004: a clipboard that cannot be kept whole is never written over (nothing pasted).
+    let take = || crate::clipboard_guard::Keeper::take().map_err(unkept_paste);
+    let mut keeper = take()?;
     crate::host::suppress_clipboard_tracking(Duration::from_secs(4));
     if keeper.put_text(value).is_err() {
         // Written between the snapshot and our text (a clipboard manager): taken again, once.
-        keeper = crate::clipboard_guard::Keeper::take(read_clipboard);
+        keeper = take()?;
         keeper.put_text(value).map_err(|message| {
             AppError::new(ErrorKind::PasteBlocked, message).because("clipboard busy")
         })?;
@@ -1466,6 +1516,16 @@ mod tests {
         assert!(paste_preflight(&target, "ok").is_ok());
         assert_eq!(released(false).unwrap_err().kind, ErrorKind::KeysHeld);
         assert!(released(true).is_ok());
+        // NATIVE-004: a clipboard that cannot be kept whole refuses the copy and the paste with
+        // its own code (a busy one blocks the paste, as before).
+        use crate::clipboard_guard::Unkept;
+        assert_eq!(unkeepable_capture().kind, ErrorKind::ClipboardUnkeepable);
+        assert_eq!(
+            unkept_paste(Unkept::Unkeepable).kind,
+            ErrorKind::ClipboardUnkeepable
+        );
+        assert_eq!(unkept_paste(Unkept::Busy).kind, ErrorKind::PasteBlocked);
+        assert_eq!(unkept_paste(Unkept::Busy).reason, "clipboard busy");
         assert_eq!(
             validate_target(&target).unwrap_err().kind,
             ErrorKind::TargetChanged,

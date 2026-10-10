@@ -60,6 +60,9 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //                    browser used to end on the check): the result exists, Copy result: paste.
 //   protected_window 0.6: the window in front runs as administrator, Windows lets us neither
 //                    read it nor send it a key: content, ✕ only (a capture notice).
+//   clipboard_unkeepable  lot C (NATIVE-004): the clipboard cannot be kept whole, so nothing was
+//                    written over it: paste (Copy result is the user's own choice); as a capture
+//                    notice, its own words: copy the text yourself, then try again.
 //   too_long, no_selection, protected_field, settings_open, setup_open, nothing_recent: nothing
 //                    was read or sent: content, ✕ only (the last three are capture notices, no
 //                    button at all; setup_open, 0.6: the same press over the first-run setup).
@@ -80,6 +83,7 @@ const table: Record<ErrorCode, Entry> = {
   not_editable: { family: 'paste' },
   read_only: { family: 'paste' },
   keys_held: { family: 'paste' },
+  clipboard_unkeepable: { family: 'paste' },
   too_long: { family: 'content' },
   no_selection: { family: 'content' },
   protected_field: { family: 'content' },
@@ -117,8 +121,12 @@ export type ErrorDescription = {
 };
 
 // What a capture says in its own words (source 'capture'): target_changed there is the source
-// window changing during the capture (capture.rs), before anything was pasted.
-const captureMessage: Partial<Record<ErrorCode, MessageKey>> = { target_changed: 'result.notice.target_changed' };
+// window changing during the capture (capture.rs), before anything was pasted;
+// clipboard_unkeepable, the synthetic copy that was never sent (copy yourself, then try again).
+const captureMessage: Partial<Record<ErrorCode, MessageKey>> = {
+  target_changed: 'result.notice.target_changed',
+  clipboard_unkeepable: 'result.notice.clipboard_unkeepable',
+};
 // Why an Undo was refused, in its own words (the request's would say « not replaced »): the text,
 // the caret, the field or the window changed, or Undo was already withdrawn; keys still held; the
 // source could not be brought back or the chord was blocked; anything else (the command refused:

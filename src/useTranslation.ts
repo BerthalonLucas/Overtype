@@ -79,8 +79,11 @@ export function useTranslation(readyOnMount = false) {
     settingsReadyRef.current = bridge
       .getSettings()
       .then((next) => {
-        settingsRef.current = next;
-        setSettings(next);
+        // A `settings-changed` that came first is newer: the read does not put the older copy back.
+        if (!settingsRef.current) {
+          settingsRef.current = next;
+          setSettings(next);
+        }
         return true;
       })
       .catch(() => false);

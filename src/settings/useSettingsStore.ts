@@ -61,8 +61,11 @@ export function useSettingsStore(): SettingsStore {
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const lastError = useRef<SaveProblem>({ key: 'settings.notSaved' });
   const settledTimer = useRef(0);
+  // The ticket of the latest read: a read answers only if no edit nor event came after it asked.
+  const readTicket = useRef(0);
   // The window's own copy feeds its document preferences (language, theme) at once.
   const show = (next: Settings) => {
+    readTicket.current += 1;
     latest.current = next;
     setSettings(next);
     shareSettings(next);
@@ -71,12 +74,19 @@ export function useSettingsStore(): SettingsStore {
     synced.current = next;
     show(next);
   };
+  // The first read, or « Retry »: what it brings is adopted unless the window received or made a
+  // newer copy while it was on its way (a `settings-changed`, an edit); then that copy stays.
   const reload = () => {
     setLoadError(false);
-    void bridge
-      .getSettings()
-      .then(adopt)
-      .catch(() => setLoadError(true));
+    const ticket = ++readTicket.current;
+    void bridge.getSettings().then(
+      (next) => {
+        if (ticket === readTicket.current) adopt(next);
+      },
+      () => {
+        if (ticket === readTicket.current) setLoadError(true);
+      },
+    );
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: once on mount: the first load
   useEffect(() => {

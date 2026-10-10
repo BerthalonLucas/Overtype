@@ -314,7 +314,7 @@ export function ServerPage() {
       <div className="st-servers" data-field="server">
         <AnimatePresence initial={false}>
           {servers.map(
-            (server, index) =>
+            (server) =>
               probes[server.id] && (
                 <ServerCard
                   key={server.id}

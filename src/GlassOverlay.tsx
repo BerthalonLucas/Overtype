@@ -22,7 +22,6 @@ import {
   dimming,
   frameSide,
   glass,
-  halo,
   readerMetrics,
   readingBudget,
   remainingAfterLeave,

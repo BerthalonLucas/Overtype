@@ -15,7 +15,38 @@ on:
 permissions:
   contents: write
 jobs:
+  # A push to main that touches package.json without a new version (a dependency, a script) is
+  # not a release: it stops here, green. A tag or a manual run of a version already published
+  # is still refused.
+  version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      publish: ${{ steps.resolve.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - name: Is this a new version?
+        id: resolve
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $mainPush = $env:GITHUB_REF -eq 'refs/heads/main' -and $env:GITHUB_EVENT_NAME -eq 'push'
+          $tag = if ($mainPush) { "v$version" } else { $env:RELEASE_TAG }
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          $published = $LASTEXITCODE -eq 0
+          if ($published -and -not $mainPush) { throw "$tag est déjà publiée ; aucune réécriture autorisée." }
+          if ($published) { "::notice::$tag est déjà publiée : pas de nouvelle version, rien à publier." }
+          "publish=$(if ($published) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
+          exit 0
   checks:
+    needs: version
+    if: needs.version.outputs.publish == 'true'
     uses: ./.github/workflows/checks.yml
     permissions:
       contents: read
@@ -23,7 +54,8 @@ jobs:
       ref: ${{ inputs.tag || github.sha }}
       bundle: false
   windows:
-    needs: checks
+    needs: [version, checks]
+    if: needs.version.outputs.publish == 'true'
     runs-on: windows-latest
     env:
       RELEASE_TAG: ${{ inputs.tag || github.ref_name }}

@@ -23,6 +23,9 @@
   --glass-tint: rgb(255 255 255 / .55);
   --glass-blur: blur(28px) saturate(1.9);
   --surface-radius: 16px;
+  /* The brand's colour wheel (the mark, the dots), and its richer turn for the loaders. */
+  --brand-stops: #BC82F3, #8D9FFF, #FF6778, #FFBA71, #BC82F3;
+  --brand-stops-rich: #BC82F3, #F5B9EA, #8D9FFF, #AA6EEE, #FF6778, #FFBA71, #C686FF, #BC82F3;
   /* Text on any surface of the theme. */
   --text: rgb(var(--ink-rgb));
   --text-muted: rgb(var(--ink-rgb) / .8);

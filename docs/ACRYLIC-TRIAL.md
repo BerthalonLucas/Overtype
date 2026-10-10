@@ -1,5 +1,7 @@
 # Essai Acrylic (lot 12, phase B) : constat pour la décision
 
+> Document historique (essai Acrylic de la 0.5, 24 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Essai du 24 septembre 2026 par l'agent natif, fusionné dans `da-ilot` (839340d). Plan :
 [DA-PLAN.md](DA-PLAN.md), lot 12 ; décision par défaut 3 de [UI-DECISIONS.md](UI-DECISIONS.md).
 Contrat technique : [BRIDGE.md](BRIDGE.md), « Îlot: the Acrylic trial ».

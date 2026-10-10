@@ -1,5 +1,7 @@
 # Jalon atelier UI — 9 septembre 2026
 
+> Document historique (atelier UI, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 ## Vérifié
 
 - Build TypeScript/Vite réussi ; dist contient l’entrée de production, pas lab.html/lab-frame.html.

@@ -1,5 +1,7 @@
 # DA « Îlot » : rapport de fin de mission (0.5.0)
 
+> Document historique (rapport de la 0.5.0, 25 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Rédigé le 25 septembre 2026, pour la décision de sortie de la 0.5.0. Branche `da-ilot`, poussée,
 en PR brouillon vers `main` ; rien dans `main`, aucun tag. Plan : [DA-PLAN.md](DA-PLAN.md). Décisions par
 défaut : dernière section de [UI-DECISIONS.md](UI-DECISIONS.md). Contrat : [BRIDGE.md](BRIDGE.md).

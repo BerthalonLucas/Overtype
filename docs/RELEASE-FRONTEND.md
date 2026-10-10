@@ -1,5 +1,7 @@
 # Frontend readiness pass for 0.1.5
 
+> Document historique (publication 0.1.5, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 The settings window shows the selected engine and model before advanced configuration is opened. Its explicit save-and-check action uses the existing check_connection command only; opening settings never probes the network and a connection check never requests translation. The result is associated with the checked profile and ceases to apply after editing that profile. Browser checks remain explicitly simulated. A failed check preserves the saved settings and explains how to start the server and inspect the address/model/key.
 
 Settings loading failures now replace the loading message with a retry and close action. Translation failures keep Copy disabled and expose Retry plus Settings through the existing overlapping action menu. The browser Settings menu and close action now navigate to the settings/preview screens. Initialization error UI includes retry, settings, and close actions; its visibility in a native window before capture/geometry is not established by browser tests.

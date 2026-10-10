@@ -1,5 +1,7 @@
 # Validation evidence
 
+> Document historique (preuves 0.1.x, 10 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 ## Integrated 0.1.6 — glass rework, 2026-09-10
 
 - NSIS installer `FlowTranslate_0.1.6_x64-setup.exe`, SHA-256 `594BAAED1F10D45BB75FE6E5598935C418CD5659D403243F08CECD7993643A70`, built from the 0.1.6 sources (commit recorded in the kit manifest). Packaged as `release/FlowTranslate-0.1.6-test-kit.zip` for another workstation: installer, `Mode-simule.cmd` (`--simulate-inference`), server files, trial guide, this file and the 0.1.5 measurements. Not signed.

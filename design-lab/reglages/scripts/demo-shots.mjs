@@ -1,16 +1,21 @@
 // Frames of the Démo, seeked exactly (window.__demo.seek(t): the scene is a pure function of time).
-//   node scripts/demo-shots.mjs [outDir] [--times=6100,6300] [--theme=light|dark] [--marks=encre]
+//   node scripts/demo-shots.mjs [--out=dir] [--times=6100,6300] [--theme=light|dark] [--marks=encre]
 //        [--preset=smooth|bouncy] [--reduced] [--dpr=2] [--crop=ilot|text|full|cursor] [--speed=1]
 // Default: a contact set of the key moments, both themes. Console errors fail the run.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(resolve('D:/src/Flow_Translate/node_modules/@playwright/test'));
+// Paths come from this file's location: the lab is design-lab/reglages/, the repository two levels up.
+const lab = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../../', import.meta.url));
+const require = createRequire(join(root, 'package.json'));
+const { chromium } = require('@playwright/test');
 const args = process.argv.slice(2);
 const opt = (name, def) => { const a = args.find(x => x.startsWith(`--${name}=`)); return a ? a.slice(name.length + 3) : def; };
-const out = resolve(args.find(a => !a.startsWith('--')) || 'C:/Users/agent/AppData/Local/Temp/claude/D--src/a9e04c7f-6ece-5d86-980b-e4bfe3913ac5/scratchpad/labo-shots-v2/demo/frames');
+const outArg = args.find(a => a.startsWith('--out='));
+const out = resolve(outArg ? outArg.slice(6) : join(lab, 'shots', 'demo/frames'));
 mkdirSync(out, { recursive: true });
 const url = opt('url', 'http://127.0.0.1:5180/labo-reglages.html');
 const themes = opt('theme', 'light,dark').split(',');

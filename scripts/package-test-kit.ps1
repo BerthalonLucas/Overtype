@@ -4,6 +4,8 @@ param(
     [string]$EvaluationVersion = ''
 )
 $ErrorActionPreference = "Stop"
+# Archive of the 0.1.x test kit, kept for reference only.
+throw "Archive : ce script assemblait le kit d'essai 0.1.x. Les versions passent désormais par l'installateur signé (release GitHub) et la mise à jour intégrée ; il n'y a plus de kit à produire."
 $repo = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content -LiteralPath (Join-Path $repo "package.json") -Raw | ConvertFrom-Json).version
 if ($version -notmatch '^\d+\.\d+\.\d+$') { throw "Unexpected release version" }

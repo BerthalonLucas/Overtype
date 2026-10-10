@@ -1,17 +1,22 @@
 // Screenshots of the lab in several combinations (Playwright chromium from the app's
 // node_modules). Usage:
-//   node scripts/shots.mjs [outDir] [--url=http://127.0.0.1:5180/labo-reglages.html] [--only=name,name]
+//   node scripts/shots.mjs [--out=dir] [--url=http://127.0.0.1:5180/labo-reglages.html] [--only=name,name]
 // Each shot = a lab state (localStorage) + an optional action; console errors are reported.
-// Other agents: copy this file into your folder (or pass your own SHOTS) rather than editing it.
+// Default output: design-lab/reglages/shots/shell/ (ignored by Git); pass --out=dir to write elsewhere.
 import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(resolve('D:/src/Flow_Translate/node_modules/@playwright/test'));
+// Paths come from this file's location: the lab is design-lab/reglages/, the repository two levels up.
+const lab = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../../', import.meta.url));
+const require = createRequire(join(root, 'package.json'));
+const { chromium } = require('@playwright/test');
 
 const args = process.argv.slice(2);
-const out = resolve(args.find(a => !a.startsWith('--')) || 'C:/Users/agent/AppData/Local/Temp/claude/D--src/a9e04c7f-6ece-5d86-980b-e4bfe3913ac5/scratchpad/labo-shots-v2/shell');
+const outArg = args.find(a => a.startsWith('--out='));
+const out = resolve(outArg ? outArg.slice(6) : join(lab, 'shots', 'shell'));
 const url = (args.find(a => a.startsWith('--url=')) || '--url=http://127.0.0.1:5180/labo-reglages.html').slice(6);
 const only = (args.find(a => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 mkdirSync(out, { recursive: true });

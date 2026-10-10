@@ -16,10 +16,10 @@ npm install                 # une fois (dépendances locales à ce dossier)
 node build.mjs              # → labo-reglages.html (+ dist/labo-reglages.artifact.html)
 node build.mjs --watch      # reconstruit à chaque modification de src/
 npx http-server . -p 5180 -c-1   # http://127.0.0.1:5180/labo-reglages.html  (jamais le port 5173)
-node scripts/shots.mjs [dossier] [--only=nom,nom]   # captures Playwright (voir SHOTS dans le fichier)
+node scripts/shots.mjs [--out=dossier] [--only=nom,nom]   # captures Playwright (voir SHOTS dans le fichier)
 node scripts/contrast.mjs [-v] [--table]   # 2 bases + couleurs de page A/B, 2 thèmes (0 échec attendu)
-node scripts/demo-shots.mjs [dossier] [--times=…] [--theme=light,dark] [--crop=full|stage|ilot|text|words|cursor] [--dpr=2] [--marks=…] [--preset=…] [--reduced]
-node scripts/demo-chaos.mjs [--rounds=3]   # la démo secouée puis comparée pixel à pixel à une page neuve
+node scripts/demo-shots.mjs [--out=dossier] [--times=…] [--theme=light,dark] [--crop=full|stage|ilot|text|words|cursor] [--dpr=2] [--marks=…] [--preset=…] [--reduced]
+node scripts/demo-chaos.mjs [--out=dossier] [--rounds=3]   # la démo secouée puis comparée pixel à pixel à une page neuve
 node scripts/demo-check.mjs               # les valeurs de l’app recopiées par la démo n’ont pas dérivé
 ```
 
@@ -28,7 +28,9 @@ node scripts/demo-check.mjs               # les valeurs de l’app recopiées pa
   le lecteur d’artefacts fournit le squelette). Taille actuelle ≈ 1,8 Mo (limite 16 Mo).
 - Pas d’`alert/confirm/prompt` (bloqués dans l’artefact). Presse-papiers : seulement dans un gestionnaire de clic,
   avec repli (`copyText()` de `src/lab/copy.js`, puis boîte de dialogue « copiez à la main »).
-- Captures : `C:\Users\agent\AppData\Local\Temp\claude\D--src\a9e04c7f-6ece-5d86-980b-e4bfe3913ac5\scratchpad\labo-shots-v2\<votre-zone>\`.
+- Captures : par défaut dans `design-lab/reglages/shots/` (`shell/`, `demo/frames/`, `demo/chaos/`, ignoré par Git) ; `--out=dossier` pour
+  écrire ailleurs plutôt que de copier un script. Les scripts trouvent la racine du repo depuis leur propre emplacement
+  et chargent `@playwright/test` depuis le `node_modules` racine (`npm ci` à la racine) : ils se lancent de n’importe où.
   État du labo dans `localStorage`, clé **`ft-labo-reglages-v2`** : `{ section, base, pageSet, switchStyle, theme, speed, reduced, scenario }`.
 - **Boucle obligatoire (Lucas, 30/09)** : pour chaque animation, effet ou correctif : modifier → capturer → REGARDER la
   capture (images intermédiaires à vitesse ⅒, recadrages DPR 2) → revoir → valider. Tester aussi la robustesse : serveur

@@ -1,7 +1,30 @@
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { BriefcaseBusiness, Check, ChevronDown, ChevronUp, Clipboard, Copy, Cpu, Ellipsis, FoldVertical, KeyRound, Languages, LoaderCircle, Mail, Pin, PinOff, Server, Settings2, SpellCheck, TriangleAlert, Undo2, WandSparkles, X } from 'lucide-react';
+import {
+  BriefcaseBusiness,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Clipboard,
+  Copy,
+  Cpu,
+  Ellipsis,
+  FoldVertical,
+  KeyRound,
+  Languages,
+  LoaderCircle,
+  Mail,
+  Pin,
+  PinOff,
+  Server,
+  Settings2,
+  SpellCheck,
+  TriangleAlert,
+  Undo2,
+  WandSparkles,
+  X,
+} from 'lucide-react';
 import { useT } from './i18n';
 import { useContentPresence, useSurfacePresence } from './motion/MotionPreferences';
 import type { Grow } from './motion/presence';
@@ -13,9 +36,29 @@ import type { Grow } from './motion/presence';
 // Lucide, thin stroke (docs/DA-PLAN.md, lot 1): one stroke of 1.5 and a size of 14 to 16 px
 // everywhere; no CSS forces a size over the prop. The plan's twelve names come first.
 const icons = {
-  fix: SpellCheck, translate: Languages, professional: BriefcaseBusiness, shorten: FoldVertical, email: Mail, custom: WandSparkles,
-  undo: Undo2, settings: Settings2, error: TriangleAlert, key: KeyRound, server: Server, model: Cpu,
-  copy: Copy, more: Ellipsis, close: X, clipboard: Clipboard, check: Check, chevron: ChevronDown, up: ChevronUp, pin: Pin, unpin: PinOff, languages: Languages, spinner: LoaderCircle,
+  fix: SpellCheck,
+  translate: Languages,
+  professional: BriefcaseBusiness,
+  shorten: FoldVertical,
+  email: Mail,
+  custom: WandSparkles,
+  undo: Undo2,
+  settings: Settings2,
+  error: TriangleAlert,
+  key: KeyRound,
+  server: Server,
+  model: Cpu,
+  copy: Copy,
+  more: Ellipsis,
+  close: X,
+  clipboard: Clipboard,
+  check: Check,
+  chevron: ChevronDown,
+  up: ChevronUp,
+  pin: Pin,
+  unpin: PinOff,
+  languages: Languages,
+  spinner: LoaderCircle,
 };
 export type IconName = keyof typeof icons;
 export const iconStroke = 1.5;
@@ -36,42 +79,82 @@ export function iconFromLucide(lucideName: string | undefined): IconName | undef
 
 export function AnimatedIcon({ name }: { name: IconName }) {
   const fade = useContentPresence();
-  return <span className="action-glyph" aria-hidden="true"><AnimatePresence initial={false}>
-    <motion.span key={name} {...fade}><Icon name={name} /></motion.span>
-  </AnimatePresence></span>;
+  return (
+    <span className="action-glyph" aria-hidden="true">
+      <AnimatePresence initial={false}>
+        <motion.span key={name} {...fade}>
+          <Icon name={name} />
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
 }
 
 type IconButtonProps = ComponentPropsWithoutRef<'button'> & { label: string; children: ReactNode };
-export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, children, className = '', ...props }, ref) {
-  return <button ref={ref} type="button" className={`icon-button ${className}`} aria-label={label} title={label} {...props}>{children}</button>;
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
+  { label, children, className = '', ...props },
+  ref,
+) {
+  return (
+    <button ref={ref} type="button" className={`icon-button ${className}`} aria-label={label} title={label} {...props}>
+      {children}
+    </button>
+  );
 });
 
 export type BubbleMenuAction = { label: string; run: () => void; disabled?: boolean; close?: boolean };
-export function BubbleMenu({ open, onOpenChange, actions, grow = 'down', children }: {
-  open: boolean; onOpenChange: (open: boolean) => void; actions: BubbleMenuAction[]; grow?: Grow; children: ReactNode;
+export function BubbleMenu({
+  open,
+  onOpenChange,
+  actions,
+  grow = 'down',
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  actions: BubbleMenuAction[];
+  grow?: Grow;
+  children: ReactNode;
 }) {
   const rise = useSurfacePresence(grow);
   const t = useT();
-  return <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
-    {children}
-    <AnimatePresence>
-      {open && <DropdownMenu.Content forceMount asChild loop>
-        <motion.div {...rise} className="more-menu" aria-label={t('glass.menu')}>
-          {actions.map(action => <span key={action.label} className="menu-slot">
-            {action.close && <DropdownMenu.Separator className="menu-separator" />}
-            <DropdownMenu.Item className={`menu-item ${action.close ? 'menu-close' : ''}`} disabled={action.disabled} onSelect={action.run}>
-              <span>{action.label}</span>{action.close && <Icon name="close" size={14} />}
-            </DropdownMenu.Item>
-          </span>)}
-        </motion.div>
-      </DropdownMenu.Content>}
-    </AnimatePresence>
-  </DropdownMenu.Root>;
+  return (
+    <DropdownMenu.Root open={open} onOpenChange={onOpenChange} modal={false}>
+      {children}
+      <AnimatePresence>
+        {open && (
+          <DropdownMenu.Content forceMount asChild loop>
+            <motion.div {...rise} className="more-menu" aria-label={t('glass.menu')}>
+              {actions.map((action) => (
+                <span key={action.label} className="menu-slot">
+                  {action.close && <DropdownMenu.Separator className="menu-separator" />}
+                  <DropdownMenu.Item
+                    className={`menu-item ${action.close ? 'menu-close' : ''}`}
+                    disabled={action.disabled}
+                    onSelect={action.run}
+                  >
+                    <span>{action.label}</span>
+                    {action.close && <Icon name="close" size={14} />}
+                  </DropdownMenu.Item>
+                </span>
+              ))}
+            </motion.div>
+          </DropdownMenu.Content>
+        )}
+      </AnimatePresence>
+    </DropdownMenu.Root>
+  );
 }
 
 export function BubbleMenuTrigger({ onClick, pressed }: { onClick: () => void; pressed: boolean }) {
   // Opening on pointerdown resizes/reanchors the native window before pointerup.
   // Keep Radix keyboard semantics, but let a pointer click finish before opening.
   const t = useT();
-  return <DropdownMenu.Trigger asChild onPointerDown={event => event.preventDefault()} onClick={onClick}><IconButton label={t('glass.more')} data-pressed={pressed || undefined}><Icon name="more" /></IconButton></DropdownMenu.Trigger>;
+  return (
+    <DropdownMenu.Trigger asChild onPointerDown={(event) => event.preventDefault()} onClick={onClick}>
+      <IconButton label={t('glass.more')} data-pressed={pressed || undefined}>
+        <Icon name="more" />
+      </IconButton>
+    </DropdownMenu.Trigger>
+  );
 }

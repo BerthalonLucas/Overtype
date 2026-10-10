@@ -18,7 +18,10 @@ export function breakable(text: string): string[] {
   }
   const pieces: string[] = [];
   let start = 0;
-  for (const index of breaks) { pieces.push(text.slice(start, index)); start = index; }
+  for (const index of breaks) {
+    pieces.push(text.slice(start, index));
+    start = index;
+  }
   pieces.push(text.slice(start));
   return pieces;
 }

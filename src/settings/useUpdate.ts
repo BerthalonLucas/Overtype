@@ -10,10 +10,29 @@ export function useUpdate(): UpdateStatus | null {
     let received = false;
     let off: (() => void) | undefined;
     // The event is newer than any answer of the command still on its way.
-    void bridge.on<UpdateStatus>('update-status', next => { if (!live) return; received = true; setStatus(next); })
-      .then(unlisten => { if (live) off = unlisten; else unlisten(); }, () => undefined);
-    void bridge.updateStatus().then(next => { if (live && !received) setStatus(next); }, () => undefined);
-    return () => { live = false; off?.(); };
+    void bridge
+      .on<UpdateStatus>('update-status', (next) => {
+        if (!live) return;
+        received = true;
+        setStatus(next);
+      })
+      .then(
+        (unlisten) => {
+          if (live) off = unlisten;
+          else unlisten();
+        },
+        () => undefined,
+      );
+    void bridge.updateStatus().then(
+      (next) => {
+        if (live && !received) setStatus(next);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+      off?.();
+    };
   }, []);
   return status;
 }

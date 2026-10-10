@@ -26,10 +26,22 @@ async function mount(props: Partial<IlotProps> = {}) {
   root = createRoot(host);
   const handle = createRef<IlotHandle>();
   const calls = { onChoose: vi.fn(), onInstruction: vi.fn(), onClose: vi.fn() };
-  const render = async (next: Partial<IlotProps> = {}) => act(async () => root!.render(<Ilot ref={handle} actions={actions} lastActionId="translate" {...calls} {...props} {...next} />));
+  const render = async (next: Partial<IlotProps> = {}) =>
+    act(async () =>
+      root!.render(<Ilot ref={handle} actions={actions} lastActionId="translate" {...calls} {...props} {...next} />),
+    );
   await render();
-  const press = async (key: string) => { let used = false; await act(async () => { used = handle.current!.press(key); }); return used; };
-  const keydown = async (key: string, init: KeyboardEventInit = {}) => act(async () => { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })); });
+  const press = async (key: string) => {
+    let used = false;
+    await act(async () => {
+      used = handle.current!.press(key);
+    });
+    return used;
+  };
+  const keydown = async (key: string, init: KeyboardEventInit = {}) =>
+    act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }));
+    });
   const mode = () => host!.querySelector('[data-ilot]')?.getAttribute('data-mode');
   const present = () => host!.querySelector('.shape-layer:not(.is-leaving)')!;
   return { calls, press, keydown, mode, present, render };
@@ -37,8 +49,35 @@ async function mount(props: Partial<IlotProps> = {}) {
 
 describe('iconFromLucide', () => {
   it('finds the registry entry drawn with a Lucide glyph, none for an unknown name', () => {
-    expect(['SpellCheck', 'Languages', 'BriefcaseBusiness', 'FoldVertical', 'Mail', 'WandSparkles', 'Undo2', 'Settings2', 'TriangleAlert', 'KeyRound', 'Server', 'Cpu'].map(iconFromLucide))
-      .toEqual(['fix', 'translate', 'professional', 'shorten', 'email', 'custom', 'undo', 'settings', 'error', 'key', 'server', 'model']);
+    expect(
+      [
+        'SpellCheck',
+        'Languages',
+        'BriefcaseBusiness',
+        'FoldVertical',
+        'Mail',
+        'WandSparkles',
+        'Undo2',
+        'Settings2',
+        'TriangleAlert',
+        'KeyRound',
+        'Server',
+        'Cpu',
+      ].map(iconFromLucide),
+    ).toEqual([
+      'fix',
+      'translate',
+      'professional',
+      'shorten',
+      'email',
+      'custom',
+      'undo',
+      'settings',
+      'error',
+      'key',
+      'server',
+      'model',
+    ]);
     expect(iconFromLucide('NotAnIcon')).toBeUndefined();
     expect(iconFromLucide(undefined)).toBeUndefined();
   });
@@ -61,10 +100,10 @@ describe('Ilot', () => {
     expect(await press('Tab')).toBe(true);
     expect(mode()).toBe('grid');
     const tiles = [...present().querySelectorAll('[role="menuitem"]')];
-    expect(tiles.map(tile => tile.getAttribute('data-tile'))).toEqual(['fix', 'translate', 'pro', 'ask']);
-    expect(tiles.map(tile => tile.textContent)).toEqual(['Fix', 'Translate', 'Pro', 'Ask']);
+    expect(tiles.map((tile) => tile.getAttribute('data-tile'))).toEqual(['fix', 'translate', 'pro', 'ask']);
+    expect(tiles.map((tile) => tile.textContent)).toEqual(['Fix', 'Translate', 'Pro', 'Ask']);
     // An icon outside the registry is left out, the tile keeps its label.
-    expect(tiles.map(tile => tile.querySelectorAll('svg').length)).toEqual([1, 1, 0, 1]);
+    expect(tiles.map((tile) => tile.querySelectorAll('svg').length)).toEqual([1, 1, 0, 1]);
     expect(tiles[1]).toBe(document.activeElement);
   });
 
@@ -78,7 +117,9 @@ describe('Ilot', () => {
     expect(mode()).toBe('prompt');
     const input = document.activeElement as HTMLInputElement;
     expect(input.value).toBe('x');
-    await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); });
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
     expect(mode()).toBe('compact');
     expect(calls.onClose).not.toHaveBeenCalled();
     // The focus outside the input (review of bc57857, finding 5): Escape still goes back one step.
@@ -107,10 +148,17 @@ describe('Ilot', () => {
     input.dispatchEvent(onInput);
     expect(onInput.defaultPrevented).toBe(false);
     // Blank: nothing is sent; a (synthetic) instruction is sent trimmed, once per click.
-    await act(async () => { present().querySelector<HTMLElement>('.ilot-keycap')!.click(); });
+    await act(async () => {
+      present().querySelector<HTMLElement>('.ilot-keycap')!.click();
+    });
     expect(calls.onInstruction).not.toHaveBeenCalled();
-    await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '  plus court  '); input.dispatchEvent(new Event('input', { bubbles: true })); });
-    await act(async () => { present().querySelector<HTMLElement>('.ilot-keycap')!.click(); });
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '  plus court  ');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      present().querySelector<HTMLElement>('.ilot-keycap')!.click();
+    });
     expect(calls.onInstruction).toHaveBeenCalledWith('plus court');
   });
 
@@ -137,16 +185,30 @@ describe('Ilot', () => {
     await act(async () => root!.render(<Ilot ref={ref} actions={actions} lastActionId="translate" {...calls} />));
     // Ctrl+T is the system's, never the letter of Translate.
     let used = true;
-    await act(async () => { used = ref.current!.press('t', { ctrlKey: true }); });
+    await act(async () => {
+      used = ref.current!.press('t', { ctrlKey: true });
+    });
     expect(used).toBe(false);
     expect(calls.onChoose).not.toHaveBeenCalled();
     // Replayed together (one frame): « q » opens the field, « u », « i » and an AltGr « € » join it.
-    await act(async () => { for (const [key, modifiers] of [['q', {}], ['u', {}], ['i', { shiftKey: true }], ['€', { ctrlKey: true, altKey: true, altGraph: true }]] as const) ref.current!.press(key, modifiers); });
+    await act(async () => {
+      for (const [key, modifiers] of [
+        ['q', {}],
+        ['u', {}],
+        ['i', { shiftKey: true }],
+        ['€', { ctrlKey: true, altKey: true, altGraph: true }],
+      ] as const)
+        ref.current!.press(key, modifiers);
+    });
     expect(mode()).toBe('prompt');
     const input = present().querySelector('input')!;
     expect(input.value).toBe('qui€');
     // A key replayed once the field shows is typed into it too; a chord or a named key is not.
-    await act(async () => { ref.current!.press('x'); ref.current!.press('v', { ctrlKey: true }); ref.current!.press('ArrowLeft'); });
+    await act(async () => {
+      ref.current!.press('x');
+      ref.current!.press('v', { ctrlKey: true });
+      ref.current!.press('ArrowLeft');
+    });
     expect(input.value).toBe('qui€x');
     expect(calls.onInstruction).not.toHaveBeenCalled();
   });
@@ -155,14 +217,18 @@ describe('Ilot', () => {
   it('asks for the keyboard when the pastille or the « Ask » tile is clicked without it, and opens the field once granted', async () => {
     const onRequestKeyboard = vi.fn(async () => false);
     const { mode, present, press, render } = await mount({ keyboard: 'injected', onRequestKeyboard });
-    await act(async () => { present().querySelector<HTMLButtonElement>('[data-item="ask"]')!.click(); });
+    await act(async () => {
+      present().querySelector<HTMLButtonElement>('[data-item="ask"]')!.click();
+    });
     expect(onRequestKeyboard).toHaveBeenCalledTimes(1);
     expect(mode()).toBe('compact');
     expect(present().querySelector('input')).toBeNull();
     // Granted from the grid's « Ask » tile: the parent then passes the keyboard it holds.
     onRequestKeyboard.mockResolvedValue(true);
     expect(await press('Tab')).toBe(true);
-    await act(async () => { present().querySelector<HTMLButtonElement>('[data-tile="ask"]')!.click(); });
+    await act(async () => {
+      present().querySelector<HTMLButtonElement>('[data-tile="ask"]')!.click();
+    });
     expect(onRequestKeyboard).toHaveBeenCalledTimes(2);
     await render({ keyboard: 'focused', onRequestKeyboard });
     expect(mode()).toBe('prompt');
@@ -174,10 +240,16 @@ describe('Ilot', () => {
     const { mode, present } = await mount();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
-      const pointer = (element: Element, on: boolean) => act(async () => {
-        element.dispatchEvent(new MouseEvent(on ? 'mouseover' : 'mouseout', { bubbles: true, relatedTarget: document.body }));
-      });
-      const advance = (ms: number) => act(async () => { vi.advanceTimersByTime(ms); });
+      const pointer = (element: Element, on: boolean) =>
+        act(async () => {
+          element.dispatchEvent(
+            new MouseEvent(on ? 'mouseover' : 'mouseout', { bubbles: true, relatedTarget: document.body }),
+          );
+        });
+      const advance = (ms: number) =>
+        act(async () => {
+          vi.advanceTimersByTime(ms);
+        });
       const last = present().querySelector('[data-item="last"]')!;
       const ask = present().querySelector('[data-item="ask"]')!;
       await pointer(last, true);
@@ -202,7 +274,10 @@ describe('Ilot', () => {
   it('becomes the pill on the same surface, ignores the menu keys there, and starts over compact', async () => {
     const { press, mode, render } = await mount({ initialMode: 'grid' });
     const surface = host!.querySelector('[data-ilot-shape]');
-    await render({ shape: 'pill', pill: { key: 'working', size: { width: 44, height: 28 }, node: <span data-testid="orb" /> } });
+    await render({
+      shape: 'pill',
+      pill: { key: 'working', size: { width: 44, height: 28 }, node: <span data-testid="orb" /> },
+    });
     expect(host!.querySelector('[data-ilot]')!.getAttribute('data-shape')).toBe('pill');
     expect(host!.querySelector('.shape-layer:not(.is-leaving) [data-testid="orb"]')).not.toBeNull();
     expect(host!.querySelector('[data-ilot-shape]')).toBe(surface);

@@ -12,9 +12,32 @@ export type CaptureOrigin = 'uia' | 'copy' | 'fresh' | 'replay' | 'demo';
 // The halo window (lot 6, « mise en valeur »): logical pixels relative to the window (width × height). menu: the selection at three levels (textBox, full lines, lines = exact text), still; work: the reflection over the exact text and the aurora around the text box, after 250 ms unless a menu was shown; marks: a wave over the new text (whole), then the changed words (lines), held; leave fades, clear removes. tone and ground come from the colour read under the text (null: the app's theme).
 export type HaloPhase = 'menu' | 'work' | 'marks' | 'leave' | 'clear';
 export type HaloTone = 'light' | 'dark';
-export type HaloEvent = { generation: number; phase: HaloPhase; lines: Rect[]; full?: Rect[]; textBox?: Rect | null; whole?: Rect[]; tone?: HaloTone | null; ground?: [number, number, number] | null; width: number; height: number };
+export type HaloEvent = {
+  generation: number;
+  phase: HaloPhase;
+  lines: Rect[];
+  full?: Rect[];
+  textBox?: Rect | null;
+  whole?: Rect[];
+  tone?: HaloTone | null;
+  ground?: [number, number, number] | null;
+  width: number;
+  height: number;
+};
 // selectionRects: the lines of a UI Automation selection, physical screen pixels like anchor (lot 5); Rust places from them, the frontend never does.
-export type Capture = { id: string; text: string; source: 'selection' | 'clipboard'; origin?: CaptureOrigin; canReplace: boolean; anchor: Rect | null; selectionRects?: Rect[]; screen?: Screen; replay?: Replay; execution?: ExecutionInfo; menu?: MenuInfo };
+export type Capture = {
+  id: string;
+  text: string;
+  source: 'selection' | 'clipboard';
+  origin?: CaptureOrigin;
+  canReplace: boolean;
+  anchor: Rect | null;
+  selectionRects?: Rect[];
+  screen?: Screen;
+  replay?: Replay;
+  execution?: ExecutionInfo;
+  menu?: MenuInfo;
+};
 // lastActionId: the last action chosen in the source application (null: none remembered). Never any text.
 export type MenuInfo = { lastActionId: string | null };
 // A menu key the native hook took from the source window (the overlay could not hold the foreground): KeyboardEvent.key naming.
@@ -56,17 +79,56 @@ export type PillPlacement = 'below' | 'margin';
 // itself wherever Windows cannot) or the painted glass always (src-tauri/src/backdrop.rs).
 export type GlassMaterial = 'painted' | 'glass';
 // undoSeconds: 2 to 20. changedWordsSeconds: 5 to 120, the longest the marks stay without an action in the text.
-export type AfterReplace = { check: boolean; undo: boolean; undoSeconds: number; changedWords: boolean; changedWordsSeconds: number };
+export type AfterReplace = {
+  check: boolean;
+  undo: boolean;
+  undoSeconds: number;
+  changedWords: boolean;
+  changedWordsSeconds: number;
+};
 // 0.4.0: no target language any more; each action's instruction names its language.
 // servers: 1 to 8 (the interface shows two at most); defaultServerId: always one of them;
 // setupDone: the first-run setup was finished (or the settings come from a 0.5 file already set up).
-export type Settings = { actions: ActionDefinition[]; shortcutBindings: ShortcutBinding[]; defaultActionId: string; historyEnabled: boolean; autostart: boolean; textSize: TextSize; autoClose: AutoClose; uiVersion: UiVersion;
-  language: Language; theme: Theme; motion: MotionPreference; motionPreset: MotionPreset; indicator: Indicator; afterReplace: AfterReplace;
-  undoStrategy: UndoStrategy; pillPlacement: PillPlacement; glassMaterial: GlassMaterial; menuActionIds: string[];
-  servers: Server[]; defaultServerId: string; setupDone: boolean; changedWordsStyle: ChangedWordsStyle };
-export type StreamEvent = { requestId: string; kind: 'delta' | 'done' | 'error'; text?: string; message?: string; code?: ErrorCode };
+export type Settings = {
+  actions: ActionDefinition[];
+  shortcutBindings: ShortcutBinding[];
+  defaultActionId: string;
+  historyEnabled: boolean;
+  autostart: boolean;
+  textSize: TextSize;
+  autoClose: AutoClose;
+  uiVersion: UiVersion;
+  language: Language;
+  theme: Theme;
+  motion: MotionPreference;
+  motionPreset: MotionPreset;
+  indicator: Indicator;
+  afterReplace: AfterReplace;
+  undoStrategy: UndoStrategy;
+  pillPlacement: PillPlacement;
+  glassMaterial: GlassMaterial;
+  menuActionIds: string[];
+  servers: Server[];
+  defaultServerId: string;
+  setupDone: boolean;
+  changedWordsStyle: ChangedWordsStyle;
+};
+export type StreamEvent = {
+  requestId: string;
+  kind: 'delta' | 'done' | 'error';
+  text?: string;
+  message?: string;
+  code?: ErrorCode;
+};
 // server: the host of the server that answered (empty for an entry older than 0.6).
-export type HistoryEntry = { id: string; sourceText: string; translatedText: string; actionName: string; server: string; createdAt: string };
+export type HistoryEntry = {
+  id: string;
+  sourceText: string;
+  translatedText: string;
+  actionName: string;
+  server: string;
+  createdAt: string;
+};
 // serverId: one of the servers frozen at the capture; the first request must name the capture's (execution.serverId).
 export type TranslationRequest = { actionId: string; id: string; captureId: string; text: string; serverId: string };
 // What the session shows: the waiting pill, the short glass beside the selection, or the reader band.
@@ -77,13 +139,26 @@ export type HitRegion = { x: number; y: number; width: number; height: number; r
 // frame: the rectangle Rust anchors beside the selection (the glass footprint, present before the glass opens).
 export type OverlayGeometry = { captureId: string; presentation: Presentation; regions: HitRegion[]; frame: HitRegion };
 
-
 export type OutputMode = 'display' | 'replace';
 // key: the letter that runs it from the Îlot; shortName: its tile label; icon: a Lucide name.
-export type ActionDefinition = { id: string; name: string; promptTemplate: string; key?: string; shortName?: string; icon?: string };
+export type ActionDefinition = {
+  id: string;
+  name: string;
+  promptTemplate: string;
+  key?: string;
+  shortName?: string;
+  icon?: string;
+};
 // kind: one action at once (0.4), or the Îlot menu beside the selection. Absent means 'action'.
 export type BindingKind = 'action' | 'menu';
-export type ShortcutBinding = { id: string; kind?: BindingKind; shortcut: string; actionId: string; outputMode: OutputMode; enabled: boolean };
+export type ShortcutBinding = {
+  id: string;
+  kind?: BindingKind;
+  shortcut: string;
+  actionId: string;
+  outputMode: OutputMode;
+  enabled: boolean;
+};
 // A direct link to one field of the Settings window (lot 13, for the errors of lot 10): the
 // `field=` parameter of its URL, or the `settings-focus-field` event while it is open. A bare
 // server field means the default server's; `<serverId>.<field>` names a server (Rust drops one
@@ -91,14 +166,31 @@ export type ShortcutBinding = { id: string; kind?: BindingKind; shortcut: string
 export type ProfileField = 'endpoint' | 'apiKey' | 'model';
 export type SettingsField = 'menuShortcut' | ProfileField | `${string}.${ProfileField}`;
 // The pages of the Settings window (0.6); diagnostic is the hidden one (Ctrl+Shift+M).
-export const settingsPages = ['general', 'shortcuts', 'actions', 'after', 'appearance', 'server', 'data', 'diagnostic'] as const;
-export type SettingsPage = typeof settingsPages[number];
+export const settingsPages = [
+  'general',
+  'shortcuts',
+  'actions',
+  'after',
+  'appearance',
+  'server',
+  'data',
+  'diagnostic',
+] as const;
+export type SettingsPage = (typeof settingsPages)[number];
 // `settings-focus-field`: the page to open and/or the field to reveal (either may be absent).
 export type SettingsFocus = { field?: SettingsField; page?: SettingsPage };
 // serverId: the default server when the capture was taken; the first request goes to it.
 export type ExecutionInfo = { actionId: string; actionName: string; outputMode: OutputMode; serverId: string };
 // applied: the result was pasted over the selection (confirmed when the field read it back); fallback: it stays in the glass.
-export type ResultDelivery = { requestId: string; status: 'applied' | 'fallback'; confirmed: boolean; message: string; code?: ErrorCode; pastedRects?: Rect[]; undoable?: boolean };
+export type ResultDelivery = {
+  requestId: string;
+  status: 'applied' | 'fallback';
+  confirmed: boolean;
+  message: string;
+  code?: ErrorCode;
+  pastedRects?: Rect[];
+  undoable?: boolean;
+};
 // Lot 10: what failed, beside the French message of 0.4 (translation error, result-delivery
 // fallback, capture-notice, target-invalidated, the refusals of replace_result
 // and undo_result). The one list of the codes Rust sends (error.rs, in its order);
@@ -107,16 +199,34 @@ export type ResultDelivery = { requestId: string; status: 'applied' | 'fallback'
 // while the Settings window is in front) and nothing_recent (the tray's « Revoir » with nothing
 // recent) are capture notices since the review of da-ilot.
 export const errorCodes = [
-  'unreachable', 'timeout', 'unauthorized', 'model_not_found', 'bad_endpoint', 'busy', 'length', 'stream_broken',
-  'paste_blocked', 'target_changed', 'not_editable', 'too_long', 'cancelled',
-  'server_error', 'no_selection', 'protected_field', 'keys_held', 'settings_open', 'nothing_recent', 'internal',
+  'unreachable',
+  'timeout',
+  'unauthorized',
+  'model_not_found',
+  'bad_endpoint',
+  'busy',
+  'length',
+  'stream_broken',
+  'paste_blocked',
+  'target_changed',
+  'not_editable',
+  'too_long',
+  'cancelled',
+  'server_error',
+  'no_selection',
+  'protected_field',
+  'keys_held',
+  'settings_open',
+  'nothing_recent',
+  'internal',
   // 0.6 (field test of 0.5.1): the paste changed nothing (a PDF in a browser); the window in
   // front runs as administrator and can neither be read nor written.
-  'read_only', 'protected_window',
+  'read_only',
+  'protected_window',
   // 0.6: a shortcut pressed while the first-run setup (or its demo) is in front.
   'setup_open',
 ] as const;
-export type ErrorCode = typeof errorCodes[number];
+export type ErrorCode = (typeof errorCodes)[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.
 export type BindingState = 'registered' | 'taken' | 'failed' | 'disabled';
 export type ShortcutStatus = { bindingId: string; shortcut: string; state: BindingState };
@@ -129,7 +239,13 @@ export type TextRange = { start: number; end: number };
 export type HighlightResult = { ranges: number; lines: number };
 // Lot 9, `undo_result`: undone (confirmed when read back), refused (nothing sent), failed (sent, the original did not come back).
 export type UndoStatus = 'undone' | 'refused' | 'failed';
-export type UndoOutcome = { requestId: string; status: UndoStatus; confirmed: boolean; message: string; code?: ErrorCode };
+export type UndoOutcome = {
+  requestId: string;
+  status: UndoStatus;
+  confirmed: boolean;
+  message: string;
+  code?: ErrorCode;
+};
 // Lot 9, event `undo-state`: Undo withdrawn; typed: a key reached the source; undo_key: the user's own Ctrl+Z; caret_moved: the text is no longer before the caret.
 export type UndoLoss = 'typed' | 'undo_key' | 'caret_moved';
 export type UndoState = { requestId: string; available: false; reason: UndoLoss };
@@ -146,40 +262,84 @@ export type Refusal = { message: string; code: ErrorCode };
 // that was cut (/v1, /v1/models…). The same rule in Rust (settings::normalize_endpoint) and in
 // the preview (normalizeEndpoint, src/bridge.mock.ts), tested on src/connection/endpoint.vectors.json.
 export type NormalizedEndpoint =
-  | { ok: true; base: string; host: string; display: string; secure: boolean; local: boolean; insecure: boolean; changed: boolean; removed?: string }
+  | {
+      ok: true;
+      base: string;
+      host: string;
+      display: string;
+      secure: boolean;
+      local: boolean;
+      insecure: boolean;
+      changed: boolean;
+      removed?: string;
+    }
   | { ok: false; reason: 'empty' | 'malformed' | 'scheme' | 'credentials' };
 export const probeStepIds = ['address', 'reach', 'key', 'models'] as const;
-export type ProbeStepId = typeof probeStepIds[number];
+export type ProbeStepId = (typeof probeStepIds)[number];
 export type StepState = 'waiting' | 'running' | 'ok' | 'error' | 'skipped';
 // What a row says once it succeeded. key_accepted.tail: the four last characters of the key
 // (empty for a short key). key_none: « Mon serveur n'a pas de clé »; key_not_asked: none typed.
 export type StepDetail =
   | { code: 'found' | 'local'; host: string }
   | { code: 'tls' | 'http_local' | 'http_insecure' }
-  | { code: 'key_accepted'; tail: string } | { code: 'key_none' | 'key_not_asked' }
+  | { code: 'key_accepted'; tail: string }
+  | { code: 'key_none' | 'key_not_asked' }
   | { code: 'models'; count: number };
 export type ProbeStep = { id: ProbeStepId; state: StepState; ms?: number; detail?: StepDetail };
 // Every cause has a title and a gesture in the interface. reach.certificate: Windows refused the
 // server's certificate (self-signed, unknown authority, name, dates); reach.tls: no TLS there.
 export const probeCauses = [
-  'address.empty', 'address.malformed', 'address.scheme', 'address.credentials', 'address.dns',
-  'reach.refused', 'reach.timeout', 'reach.tls', 'reach.certificate', 'reach.network',
-  'key.required', 'key.rejected',
-  'models.notfound', 'models.empty', 'models.invalid', 'models.server',
-  'try.model', 'try.rejected', 'try.server', 'try.timeout', 'try.empty', 'cancelled',
+  'address.empty',
+  'address.malformed',
+  'address.scheme',
+  'address.credentials',
+  'address.dns',
+  'reach.refused',
+  'reach.timeout',
+  'reach.tls',
+  'reach.certificate',
+  'reach.network',
+  'key.required',
+  'key.rejected',
+  'models.notfound',
+  'models.empty',
+  'models.invalid',
+  'models.server',
+  'try.model',
+  'try.rejected',
+  'try.server',
+  'try.timeout',
+  'try.empty',
+  'cancelled',
 ] as const;
-export type ProbeCause = typeof probeCauses[number];
+export type ProbeCause = (typeof probeCauses)[number];
 // technical: the system's own words (an OS error), scrubbed of the key; never a response body.
 // logId: the journal entry of the failure (« Voir le journal » opens on it).
-export type ProbeProblem = { step: ProbeStepId | 'try'; cause: ProbeCause; status?: number; technical?: string; logId?: number };
+export type ProbeProblem = {
+  step: ProbeStepId | 'try';
+  cause: ProbeCause;
+  status?: number;
+  technical?: string;
+  logId?: number;
+};
 export type ModelInfo = { id: string; ownedBy?: string };
 // A stale run is ignored by its caller: a newer check of the same window cancels the older one
 // (its result then says cause 'cancelled').
-export type ProbeResult = { run: string; ok: boolean; endpoint: NormalizedEndpoint; steps: ProbeStep[]; models: ModelInfo[]; problem?: ProbeProblem; totalMs: number };
+export type ProbeResult = {
+  run: string;
+  ok: boolean;
+  endpoint: NormalizedEndpoint;
+  steps: ProbeStep[];
+  models: ModelInfo[];
+  problem?: ProbeProblem;
+  totalMs: number;
+};
 // `probe-step`: the whole trace at each change, to the window that started the check.
 export type ProbeStepEvent = { run: string; steps: ProbeStep[] };
 // « Essayer avec une phrase »: reply is 200 characters at most, shown and never logged.
-export type TryResult = { run: string; ok: true; reply: string; ms: number } | { run: string; ok: false; problem: ProbeProblem };
+export type TryResult =
+  | { run: string; ok: true; reply: string; ms: number }
+  | { run: string; ok: false; problem: ProbeProblem };
 // The journal (hidden Diagnostic page, « Voir le journal »). code: a stable word (resolved, local,
 // proxy, connected, tls, key_accepted, key_none, models, reply, done, started, a ProbeCause, an
 // ErrorCode). cause: the system's words for a failure. detail: a neutral fact (host → IP, a count,
@@ -187,8 +347,32 @@ export type TryResult = { run: string; ok: true; reply: string; ms: number } | {
 // proxy: `system: <host>` when the request went through the proxy of the environment.
 export type DiagStep = ProbeStepId | 'try' | 'request' | 'app';
 export type DiagLevel = 'ok' | 'info' | 'error';
-export type DiagEntry = { id: number; at: string; run?: string; step: DiagStep; level: DiagLevel; method?: 'GET' | 'POST'; url?: string; status?: number; ms?: number; code: string; cause?: string; detail?: string; proxy?: string; key?: string };
+export type DiagEntry = {
+  id: number;
+  at: string;
+  run?: string;
+  step: DiagStep;
+  level: DiagLevel;
+  method?: 'GET' | 'POST';
+  url?: string;
+  status?: number;
+  ms?: number;
+  code: string;
+  cause?: string;
+  detail?: string;
+  proxy?: string;
+  key?: string;
+};
 // `demo-ended`: the demo window closed (done: it played to its end; false: skipped, closed, or its watchdog).
 export type DemoEnded = { done: boolean };
 // `update-status` (Rust update.rs, 0.6.2): the in-app update, as Settings › General shows it.
-export type UpdateStatus = { current: string; available: string | null; checkedAt: number | null; checking: boolean; failed: boolean; installing: boolean; downloaded: number; total: number | null };
+export type UpdateStatus = {
+  current: string;
+  available: string | null;
+  checkedAt: number | null;
+  checking: boolean;
+  failed: boolean;
+  installing: boolean;
+  downloaded: number;
+  total: number | null;
+};

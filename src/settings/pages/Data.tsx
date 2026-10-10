@@ -36,7 +36,8 @@ export function DataPage() {
     if (clearing) return;
     setClearing(true);
     const done = await removeHistory(null);
-    setClearing(false); setConfirming(false);
+    setClearing(false);
+    setConfirming(false);
     if (done) showToast(t('page.data.cleared'));
   };
   const remove = async (id: string) => {
@@ -46,39 +47,106 @@ export function DataPage() {
     setRemoving(null);
   };
   const plural = new Intl.PluralRules(locales[language]).select(count) === 'one';
-  return <>
-    <Group title={t('settings.device')}>
-      <Row id="history" icon={<ShieldCheck {...ICON} />} title={t('page.data.historyKeep')} description={t('settings.historyHelp')}
-        control={<Switch checked={settings.historyEnabled} onCheckedChange={historyEnabled => persist({ ...settings, historyEnabled }, true)} label={t('page.data.historyKeep')} />} />
-    </Group>
+  return (
+    <>
+      <Group title={t('settings.device')}>
+        <Row
+          id="history"
+          icon={<ShieldCheck {...ICON} />}
+          title={t('page.data.historyKeep')}
+          description={t('settings.historyHelp')}
+          control={
+            <Switch
+              checked={settings.historyEnabled}
+              onCheckedChange={(historyEnabled) => persist({ ...settings, historyEnabled }, true)}
+              label={t('page.data.historyKeep')}
+            />
+          }
+        />
+      </Group>
 
-    <Group title={t('page.data.history')} description={settings.historyEnabled ? null : t('page.data.off')}
-      action={count > 0 ? <Button size="sm" variant="danger" onClick={() => setConfirming(true)} disabled={confirming}>{t('settings.historyClear')}</Button> : null}>
-      <InlineConfirm open={confirming && count > 0} busy={clearing} text={plural ? t('page.data.confirmOne') : t('page.data.confirmOther', { count })}
-        confirm={t('settings.historyClear')} keep={t('page.data.keep')} onKeep={() => setConfirming(false)} onConfirm={() => void clear()} />
-      {historyError && <p className="st-row-problem" role="alert">{t('settings.deleteFailed')}</p>}
-      <ul className="st-history" aria-label={t('page.data.history')}>
-        <AnimatePresence initial={false}>
-          {history.map(item => <motion.li key={item.id} layout="position" className="st-history-item"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, x: 24, transition: tx({ duration: 0.18, ease: 'out' }) }} transition={tx('smooth')}>
-            <span className="st-history-tile" aria-hidden="true"><ActionGlyph action={settings.actions.find(action => action.name === item.actionName)} /></span>
-            <span className="st-history-main">
-              <span className="st-history-head"><strong>{item.actionName}</strong><time>{[item.server, date(item.createdAt)].filter(Boolean).join(' · ')}</time></span>
-              <span className="st-history-text">
-                <span className="st-history-from">{item.sourceText}</span>
-                <ArrowRight size={13} strokeWidth={1.75} aria-hidden="true" />
-                <span className="st-history-to">{item.translatedText}</span>
+      <Group
+        title={t('page.data.history')}
+        description={settings.historyEnabled ? null : t('page.data.off')}
+        action={
+          count > 0 ? (
+            <Button size="sm" variant="danger" onClick={() => setConfirming(true)} disabled={confirming}>
+              {t('settings.historyClear')}
+            </Button>
+          ) : null
+        }
+      >
+        <InlineConfirm
+          open={confirming && count > 0}
+          busy={clearing}
+          text={plural ? t('page.data.confirmOne') : t('page.data.confirmOther', { count })}
+          confirm={t('settings.historyClear')}
+          keep={t('page.data.keep')}
+          onKeep={() => setConfirming(false)}
+          onConfirm={() => void clear()}
+        />
+        {historyError && (
+          <p className="st-row-problem" role="alert">
+            {t('settings.deleteFailed')}
+          </p>
+        )}
+        <ul className="st-history" aria-label={t('page.data.history')}>
+          <AnimatePresence initial={false}>
+            {history.map((item) => (
+              <motion.li
+                key={item.id}
+                layout="position"
+                className="st-history-item"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, x: 24, transition: tx({ duration: 0.18, ease: 'out' }) }}
+                transition={tx('smooth')}
+              >
+                <span className="st-history-tile" aria-hidden="true">
+                  <ActionGlyph action={settings.actions.find((action) => action.name === item.actionName)} />
+                </span>
+                <span className="st-history-main">
+                  <span className="st-history-head">
+                    <strong>{item.actionName}</strong>
+                    <time>{[item.server, date(item.createdAt)].filter(Boolean).join(' · ')}</time>
+                  </span>
+                  <span className="st-history-text">
+                    <span className="st-history-from">{item.sourceText}</span>
+                    <ArrowRight size={13} strokeWidth={1.75} aria-hidden="true" />
+                    <span className="st-history-to">{item.translatedText}</span>
+                  </span>
+                </span>
+                <IconButton
+                  size="sm"
+                  label={t('settings.historyRemove')}
+                  disabled={removing !== null || clearing}
+                  onClick={() => void remove(item.id)}
+                >
+                  <X {...ICON} size={15} />
+                </IconButton>
+              </motion.li>
+            ))}
+          </AnimatePresence>
+          {count === 0 && (
+            <motion.li
+              className="st-history-empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={tx(0.2)}
+            >
+              <span className="st-empty-icon" aria-hidden="true">
+                <Inbox size={18} strokeWidth={1.5} />
               </span>
-            </span>
-            <IconButton size="sm" label={t('settings.historyRemove')} disabled={removing !== null || clearing} onClick={() => void remove(item.id)}><X {...ICON} size={15} /></IconButton>
-          </motion.li>)}
-        </AnimatePresence>
-        {count === 0 && <motion.li className="st-history-empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={tx(0.2)}>
-          <span className="st-empty-icon" aria-hidden="true"><Inbox size={18} strokeWidth={1.5} /></span>
-          {t('page.data.empty')}
-        </motion.li>}
-      </ul>
-    </Group>
-    {count > 0 && <p className="st-footnote st-footnote-tight">{t(plural ? 'page.data.countOne' : 'page.data.countOther', { count })}</p>}
-  </>;
+              {t('page.data.empty')}
+            </motion.li>
+          )}
+        </ul>
+      </Group>
+      {count > 0 && (
+        <p className="st-footnote st-footnote-tight">
+          {t(plural ? 'page.data.countOne' : 'page.data.countOther', { count })}
+        </p>
+      )}
+    </>
+  );
 }

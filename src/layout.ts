@@ -8,8 +8,12 @@ import { surfaceRadius } from './motion/surface';
 // size. The pill bites the upper-right edge of the glass by 14 px (design « 1a »).
 export const glass = {
   shortWidth: 380,
-  radius: 28, pillHeight: 28, pillInset: 16, overlap: 14,
-  menuWidth: 196, menuTop: 20,
+  radius: 28,
+  pillHeight: 28,
+  pillInset: 16,
+  overlap: 14,
+  menuWidth: 196,
+  menuTop: 20,
   // Text paddings: top, side, bottom (short glass / reader band).
   shortPadding: { top: 16, side: 22, bottom: 13 },
   readerPadding: { top: 18, side: 28, bottom: 16 },
@@ -30,13 +34,25 @@ export const presets: Record<TextSize, { short: [number, number]; reader: [numbe
   xlarge: { short: [20, 30], reader: [26, 39] },
 };
 
-export type ShortMetrics = { width: number; fontSize: number; lineHeight: number; maxHeight: number; minHeight: number };
+export type ShortMetrics = {
+  width: number;
+  fontSize: number;
+  lineHeight: number;
+  maxHeight: number;
+  minHeight: number;
+};
 export type ReaderMetrics = { width: number; fontSize: number; lineHeight: number; maxHeight: number };
 
 export function shortMetrics(preset: TextSize): ShortMetrics {
   const [fontSize, lineHeight] = presets[preset].short;
   const { top, bottom } = glass.shortPadding;
-  return { width: glass.shortWidth, fontSize, lineHeight, maxHeight: COMPACT_MAX_LINES * lineHeight + top + bottom, minHeight: lineHeight + top + bottom };
+  return {
+    width: glass.shortWidth,
+    fontSize,
+    lineHeight,
+    maxHeight: COMPACT_MAX_LINES * lineHeight + top + bottom,
+    minHeight: lineHeight + top + bottom,
+  };
 }
 
 // The band: half the work area wide, at most 45 % of its height, whole lines only.
@@ -68,7 +84,10 @@ export const anchoredReserve = { width: glass.shortWidth + 2 * halo.x }; // 444
 export function bottomReserve(screen: Pick<Screen, 'width' | 'height'>, preset: TextSize) {
   const reader = readerMetrics(screen, preset);
   // top halo, menu, 6 px gap, pill band, reader glass, bottom halo
-  return { width: reader.width + 2 * halo.x, height: halo.top + menu.reserve + 6 + glass.overlap + reader.maxHeight + halo.bottomForm };
+  return {
+    width: reader.width + 2 * halo.x,
+    height: halo.top + menu.reserve + 6 + glass.overlap + reader.maxHeight + halo.bottomForm,
+  };
 }
 
 // The Îlot (lot 7) has its own window, reserved once per capture for its largest shapes: the
@@ -110,9 +129,18 @@ const ilotSpare = ilotBox.width - ilotStrip;
 const ilotRightSpare = Math.max(ilotSpare, ilotStrip - ilotMetrics.compactMinWidth);
 const ilotGrowth = ilotBox.height - ilotMetrics.compactHeight;
 export function ilotReserve(presentation: Presentation): { width: number; height: number; frame: HitRegion } {
-  if (presentation === 'bottom') return { width: ilotBox.width + 2 * halo.x, height: halo.top + ilotBox.height + halo.bottomForm, frame: { x: halo.x, y: halo.top, width: ilotBox.width, height: ilotBox.height, radius: 0 } };
+  if (presentation === 'bottom')
+    return {
+      width: ilotBox.width + 2 * halo.x,
+      height: halo.top + ilotBox.height + halo.bottomForm,
+      frame: { x: halo.x, y: halo.top, width: ilotBox.width, height: ilotBox.height, radius: 0 },
+    };
   const y = halo.top + ilotGrowth;
-  return { width: halo.x + ilotSpare + ilotStrip + ilotRightSpare + halo.x, height: y + ilotMetrics.compactHeight + ilotGrowth + halo.bottom, frame: { x: halo.x + ilotSpare, y, width: ilotStrip, height: ilotMetrics.compactHeight, radius: 0 } };
+  return {
+    width: halo.x + ilotSpare + ilotStrip + ilotRightSpare + halo.x,
+    height: y + ilotMetrics.compactHeight + ilotGrowth + halo.bottom,
+    frame: { x: halo.x + ilotSpare, y, width: ilotStrip, height: ilotMetrics.compactHeight, radius: 0 },
+  };
 }
 // Lucas, 24/09: the menu opens right of where the compact bubble was when the work area has room
 // there for its widest shape (the field), else left from the strip's corner as before, near the
@@ -156,12 +184,17 @@ export function ilotShift(width: number, room: IlotRoom | null, x = 0): number {
 export type IlotPlace = { x: number; y: number; width: number; keepLeft: boolean };
 // Whole pixels (Rust answers in logical pixels, fractional at 125 or 150 %): a translation by a
 // fraction would blur the pill's text.
-export function ilotPlace(target: Pick<PillTarget, 'x' | 'y' | 'side'>, size: { width: number; height: number }, side: IlotSide): IlotPlace {
+export function ilotPlace(
+  target: Pick<PillTarget, 'x' | 'y' | 'side'>,
+  size: { width: number; height: number },
+  side: IlotSide,
+): IlotPlace {
   const { frame } = ilotReserve('anchored');
   return {
     x: Math.round(target.x + size.width - (frame.x + frame.width)),
     y: Math.round(side === 'below' ? target.y - frame.y : target.y + size.height - (frame.y + frame.height)),
-    width: size.width, keepLeft: target.side === 'margin',
+    width: size.width,
+    keepLeft: target.side === 'margin',
   };
 }
 // The corner's place for a shape of `width` at that place (before any slide): the right edge
@@ -174,7 +207,12 @@ export function placeX(place: IlotPlace | null, width: number): number {
 // the shadow, and the window moves instead (`move_overlay`).
 export function ilotFits(target: Pick<PillTarget, 'x' | 'y'>, size: { width: number; height: number }): boolean {
   const reserve = ilotReserve('anchored');
-  return target.x >= halo.x && target.y >= halo.top && target.x + size.width <= reserve.width - halo.x && target.y + size.height <= reserve.height - halo.bottom;
+  return (
+    target.x >= halo.x &&
+    target.y >= halo.top &&
+    target.x + size.width <= reserve.width - halo.x &&
+    target.y + size.height <= reserve.height - halo.bottom
+  );
 }
 // The hit-test region of a shape in that window. Given several shapes (the start of a change, a
 // pill on its way to its place), the box that holds them all: they share the corner, or the
@@ -183,21 +221,31 @@ export function ilotFits(target: Pick<PillTarget, 'x' | 'y'>, size: { width: num
 export function ilotRegion(presentation: Presentation, side: IlotSide, ...shapes: IlotShapeBox[]): HitRegion {
   const reserve = ilotReserve(presentation);
   const { frame } = reserve;
-  const height = Math.min(reserve.height, Math.ceil(Math.max(...shapes.map(shape => shape.height))));
+  const height = Math.min(reserve.height, Math.ceil(Math.max(...shapes.map((shape) => shape.height))));
   const bottomEdge = frame.y + frame.height;
-  const round = (width: number, tall = height) => Math.min(...shapes.map(shape => surfaceRadius(shape.height)), width / 2, tall / 2);
+  const round = (width: number, tall = height) =>
+    Math.min(...shapes.map((shape) => surfaceRadius(shape.height)), width / 2, tall / 2);
   if (presentation === 'bottom') {
-    const width = Math.min(reserve.width, Math.ceil(Math.max(...shapes.map(shape => shape.width))));
+    const width = Math.min(reserve.width, Math.ceil(Math.max(...shapes.map((shape) => shape.width))));
     const x = Math.max(0, Math.floor((reserve.width - width) / 2));
-    return { x, y: Math.max(0, bottomEdge - height), width: Math.min(reserve.width - x, Math.ceil((reserve.width + width) / 2) - x), height, radius: round(width) };
+    return {
+      x,
+      y: Math.max(0, bottomEdge - height),
+      width: Math.min(reserve.width - x, Math.ceil((reserve.width + width) / 2) - x),
+      height,
+      radius: round(width),
+    };
   }
   const corner = frame.x + frame.width;
-  const x = Math.max(0, Math.floor(Math.min(...shapes.map(shape => corner + (shape.shift ?? 0) - shape.width))));
-  const width = Math.min(reserve.width, Math.ceil(Math.max(...shapes.map(shape => corner + (shape.shift ?? 0))))) - x;
+  const x = Math.max(0, Math.floor(Math.min(...shapes.map((shape) => corner + (shape.shift ?? 0) - shape.width))));
+  const width = Math.min(reserve.width, Math.ceil(Math.max(...shapes.map((shape) => corner + (shape.shift ?? 0))))) - x;
   // Each shape hangs from the strip's top (below the selection) or rests on its bottom (above).
-  const tops = shapes.map(shape => (side === 'below' ? frame.y : bottomEdge - shape.height) + (shape.dy ?? 0));
+  const tops = shapes.map((shape) => (side === 'below' ? frame.y : bottomEdge - shape.height) + (shape.dy ?? 0));
   const y = Math.max(0, Math.floor(Math.min(...tops)));
-  const bottom = Math.min(reserve.height, Math.ceil(Math.max(...shapes.map((shape, index) => tops[index] + shape.height))));
+  const bottom = Math.min(
+    reserve.height,
+    Math.ceil(Math.max(...shapes.map((shape, index) => tops[index] + shape.height))),
+  );
   return { x, y, width, height: bottom - y, radius: round(width, Math.min(height, bottom - y)) };
 }
 // Which side of its anchor Rust put a window's `frame` (the region it anchors: the Îlot's strip,

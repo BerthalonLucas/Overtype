@@ -6,23 +6,34 @@ import { test, expect, type Page } from '@playwright/test';
 // window.nativeFixture is typed in e2e/native-bridge.pw.ts; here it is reached untyped.
 
 async function openFixture(page: Page, name: 'overlay' | 'settings') {
-  await page.route(`**/?window=${name}&fixture=1`, async route => {
+  await page.route(`**/?window=${name}&fixture=1`, async (route) => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts') });
   });
   await page.goto(`/?window=${name}&fixture=1`);
   if (name === 'overlay') {
     await expect(page.locator('.glass-overlay')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => (window as any).nativeFixture.calls.some((c: any) => c.command === 'translate'))).toBe(true);
+    await expect
+      .poll(() => page.evaluate(() => (window as any).nativeFixture.calls.some((c: any) => c.command === 'translate')))
+      .toBe(true);
   }
   // A marker that a reload would erase.
-  await page.evaluate(() => { (window as unknown as { unreloaded: boolean }).unreloaded = true; });
+  await page.evaluate(() => {
+    (window as unknown as { unreloaded: boolean }).unreloaded = true;
+  });
 }
-const unreloaded = (page: Page) => page.evaluate(() => (window as unknown as { unreloaded?: boolean }).unreloaded === true);
+const unreloaded = (page: Page) =>
+  page.evaluate(() => (window as unknown as { unreloaded?: boolean }).unreloaded === true);
 
-test('the overlay speaks English by default and switches to French at once when the setting changes', async ({ page }) => {
+test('the overlay speaks English by default and switches to French at once when the setting changes', async ({
+  page,
+}) => {
   await openFixture(page, 'overlay');
-  await page.evaluate(async () => { const f = (window as any).nativeFixture; await f.delta('Bonjour'); await f.done(); });
+  await page.evaluate(async () => {
+    const f = (window as any).nativeFixture;
+    await f.delta('Bonjour');
+    await f.done();
+  });
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled();
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await page.evaluate(() => (window as any).nativeFixture.settings({ language: 'fr' }));
@@ -46,7 +57,10 @@ test('the settings window switches language and theme the moment they are chosen
   await page.emulateMedia({ colorScheme: 'light' });
   await openFixture(page, 'settings');
   const tab = (name: string) => page.getByRole('tab', { name, exact: true });
-  const pick = async (combobox: string, option: string) => { await page.getByRole('combobox', { name: combobox, exact: true }).click(); await page.getByRole('option', { name: option, exact: true }).click(); };
+  const pick = async (combobox: string, option: string) => {
+    await page.getByRole('combobox', { name: combobox, exact: true }).click();
+    await page.getByRole('option', { name: option, exact: true }).click();
+  };
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Interface language', exact: true })).toHaveText('English');
   await tab('Actions').click();
@@ -54,10 +68,21 @@ test('the settings window switches language and theme the moment they are chosen
   await tab('General').click();
   await pick('Interface language', 'Français');
   await expect(page.getByRole('heading', { name: 'Réglages', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveText(['Général', 'Raccourcis', 'Actions', 'Après remplacement', 'Apparence', 'Serveur', 'Données']);
+  await expect(page.getByRole('tab')).toHaveText([
+    'Général',
+    'Raccourcis',
+    'Actions',
+    'Après remplacement',
+    'Apparence',
+    'Serveur',
+    'Données',
+  ]);
   await expect(page.locator('.st-save')).toHaveText('Enregistré');
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
-  const saved = () => page.evaluate(() => (window as any).nativeFixture.calls.filter((c: any) => c.command === 'save_settings').at(-1)?.args.settings);
+  const saved = () =>
+    page.evaluate(
+      () => (window as any).nativeFixture.calls.filter((c: any) => c.command === 'save_settings').at(-1)?.args.settings,
+    );
   await expect.poll(saved).toMatchObject({ language: 'fr' });
   // The default actions nobody renamed follow the language (0.6): « Fix grammar » reads « Corriger ».
   await tab('Actions').click();
@@ -65,19 +90,28 @@ test('the settings window switches language and theme the moment they are chosen
   await expect(page.locator('.st-grid-name').first()).toHaveText('Corriger');
   await tab('Apparence').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.getByRole('radiogroup', { name: 'Thème', exact: true }).getByRole('radio', { name: 'Sombre', exact: true }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Thème', exact: true })
+    .getByRole('radio', { name: 'Sombre', exact: true })
+    .click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(19, 18, 25)');
   await expect.poll(saved).toMatchObject({ language: 'fr', theme: 'dark' });
   await tab('Général').click();
   await pick('Langue de l’interface', 'English');
   await tab('Appearance').click();
-  await page.getByRole('radiogroup', { name: 'Theme', exact: true }).getByRole('radio', { name: 'Light', exact: true }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Theme', exact: true })
+    .getByRole('radio', { name: 'Light', exact: true })
+    .click();
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await expect(page.locator('body')).not.toHaveCSS('background-color', 'rgb(19, 18, 25)');
   // « Follow Windows » also names an Animations choice: the Theme group's one.
-  await page.getByRole('radiogroup', { name: 'Theme', exact: true }).getByRole('radio', { name: 'Follow Windows', exact: true }).click();
+  await page
+    .getByRole('radiogroup', { name: 'Theme', exact: true })
+    .getByRole('radio', { name: 'Follow Windows', exact: true })
+    .click();
   await expect.poll(saved).toMatchObject({ language: 'en', theme: 'system' });
   expect(await unreloaded(page)).toBe(true);
 });
@@ -98,7 +132,11 @@ test('history dates follow the interface language', async ({ page }) => {
 test('the theme follows the system scheme live, and a forced theme wins over it', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await openFixture(page, 'overlay');
-  await page.evaluate(async () => { const f = (window as any).nativeFixture; await f.delta('Bonjour'); await f.done(); });
+  await page.evaluate(async () => {
+    const f = (window as any).nativeFixture;
+    await f.delta('Bonjour');
+    await f.done();
+  });
   const html = page.locator('html');
   const copy = page.locator('.translation-copy');
   await expect(html).toHaveAttribute('data-theme', 'light');
@@ -132,31 +170,45 @@ const waitingPills = [
   { name: '0.4', query: '&ui=v4', pill: '.wait-pill' },
 ] as const;
 
-for (const colorScheme of ['light', 'dark'] as const) for (const { name, query, pill: waiting } of waitingPills) {
-  test(`the ${colorScheme} material paints every surface, and every icon is a thin Lucide of 14 to 16 px (${name})`, async ({ page }) => {
-    await page.emulateMedia({ colorScheme });
-    await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-    await expect(page.locator(waiting)).toBeVisible();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
-    const paint = (selector: string) => page.locator(selector).evaluate(el => ({ image: getComputedStyle(el).backgroundImage, color: getComputedStyle(el).backgroundColor, shadow: getComputedStyle(el).boxShadow }));
-    const pill = await paint(waiting);
-    expect(pill.shadow).toContain('0.5px');
-    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-    await page.getByRole('button', { name: 'More options', exact: true }).click();
-    await expect(page.getByRole('menu')).toBeVisible();
-    const surfaces = await Promise.all(['.translation-bubble', '.action-pill', '.more-menu'].map(paint));
-    for (const surface of surfaces) expect(surface).toEqual(pill);
-    expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.06)');
-    expect(pill.color).toBe(colorScheme === 'dark' ? 'rgb(24, 23, 31)' : 'rgb(250, 249, 253)');
-    // Layout size, not the painted box: a surface still entering on its spring scales from .97.
-    const icons = await page.locator('.glass-overlay svg.lucide').evaluateAll(nodes => nodes.map(node => ({ stroke: node.getAttribute('stroke-width'), width: parseFloat(getComputedStyle(node).width), height: parseFloat(getComputedStyle(node).height) })));
-    expect(icons.length).toBeGreaterThanOrEqual(4);
-    for (const icon of icons) {
-      expect(icon.stroke).toBe('1.5');
-      expect(icon.width).toBeGreaterThanOrEqual(14);
-      expect(icon.width).toBeLessThanOrEqual(16);
-      expect(icon.height).toBe(icon.width);
-    }
-    await page.screenshot({ path: `test-results/lot1-material-${colorScheme}.png` });
-  });
-}
+for (const colorScheme of ['light', 'dark'] as const)
+  for (const { name, query, pill: waiting } of waitingPills) {
+    test(`the ${colorScheme} material paints every surface, and every icon is a thin Lucide of 14 to 16 px (${name})`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
+      await expect(page.locator(waiting)).toBeVisible();
+      await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
+      const paint = (selector: string) =>
+        page.locator(selector).evaluate((el) => ({
+          image: getComputedStyle(el).backgroundImage,
+          color: getComputedStyle(el).backgroundColor,
+          shadow: getComputedStyle(el).boxShadow,
+        }));
+      const pill = await paint(waiting);
+      expect(pill.shadow).toContain('0.5px');
+      await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
+      await page.getByRole('button', { name: 'More options', exact: true }).click();
+      await expect(page.getByRole('menu')).toBeVisible();
+      const surfaces = await Promise.all(['.translation-bubble', '.action-pill', '.more-menu'].map(paint));
+      for (const surface of surfaces) expect(surface).toEqual(pill);
+      expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.06)');
+      expect(pill.color).toBe(colorScheme === 'dark' ? 'rgb(24, 23, 31)' : 'rgb(250, 249, 253)');
+      // Layout size, not the painted box: a surface still entering on its spring scales from .97.
+      const icons = await page.locator('.glass-overlay svg.lucide').evaluateAll((nodes) =>
+        nodes.map((node) => ({
+          stroke: node.getAttribute('stroke-width'),
+          width: parseFloat(getComputedStyle(node).width),
+          height: parseFloat(getComputedStyle(node).height),
+        })),
+      );
+      expect(icons.length).toBeGreaterThanOrEqual(4);
+      for (const icon of icons) {
+        expect(icon.stroke).toBe('1.5');
+        expect(icon.width).toBeGreaterThanOrEqual(14);
+        expect(icon.width).toBeLessThanOrEqual(16);
+        expect(icon.height).toBe(icon.width);
+      }
+      await page.screenshot({ path: `test-results/lot1-material-${colorScheme}.png` });
+    });
+  }

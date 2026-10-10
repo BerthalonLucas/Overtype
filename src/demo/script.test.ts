@@ -1,9 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { createPlayer, cues, cuesBetween, dragProgress, hudAt, introAt, keysAt, phaseAt, phaseIds, phaseIndexAt, phaseProgress, phaseStarts, pointerAt, position, stills, T, type Cue, type PlayerState, type PointerPlaces } from './script';
+import {
+  createPlayer,
+  cues,
+  cuesBetween,
+  dragProgress,
+  hudAt,
+  introAt,
+  keysAt,
+  phaseAt,
+  phaseIds,
+  phaseIndexAt,
+  phaseProgress,
+  phaseStarts,
+  pointerAt,
+  position,
+  stills,
+  T,
+  type Cue,
+  type PlayerState,
+  type PointerPlaces,
+} from './script';
 
 const places: PointerPlaces = {
-  home: { x: 800, y: 700 }, dragFrom: { x: 100, y: 200 }, dragTo: { x: 300, y: 250 }, rest: { x: 420, y: 330 },
-  ask: { x: 290, y: 280 }, tile: { x: 240, y: 300 }, aside: { x: 380, y: 360 }, undo: { x: 270, y: 290 }, caret: { x: 330, y: 320 }, out: { x: 760, y: 640 },
+  home: { x: 800, y: 700 },
+  dragFrom: { x: 100, y: 200 },
+  dragTo: { x: 300, y: 250 },
+  rest: { x: 420, y: 330 },
+  ask: { x: 290, y: 280 },
+  tile: { x: 240, y: 300 },
+  aside: { x: 380, y: 360 },
+  undo: { x: 270, y: 290 },
+  caret: { x: 330, y: 320 },
+  out: { x: 760, y: 640 },
 };
 const drag = (p: number) => ({ x: 100 + 200 * p, y: 200 + 50 * p });
 
@@ -14,7 +42,8 @@ function host() {
   const fired: Cue[] = [];
   const states: PlayerState[] = [];
   return {
-    fired, states,
+    fired,
+    states,
     frames: () => frames.length,
     advance(ms: number, step = 16) {
       for (let done = 0; done < ms; done += step) {
@@ -25,9 +54,19 @@ function host() {
     },
     host: {
       now: () => now,
-      frame: (run: (now: number) => void) => { frames.push(run); return () => { const at = frames.indexOf(run); if (at >= 0) frames.splice(at, 1); }; },
-      onCue: (cue: Cue) => { fired.push(cue); },
-      onChange: (state: PlayerState) => { states.push(state); },
+      frame: (run: (now: number) => void) => {
+        frames.push(run);
+        return () => {
+          const at = frames.indexOf(run);
+          if (at >= 0) frames.splice(at, 1);
+        };
+      },
+      onCue: (cue: Cue) => {
+        fired.push(cue);
+      },
+      onChange: (state: PlayerState) => {
+        states.push(state);
+      },
     },
   };
 }
@@ -35,7 +74,7 @@ function host() {
 describe('the phases', () => {
   it('are seven, in order, each with its start', () => {
     expect(phaseIds).toEqual(['ready', 'select', 'shortcut', 'menu', 'work', 'result', 'undo']);
-    const starts = phaseIds.map(id => phaseStarts[id]);
+    const starts = phaseIds.map((id) => phaseStarts[id]);
     expect(starts[0]).toBe(0);
     for (let i = 1; i < starts.length; i++) expect(starts[i]).toBeGreaterThan(starts[i - 1]);
     expect(T.end).toBeGreaterThan(starts[starts.length - 1]);
@@ -50,7 +89,10 @@ describe('the phases', () => {
     expect(position((T.shortcut + T.menu) / 2)).toBeCloseTo(2.5);
     expect(position(T.END)).toBe(7);
     let previous = -1;
-    for (let t = 0; t <= T.END; t += 50) { expect(position(t)).toBeGreaterThanOrEqual(previous); previous = position(t); }
+    for (let t = 0; t <= T.END; t += 50) {
+      expect(position(t)).toBeGreaterThanOrEqual(previous);
+      previous = position(t);
+    }
   });
   it('hold each action in its own phase', () => {
     expect(phaseAt(T.introOut)).toBe('ready');
@@ -78,23 +120,25 @@ describe('the phases', () => {
 describe('the cues', () => {
   it('are in order and found once by the span that crosses them', () => {
     for (let i = 1; i < cues.length; i++) expect(cues[i].at).toBeGreaterThan(cues[i - 1].at);
-    expect(cuesBetween(0, T.END).map(cue => cue.id)).toEqual(cues.map(cue => cue.id));
-    expect(cuesBetween(T.open - 1, T.open).map(cue => cue.id)).toEqual(['open']);
+    expect(cuesBetween(0, T.END).map((cue) => cue.id)).toEqual(cues.map((cue) => cue.id));
+    expect(cuesBetween(T.open - 1, T.open).map((cue) => cue.id)).toEqual(['open']);
     expect(cuesBetween(T.open, T.open + 10)).toEqual([]);
   });
 });
 
 describe('the continuous values', () => {
   it('light the keys one after the other, then release them together', () => {
-    expect(keysAt(T.key1 - 1).map(key => key.lit)).toEqual([0, 0, 0]);
+    expect(keysAt(T.key1 - 1).map((key) => key.lit)).toEqual([0, 0, 0]);
     const second = keysAt(T.key2 + 200);
-    expect(second[0].lit).toBe(1); expect(second[1].lit).toBe(1); expect(second[2].lit).toBe(0);
-    expect(keysAt(T.open).every(key => key.lit === 1)).toBe(true);
-    expect(keysAt(T.keysUp + 400).every(key => key.lit === 0 && key.down === 0)).toBe(true);
+    expect(second[0].lit).toBe(1);
+    expect(second[1].lit).toBe(1);
+    expect(second[2].lit).toBe(0);
+    expect(keysAt(T.open).every((key) => key.lit === 1)).toBe(true);
+    expect(keysAt(T.keysUp + 400).every((key) => key.lit === 0 && key.down === 0)).toBe(true);
     // Four keys (Ctrl + Alt + Shift + Space) share the same span.
     const four = keysAt(T.key3 + 200, 4);
     expect(four).toHaveLength(4);
-    expect(four.every(key => key.lit === 1)).toBe(true);
+    expect(four.every((key) => key.lit === 1)).toBe(true);
     expect(keysAt(T.key1 + 10, 4)[3].lit).toBe(0);
   });
   it('show the keys under the window only around the shortcut', () => {
@@ -118,7 +162,12 @@ describe('the continuous values', () => {
     }
     expect(pointerAt(0, places, drag).opacity).toBe(0);
     expect(pointerAt(T.cursorAt + 50, places, drag)).toMatchObject({ x: 100, y: 200, shape: 'beam', opacity: 1 });
-    expect(pointerAt((T.dragFrom + T.dragTo) / 2, places, drag)).toMatchObject({ x: 200, y: 225, shape: 'beam', press: 1 });
+    expect(pointerAt((T.dragFrom + T.dragTo) / 2, places, drag)).toMatchObject({
+      x: 200,
+      y: 225,
+      shape: 'beam',
+      press: 1,
+    });
     expect(pointerAt(T.atAsk + 10, places, drag)).toMatchObject({ ...places.ask, shape: 'arrow', press: 0 });
     expect(pointerAt(T.click + 110, places, drag).press).toBeGreaterThan(0.9);
     expect(pointerAt(T.atUndo + 200, places, drag)).toMatchObject(places.undo);
@@ -133,7 +182,7 @@ describe('the player', () => {
     const player = createPlayer(h.host);
     player.play();
     h.advance(T.END + 500);
-    expect(h.fired.map(cue => cue.id)).toEqual(cues.map(cue => cue.id));
+    expect(h.fired.map((cue) => cue.id)).toEqual(cues.map((cue) => cue.id));
     expect(player.state()).toEqual({ t: T.END, playing: false, ended: true });
     expect(h.frames()).toBe(0);
     // Asked to play again at the end, it stays there.
@@ -151,7 +200,8 @@ describe('the player', () => {
     h.advance(5000);
     expect(player.state()).toEqual({ t: at, playing: false, ended: false });
     expect(h.fired).toHaveLength(fired);
-    player.play(); player.play();
+    player.play();
+    player.play();
     expect(h.frames()).toBe(1);
     h.advance(160);
     expect(player.state().t).toBeCloseTo(at + 160, -1);
@@ -162,11 +212,12 @@ describe('the player', () => {
     player.play();
     h.advance(T.pick + 100);
     const before = h.fired.length;
-    player.restart(); player.restart();
+    player.restart();
+    player.restart();
     expect(player.state()).toMatchObject({ t: 0, playing: true });
     expect(h.frames()).toBe(1);
     h.advance(T.END + 500);
-    expect(h.fired.slice(before).map(cue => cue.id)).toEqual(cues.map(cue => cue.id));
+    expect(h.fired.slice(before).map((cue) => cue.id)).toEqual(cues.map((cue) => cue.id));
   });
   it('can be stopped at any instant: no cue, no frame, no word after', () => {
     for (const at of [0, T.press, T.open + 5, T.pick, T.paste + 1, T.caret, T.END - 10]) {
@@ -175,9 +226,12 @@ describe('the player', () => {
       player.play();
       h.advance(at);
       player.stop();
-      const fired = h.fired.length, told = h.states.length;
+      const fired = h.fired.length,
+        told = h.states.length;
       h.advance(T.END);
-      player.play(); player.restart(); player.pause();
+      player.play();
+      player.restart();
+      player.pause();
       h.advance(2000);
       expect(h.fired, `stopped at ${at}`).toHaveLength(fired);
       expect(h.states).toHaveLength(told);
@@ -187,7 +241,13 @@ describe('the player', () => {
   it('stops from inside a cue without firing the next one of the same frame', () => {
     const h = host();
     const fired: string[] = [];
-    const player = createPlayer({ ...h.host, onCue: cue => { fired.push(cue.id); if (cue.id === 'click') player.stop(); } });
+    const player = createPlayer({
+      ...h.host,
+      onCue: (cue) => {
+        fired.push(cue.id);
+        if (cue.id === 'click') player.stop();
+      },
+    });
     player.play();
     h.advance(T.END);
     expect(fired.at(-1)).toBe('click');

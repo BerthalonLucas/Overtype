@@ -26,7 +26,7 @@ export const indicatorBox: Record<Indicator, { width: number; height: number }> 
 
 // Settings come from Rust: anything unknown shows the default, Perle.
 export function indicatorOf(value: unknown): Indicator {
-  return indicators.includes(value as Indicator) ? value as Indicator : 'perle';
+  return indicators.includes(value as Indicator) ? (value as Indicator) : 'perle';
 }
 
 // 44 × 28 for Perle and Nébuleuse, 52 × 28 for the Ruban, radius 14.

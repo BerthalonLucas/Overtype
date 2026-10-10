@@ -23,7 +23,8 @@ export type PauseReason = string;
 // Simulator.jsx:155: the check alone stays 1100 ms.
 export const checkOnlyMs = 1100;
 
-export const undoMs = (seconds: number) => 1000 * Math.min(undoRange.max, Math.max(undoRange.min, Math.round(Number.isFinite(seconds) ? seconds : 8)));
+export const undoMs = (seconds: number) =>
+  1000 * Math.min(undoRange.max, Math.max(undoRange.min, Math.round(Number.isFinite(seconds) ? seconds : 8)));
 
 // What the result pill shows and how long it stays (0: nothing to show, the surface leaves at
 // once, as the lab's 60 ms, Simulator.jsx:154).
@@ -44,15 +45,23 @@ export class Countdown {
     this.since = now;
   }
 
-  get paused(): boolean { return this.since === null; }
+  get paused(): boolean {
+    return this.since === null;
+  }
 
   elapsed(now: number): number {
     return Math.min(this.durationMs, this.spent + (this.since === null ? 0 : Math.max(0, now - this.since)));
   }
-  remaining(now: number): number { return this.durationMs - this.elapsed(now); }
-  expired(now: number): boolean { return this.remaining(now) <= 0; }
+  remaining(now: number): number {
+    return this.durationMs - this.elapsed(now);
+  }
+  expired(now: number): boolean {
+    return this.remaining(now) <= 0;
+  }
   // 1 at the start, 0 at the end (the ring's arc).
-  progress(now: number): number { return this.durationMs ? this.remaining(now) / this.durationMs : 0; }
+  progress(now: number): number {
+    return this.durationMs ? this.remaining(now) / this.durationMs : 0;
+  }
   // In whole seconds left, for reduced motion: the ring steps once a second instead of sliding.
   steppedProgress(now: number): number {
     const total = Math.ceil(this.durationMs / 1000);
@@ -84,7 +93,11 @@ export class Countdown {
   // Called whenever the clock stops or starts again; returns the unsubscribe.
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
-    return () => { this.listeners.delete(listener); };
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
-  private notify() { for (const listener of [...this.listeners]) listener(); }
+  private notify() {
+    for (const listener of [...this.listeners]) listener();
+  }
 }

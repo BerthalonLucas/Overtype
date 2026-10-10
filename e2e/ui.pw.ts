@@ -9,7 +9,9 @@ const journeys = [
 ] as const;
 
 for (const reducedMotion of ['no-preference', 'reduce'] as const) {
-  test(`preview backgrounds and copy feedback preserve the capture and pill bounds (${reducedMotion})`, async ({ page }) => {
+  test(`preview backgrounds and copy feedback preserve the capture and pill bounds (${reducedMotion})`, async ({
+    page,
+  }) => {
     await page.emulateMedia({ reducedMotion });
     await page.goto('/?window=overlay&demo=1&background=light');
     const copy = page.getByRole('button', { name: 'Copy translation', exact: true });
@@ -49,7 +51,10 @@ for (const scale of [1, 1.25, 1.5, 2]) {
     const bounds = await bubble.boundingBox();
     expect(bounds?.width).toBe(380);
     expect(bounds!.height).toBeLessThanOrEqual(8 * 24 + 29);
-    const style = await bubble.evaluate(el => ({ radius: getComputedStyle(el).borderRadius, opacity: getComputedStyle(el).opacity }));
+    const style = await bubble.evaluate((el) => ({
+      radius: getComputedStyle(el).borderRadius,
+      opacity: getComputedStyle(el).opacity,
+    }));
     expect(style.radius).toBe('28px');
     expect(style.opacity).toBe('1'); // alpha applies to background, not text
     await expect(bubble.getByRole('heading')).toHaveCount(0);
@@ -110,7 +115,9 @@ test('a pinned reader never leaves on its own', async ({ page }) => {
 });
 
 // The Îlot's wait: the working pill, empty for 250 ms then the Perle, nothing textual.
-test('the working pill waits while the engine streams; a long result then lands whole as a reader band', async ({ page }) => {
+test('the working pill waits while the engine streams; a long result then lands whole as a reader band', async ({
+  page,
+}) => {
   await page.goto('/?window=overlay&demo=1&scenario=long');
   const pill = page.locator('.working-pill');
   await expect(pill).toHaveAttribute('aria-label', 'Working');
@@ -130,12 +137,16 @@ test('the working pill waits while the engine streams; a long result then lands 
   await expect(page.locator('.glass-overlay')).toHaveAttribute('data-moving', 'false');
   await expect(page.locator('.translation-copy')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('.translation-bubble')).toHaveAttribute('data-reveal', 'true');
-  expect(await page.locator('.translation-bubble').evaluate(el => getComputedStyle(el).animationName)).toBe('band-in');
+  expect(await page.locator('.translation-bubble').evaluate((el) => getComputedStyle(el).animationName)).toBe(
+    'band-in',
+  );
   expect(((await page.locator('.translation-text .reveal').textContent()) ?? '').length).toBeGreaterThan(200);
 });
 
 // The 0.4 journey, asked for (uiVersion « v4 »): its spinner pill.
-test('the spinner turns while the engine streams; a long result then lands whole as a reader band', async ({ page }) => {
+test('the spinner turns while the engine streams; a long result then lands whole as a reader band', async ({
+  page,
+}) => {
   await page.goto('/?window=overlay&demo=1&scenario=long&ui=v4');
   const pill = page.locator('.wait-pill');
   await expect(pill).toHaveAttribute('aria-label', 'Translating');
@@ -147,7 +158,16 @@ test('the spinner turns while the engine streams; a long result then lands whole
   await expect(page.locator('.glass-overlay')).toHaveAttribute('data-placement', 'bottom');
   await expect(page.locator('.translation-bubble')).toHaveCount(0);
   expect(await pill.locator('svg').count()).toBe(1);
-  expect(await pill.locator('svg').evaluate(el => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration, getComputedStyle(el).animationTimingFunction, Number(el.getAttribute('width'))])).toEqual(['wait-spin', '1s', 'linear', 16]);
+  expect(
+    await pill
+      .locator('svg')
+      .evaluate((el) => [
+        getComputedStyle(el).animationName,
+        getComputedStyle(el).animationDuration,
+        getComputedStyle(el).animationTimingFunction,
+        Number(el.getAttribute('width')),
+      ]),
+  ).toEqual(['wait-spin', '1s', 'linear', 16]);
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
   await expect(pill).toHaveCount(0);
   await expect(page.locator('.glass-overlay')).toHaveAttribute('data-form', 'reader');
@@ -155,11 +175,15 @@ test('the spinner turns while the engine streams; a long result then lands whole
   await expect(page.locator('.glass-overlay')).toHaveAttribute('data-moving', 'false');
   await expect(page.locator('.translation-copy')).toHaveAttribute('aria-busy', 'false');
   await expect(page.locator('.translation-bubble')).toHaveAttribute('data-reveal', 'true');
-  expect(await page.locator('.translation-bubble').evaluate(el => getComputedStyle(el).animationName)).toBe('band-in');
+  expect(await page.locator('.translation-bubble').evaluate((el) => getComputedStyle(el).animationName)).toBe(
+    'band-in',
+  );
   expect(((await page.locator('.translation-text .reveal').textContent()) ?? '').length).toBeGreaterThan(200);
 });
 
-test('the reader band is half the viewport wide, 22/33, whole lines within 45 % of the height, and its menu opens above the pill', async ({ page }) => {
+test('the reader band is half the viewport wide, 22/33, whole lines within 45 % of the height, and its menu opens above the pill', async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1400, height: 800 });
   await page.goto('/?window=overlay&demo=1&scenario=very-long');
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 15000 });
@@ -190,10 +214,14 @@ test('the reader band is half the viewport wide, 22/33, whole lines within 45 % 
   expect(menuBox.height).toBeLessThanOrEqual(menuLayout.reserve);
   await expect(menu.getByRole('menuitem', { name: 'Expand' })).toHaveCount(0);
   // Same painted material as the glass (src/theme.css), light theme here.
-  expect(await menu.evaluate(el => getComputedStyle(el).backgroundImage)).toBe(await bubble.evaluate(el => getComputedStyle(el).backgroundImage));
+  expect(await menu.evaluate((el) => getComputedStyle(el).backgroundImage)).toBe(
+    await bubble.evaluate((el) => getComputedStyle(el).backgroundImage),
+  );
 });
 
-test('a click restores the whole budget: the glass stays at least two and a half seconds after the pointer leaves', async ({ page }) => {
+test('a click restores the whole budget: the glass stays at least two and a half seconds after the pointer leaves', async ({
+  page,
+}) => {
   await page.goto('/?window=overlay&demo=1&scenario=long');
   const copy = page.getByRole('button', { name: 'Copy translation', exact: true });
   await expect(copy).toBeEnabled();
@@ -228,7 +256,9 @@ test('a pointer resting beside the glass keeps it; it dims once the pointer is 3
   await expect(page.locator('.glass-overlay')).toHaveCSS('opacity', '1', { timeout: 2000 });
 });
 
-test('the original reads two sizes down on a tinted field and the text keeps 22 px from the rounded edge', async ({ page }) => {
+test('the original reads two sizes down on a tinted field and the text keeps 22 px from the rounded edge', async ({
+  page,
+}) => {
   await page.goto('/?window=overlay&demo=1');
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'More options', exact: true }).click();
@@ -255,40 +285,64 @@ test('error never enables copy of a partial or absent result', async ({ page }) 
 // never takes the pointer.
 test('halo fits its native viewport without overflow, transparent and never under the pointer', async ({ page }) => {
   await page.setViewportSize({ width: 236, height: 48 });
-  await page.route('**/?window=halo&fixture=1', async route => {
+  await page.route('**/?window=halo&fixture=1', async (route) => {
     const response = await route.fetch();
     await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts') });
   });
   await page.goto('/?window=halo&fixture=1');
   await expect(page.locator('html')).toHaveAttribute('data-halo-ready', 'true');
-  await page.evaluate(() => (window as unknown as { nativeFixture: { halo: (event: unknown) => Promise<void> } }).nativeFixture.halo({ generation: 1, phase: 'work', lines: [{ x: 12, y: 12, width: 212, height: 24 }], width: 236, height: 48 }));
+  await page.evaluate(() =>
+    (window as unknown as { nativeFixture: { halo: (event: unknown) => Promise<void> } }).nativeFixture.halo({
+      generation: 1,
+      phase: 'work',
+      lines: [{ x: 12, y: 12, width: 212, height: 24 }],
+      width: 236,
+      height: 48,
+    }),
+  );
   // The reflection's run, 1 px wider on each side (the lab's margin).
   const line = page.locator('.halo-veil');
   expect(await line.boundingBox()).toEqual({ x: 11, y: 12, width: 214, height: 24 });
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(page.locator('.halo')).toHaveCSS('pointer-events', 'none');
-  expect(await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight])).toEqual([236, 48]);
+  expect(
+    await page.evaluate(() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]),
+  ).toEqual([236, 48]);
 });
 
 // « Suivre Windows » (the default) with Windows reducing animations: data-motion follows the
 // media, the waiting pill's loop rests and the reveal keeps only a short fade, nothing moving.
 // The Îlot's orb (lot 8) and, asked for, the 0.4 spinner.
-for (const { name, query, pill } of journeys) test(`reduced motion ${name === 'Îlot' ? 'stills the orb' : 'freezes the spinner'} and keeps only a short fade for the reveal`, async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
-  await expect(page.locator(pill)).toHaveCount(1);
-  expect(await page.locator(name === 'Îlot' ? `${pill} .ldr` : `${pill} svg`).evaluate(el => getComputedStyle(el).animationPlayState)).toBe('paused');
-  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-  const reveals = await page.evaluate(() => ['.translation-bubble', '.translation-text .reveal'].map(selector => {
-    const el = document.querySelector(selector);
-    if (!el) return 'missing';
-    const style = getComputedStyle(el);
-    return { name: style.animationName, duration: parseFloat(style.animationDuration), delay: style.animationDelay, transform: style.transform };
-  }));
-  for (const reveal of reveals) expect(reveal).toMatchObject({ name: 'text-in', delay: '0s', transform: 'none' });
-  for (const reveal of reveals) expect((reveal as { duration: number }).duration).toBeLessThanOrEqual(0.15);
-});
+for (const { name, query, pill } of journeys)
+  test(`reduced motion ${name === 'Îlot' ? 'stills the orb' : 'freezes the spinner'} and keeps only a short fade for the reveal`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
+    await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+    await expect(page.locator(pill)).toHaveCount(1);
+    expect(
+      await page
+        .locator(name === 'Îlot' ? `${pill} .ldr` : `${pill} svg`)
+        .evaluate((el) => getComputedStyle(el).animationPlayState),
+    ).toBe('paused');
+    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
+    const reveals = await page.evaluate(() =>
+      ['.translation-bubble', '.translation-text .reveal'].map((selector) => {
+        const el = document.querySelector(selector);
+        if (!el) return 'missing';
+        const style = getComputedStyle(el);
+        return {
+          name: style.animationName,
+          duration: parseFloat(style.animationDuration),
+          delay: style.animationDelay,
+          transform: style.transform,
+        };
+      }),
+    );
+    for (const reveal of reveals) expect(reveal).toMatchObject({ name: 'text-in', delay: '0s', transform: 'none' });
+    for (const reveal of reveals) expect((reveal as { duration: number }).duration).toBeLessThanOrEqual(0.15);
+  });
 
 test('comparison shows source without replacing the translated result', async ({ page }) => {
   await page.goto('/?window=overlay&demo=1');
@@ -307,7 +361,9 @@ test('explicit replacement is accessible for an editable completed selection', a
   await expect(page.locator('.compact-feedback')).toContainText('Result pasted into the selection');
 });
 
-test('settings keep connection details collapsed, offer the reading presets and expose history deletion', async ({ page }) => {
+test('settings keep connection details collapsed, offer the reading presets and expose history deletion', async ({
+  page,
+}) => {
   await page.goto('/?window=settings&demo=1');
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   const tab = (name: string) => page.getByRole('tab', { name, exact: true });
@@ -317,7 +373,11 @@ test('settings keep connection details collapsed, offer the reading presets and 
   await page.locator('[data-server]').first().getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'API key', exact: true })).toHaveCount(1);
   await tab('Appearance').click();
-  await expect(page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Extra large', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('radiogroup', { name: 'Text size', exact: true })
+      .getByRole('radio', { name: 'Extra large', exact: true }),
+  ).toBeVisible();
   await page.getByRole('combobox', { name: 'Auto close', exact: true }).click();
   await expect(page.getByRole('option', { name: 'Never', exact: true })).toBeVisible();
   await page.keyboard.press('Escape');
@@ -375,14 +435,24 @@ test('the short glass menu overlays the glass under the pill, in the same materi
   expect(menuBounds!.height).toBeLessThanOrEqual(menuLayout.reserve);
   // The painted material of 0.6, the fallback of the real glass (light here): a soft light from the
   // top over the lab's grain and an opaque fill, the luminous rim over a 0.5 px edge (src/theme.css).
-  const material = await bubble.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, shadow: getComputedStyle(el).boxShadow }));
-  expect(material.image).toMatch(/^linear-gradient\(rgba\(255, 255, 255, 0\.5\), rgba\(255, 255, 255, 0\) 46%\), url\("data:image\/svg\+xml,.*feTurbulence.*"\), none$/);
+  const material = await bubble.evaluate((el) => ({
+    image: getComputedStyle(el).backgroundImage,
+    shadow: getComputedStyle(el).boxShadow,
+  }));
+  expect(material.image).toMatch(
+    /^linear-gradient\(rgba\(255, 255, 255, 0\.5\), rgba\(255, 255, 255, 0\) 46%\), url\("data:image\/svg\+xml,.*feTurbulence.*"\), none$/,
+  );
   await expect(bubble).toHaveCSS('background-color', 'rgb(250, 249, 253)');
   expect(material.shadow).toContain('rgba(255, 255, 255, 0.5) 0px 0px 0px 0.5px inset');
   expect(material.shadow).toContain('0px 0px 0px 0.5px');
-  expect(await menu.evaluate(el => ({ image: getComputedStyle(el).backgroundImage, shadow: getComputedStyle(el).boxShadow }))).toEqual(material);
-  expect(await menu.evaluate(el => !!el.closest('.glass-overlay'))).toBe(true);
-  expect(await menu.evaluate(el => !!el.closest('.translation-bubble'))).toBe(false);
+  expect(
+    await menu.evaluate((el) => ({
+      image: getComputedStyle(el).backgroundImage,
+      shadow: getComputedStyle(el).boxShadow,
+    })),
+  ).toEqual(material);
+  expect(await menu.evaluate((el) => !!el.closest('.glass-overlay'))).toBe(true);
+  expect(await menu.evaluate((el) => !!el.closest('.translation-bubble'))).toBe(false);
   await expect(page.locator('.glass-overlay')).toHaveCSS('transform', 'none');
   await page.screenshot({ path: 'test-results/short-menu.png' });
 });
@@ -421,7 +491,7 @@ test('very long reader preserves all text and supports wheel and keyboard withou
   await expect(indicator).toHaveCSS('opacity', '0');
   await content.focus();
   await page.keyboard.press('PageDown');
-  await expect.poll(() => content.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => content.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   await expect(content).toHaveAttribute('data-scroll-edge', 'middle');
   await expect(indicator).toHaveCSS('opacity', '1');
   await page.keyboard.press('End');
@@ -434,7 +504,7 @@ test('very long reader preserves all text and supports wheel and keyboard withou
   await content.hover();
   await expect(indicator).toHaveCSS('opacity', '1');
   await page.mouse.wheel(0, 240);
-  await expect.poll(() => content.evaluate(el => el.scrollTop)).toBeGreaterThan(0);
+  await expect.poll(() => content.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
   expect(await page.locator('.translation-text').textContent()).toBe(fullText);
   await expect(page.locator('.action-pill')).toBeInViewport();
   await expect(page.locator('.translation-bubble')).toHaveCSS('width', `${page.viewportSize()!.width / 2}px`);
@@ -459,19 +529,26 @@ test('reduced motion opens the menu without any transform, with a fade of 150 ms
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'More options', exact: true }).click();
   // Sampled every frame from the click: never a transform, fully opaque within 150 ms.
-  const samples = await page.evaluate(() => new Promise<Array<{ t: number; opacity: number; transform: string }>>(resolve => {
-    const start = performance.now();
-    const out: Array<{ t: number; opacity: number; transform: string }> = [];
-    const tick = () => {
-      const menu = document.querySelector('.more-menu');
-      if (menu) { const style = getComputedStyle(menu); out.push({ t: performance.now() - start, opacity: Number(style.opacity), transform: style.transform }); }
-      if (performance.now() - start < 400) requestAnimationFrame(tick); else resolve(out);
-    };
-    tick();
-  }));
+  const samples = await page.evaluate(
+    () =>
+      new Promise<Array<{ t: number; opacity: number; transform: string }>>((resolve) => {
+        const start = performance.now();
+        const out: Array<{ t: number; opacity: number; transform: string }> = [];
+        const tick = () => {
+          const menu = document.querySelector('.more-menu');
+          if (menu) {
+            const style = getComputedStyle(menu);
+            out.push({ t: performance.now() - start, opacity: Number(style.opacity), transform: style.transform });
+          }
+          if (performance.now() - start < 400) requestAnimationFrame(tick);
+          else resolve(out);
+        };
+        tick();
+      }),
+  );
   expect(samples.length).toBeGreaterThan(0);
   for (const sample of samples) expect(sample.transform).toBe('none');
-  for (const sample of samples.filter(sample => sample.t > 200)) expect(sample.opacity).toBe(1);
+  for (const sample of samples.filter((sample) => sample.t > 200)) expect(sample.opacity).toBe(1);
   await expect(page.getByRole('menu')).toHaveCSS('opacity', '1');
 });
 
@@ -482,30 +559,38 @@ test('a short result opens beside the selection from the pill row and never beco
   const overlay = page.locator('.glass-overlay');
   await expect(overlay).toHaveAttribute('data-form', 'short');
   await expect(overlay).toHaveAttribute('data-placement', 'anchored');
-  expect(await page.locator('.translation-bubble').evaluate(el => getComputedStyle(el).animationName)).toBe('glass-open');
+  expect(await page.locator('.translation-bubble').evaluate((el) => getComputedStyle(el).animationName)).toBe(
+    'glass-open',
+  );
   await expect(page.locator('.translation-copy')).toHaveCSS('line-height', '24px');
   await expect(page.getByRole('menuitem', { name: 'Expand' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Collapse' })).toHaveCount(0);
 });
 
-for (const { name, query, pill } of journeys) test(`a result past the ceiling lands whole and keeps the view at the top (${name})`, async ({ page }) => {
-  await page.goto(`/?window=overlay&demo=1&scenario=very-long${query}`);
-  const content = page.locator('.translation-copy');
-  await expect(page.locator(pill)).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 15000 });
-  await expect(content).toHaveAttribute('data-capped', 'true');
-  expect(await content.evaluate(el => el.scrollTop)).toBe(0);
-  await expect(page.locator(pill)).toHaveCount(0);
-});
+for (const { name, query, pill } of journeys)
+  test(`a result past the ceiling lands whole and keeps the view at the top (${name})`, async ({ page }) => {
+    await page.goto(`/?window=overlay&demo=1&scenario=very-long${query}`);
+    const content = page.locator('.translation-copy');
+    await expect(page.locator(pill)).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 15000 });
+    await expect(content).toHaveAttribute('data-capped', 'true');
+    expect(await content.evaluate((el) => el.scrollTop)).toBe(0);
+    await expect(page.locator(pill)).toHaveCount(0);
+  });
 
 test('browser settings save automatically, identify simulated checks and close back to preview', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(0);
   const tab = (name: string) => page.getByRole('tab', { name, exact: true });
   await tab('Appearance').click();
-  await page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true }).click();
-  await expect(page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true })).toHaveAttribute('aria-checked', 'true');
+  await page
+    .getByRole('radiogroup', { name: 'Text size', exact: true })
+    .getByRole('radio', { name: 'Large', exact: true })
+    .click();
+  await expect(
+    page.getByRole('radiogroup', { name: 'Text size', exact: true }).getByRole('radio', { name: 'Large', exact: true }),
+  ).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('.st-save')).toHaveText('Saved');
   await tab('Server').click();
   await expect(page.getByText('Browser preview · simulated connection')).toBeVisible();
@@ -514,7 +599,9 @@ test('browser settings save automatically, identify simulated checks and close b
   await tab('Shortcuts').click();
   const menu = page.locator('[data-field="menuShortcut"]');
   await menu.getByRole('button', { name: 'Change', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: 'Menu shortcut: press the combination', exact: true })).toHaveText('Press the combination…');
+  await expect(page.getByRole('textbox', { name: 'Menu shortcut: press the combination', exact: true })).toHaveText(
+    'Press the combination…',
+  );
   await page.keyboard.press('Control+Shift+K');
   await expect(menu.locator('kbd')).toHaveText(['Ctrl', 'Shift', 'K']);
   await page.getByRole('button', { name: 'Close', exact: true }).click();

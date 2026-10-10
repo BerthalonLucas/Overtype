@@ -1,17 +1,57 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { messageKeys } from '../i18n';
-import { allPages, clickRun, isDiagnosticsChord, loadDiagnosticsShown, pageAbout, pageFromLocation, pageOr, pageTitle, saveDiagnosticsShown, secretClicks, secretGapMs, visiblePages } from './nav';
+import {
+  allPages,
+  clickRun,
+  isDiagnosticsChord,
+  loadDiagnosticsShown,
+  pageAbout,
+  pageFromLocation,
+  pageOr,
+  pageTitle,
+  saveDiagnosticsShown,
+  secretClicks,
+  secretGapMs,
+  visiblePages,
+} from './nav';
 
-const chord = (over: Partial<Parameters<typeof isDiagnosticsChord>[0]> = {}) => ({ ctrlKey: true, shiftKey: true, altKey: false, metaKey: false, code: 'KeyM', key: 'M', repeat: false, ...over });
+const chord = (over: Partial<Parameters<typeof isDiagnosticsChord>[0]> = {}) => ({
+  ctrlKey: true,
+  shiftKey: true,
+  altKey: false,
+  metaKey: false,
+  code: 'KeyM',
+  key: 'M',
+  repeat: false,
+  ...over,
+});
 
 describe('the pages of the Settings window', () => {
   afterEach(() => saveDiagnosticsShown(false));
 
   it('shows one page per topic in order; After replacing only in the Îlot, Diagnostic only once revealed', () => {
-    expect(visiblePages({ uiVersion: 'ilot' }, false)).toEqual(['general', 'shortcuts', 'actions', 'after', 'appearance', 'server', 'data']);
-    expect(visiblePages({ uiVersion: 'v4' }, false)).toEqual(['general', 'shortcuts', 'actions', 'appearance', 'server', 'data']);
+    expect(visiblePages({ uiVersion: 'ilot' }, false)).toEqual([
+      'general',
+      'shortcuts',
+      'actions',
+      'after',
+      'appearance',
+      'server',
+      'data',
+    ]);
+    expect(visiblePages({ uiVersion: 'v4' }, false)).toEqual([
+      'general',
+      'shortcuts',
+      'actions',
+      'appearance',
+      'server',
+      'data',
+    ]);
     expect(visiblePages({ uiVersion: 'ilot' }, true).at(-1)).toBe('diagnostic');
-    for (const page of allPages) { expect(messageKeys).toContain(pageTitle(page)); expect(messageKeys).toContain(pageAbout(page)); }
+    for (const page of allPages) {
+      expect(messageKeys).toContain(pageTitle(page));
+      expect(messageKeys).toContain(pageAbout(page));
+    }
   });
 
   it('falls back to General when the page went away, and reads the page asked by the URL', () => {
@@ -42,7 +82,12 @@ describe('the pages of the Settings window', () => {
   it('reveals the Diagnostic at the fifth quick click on the version, and starts the count over after a pause', () => {
     let run = { count: 0, at: 0 };
     let now = 10_000;
-    for (let n = 1; n < secretClicks; n++) { const next = clickRun(run, now); expect(next.fired).toBe(false); run = next.run; now += 100; }
+    for (let n = 1; n < secretClicks; n++) {
+      const next = clickRun(run, now);
+      expect(next.fired).toBe(false);
+      run = next.run;
+      now += 100;
+    }
     expect(clickRun(run, now).fired).toBe(true);
     expect(clickRun(run, now).run).toEqual({ count: 0, at: 0 });
     // Four clicks, a pause, then a click: the run starts over.

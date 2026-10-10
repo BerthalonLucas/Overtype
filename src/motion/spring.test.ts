@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { fromAppleDurationBounce, fromDampingRatio, fromMotionVisualDuration, fromResponse, springSolver, springToLinear, toAppleDurationBounce, toMotionSpring } from './spring';
+import {
+  fromAppleDurationBounce,
+  fromDampingRatio,
+  fromMotionVisualDuration,
+  fromResponse,
+  springSolver,
+  springToLinear,
+  toAppleDurationBounce,
+  toMotionSpring,
+} from './spring';
 
 const presets = [
   { name: 'smooth enter', duration: 0.4, bounce: 0 },
@@ -10,20 +19,32 @@ const presets = [
 
 describe('Apple springs in Motion', () => {
   it('converts an Apple duration and bounce to visualDuration = d / 1.2 and the same bounce, both always passed', () => {
-    expect(toMotionSpring({ duration: 0.4, bounce: 0 })).toEqual({ type: 'spring', visualDuration: 0.4 / 1.2, bounce: 0 });
-    expect(toMotionSpring({ duration: 0.45, bounce: 0.3 })).toEqual({ type: 'spring', visualDuration: 0.45 / 1.2, bounce: 0.3 });
+    expect(toMotionSpring({ duration: 0.4, bounce: 0 })).toEqual({
+      type: 'spring',
+      visualDuration: 0.4 / 1.2,
+      bounce: 0,
+    });
+    expect(toMotionSpring({ duration: 0.45, bounce: 0.3 })).toEqual({
+      type: 'spring',
+      visualDuration: 0.45 / 1.2,
+      bounce: 0.3,
+    });
     expect(toMotionSpring({ duration: 0.4, bounce: 0 }).visualDuration).toBeCloseTo(0.333, 3);
     expect(toMotionSpring({ duration: 0.45, bounce: 0 }).visualDuration).toBeCloseTo(0.375, 3);
-    for (const spring of presets.map(toMotionSpring)) expect(Object.keys(spring).sort()).toEqual(['bounce', 'type', 'visualDuration']);
+    for (const spring of presets.map(toMotionSpring))
+      expect(Object.keys(spring).sort()).toEqual(['bounce', 'type', 'visualDuration']);
   });
 
-  it.each(presets)('gives Motion the same stiffness and damping as the Apple spring ($name)', ({ duration, bounce }) => {
-    const apple = fromAppleDurationBounce(duration, bounce);
-    const motion = fromMotionVisualDuration(duration / 1.2, bounce);
-    expect(motion.mass).toBe(apple.mass);
-    expect(motion.stiffness).toBeCloseTo(apple.stiffness, 9);
-    expect(motion.damping).toBeCloseTo(apple.damping, 9);
-  });
+  it.each(presets)(
+    'gives Motion the same stiffness and damping as the Apple spring ($name)',
+    ({ duration, bounce }) => {
+      const apple = fromAppleDurationBounce(duration, bounce);
+      const motion = fromMotionVisualDuration(duration / 1.2, bounce);
+      expect(motion.mass).toBe(apple.mass);
+      expect(motion.stiffness).toBeCloseTo(apple.stiffness, 9);
+      expect(motion.damping).toBeCloseTo(apple.damping, 9);
+    },
+  );
 
   it('refuses the bounces Motion cannot express instead of changing them', () => {
     expect(() => toMotionSpring({ duration: 0.4, bounce: -0.2 })).toThrow(RangeError);
@@ -47,7 +68,10 @@ describe('springs as CSS linear()', () => {
   // Settle times of the lab's own springToLinear (design-lab/src/spring.js:94-106 with its
   // defaults, recomputed from that source): what a CSS spring lasts, not what it is perceived as.
   it.each([
-    [0.4, 0, 613], [0.45, 0, 680], [0.4, 0.3, 700], [0.45, 0.3, 775],
+    [0.4, 0, 613],
+    [0.45, 0, 680],
+    [0.4, 0.3, 700],
+    [0.45, 0.3, 775],
   ])('settles a %s s spring with bounce %s in %s ms', (duration, bounce, ms) => {
     expect(springToLinear(fromAppleDurationBounce(duration, bounce)).duration).toBe(ms);
   });
@@ -68,11 +92,18 @@ describe('springs as CSS linear()', () => {
       expect(at).toBeLessThan(100);
       last = at;
     }
-    if (typeof CSS !== 'undefined' && CSS.supports) expect(CSS.supports('transition-timing-function', easing)).toBe(true);
+    if (typeof CSS !== 'undefined' && CSS.supports)
+      expect(CSS.supports('transition-timing-function', easing)).toBe(true);
   });
 
   it('overshoots only with a bounce', () => {
-    const peak = (easing: string) => Math.max(...easing.slice(7, -1).split(', ').map(stop => Number(stop.split(' ')[0])));
+    const peak = (easing: string) =>
+      Math.max(
+        ...easing
+          .slice(7, -1)
+          .split(', ')
+          .map((stop) => Number(stop.split(' ')[0])),
+      );
     expect(peak(springToLinear(fromAppleDurationBounce(0.4, 0)).easing)).toBe(1);
     expect(peak(springToLinear(fromAppleDurationBounce(0.4, 0.3)).easing)).toBeGreaterThan(1.04);
   });

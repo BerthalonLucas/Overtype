@@ -18,7 +18,16 @@ export type GlassShape = { x: number; y: number; width: number; height: number; 
 
 // The surfaces of the overlay that are glass: the list of the `data-backdrop="glass"` rule of
 // src/theme.css (src/glassBackdrop.test.ts keeps the two in step).
-export const overlayGlassSurfaces = ['.translation-bubble', '.wait-pill', '.working-pill', '.action-pill', '.more-menu', '.notice-pill', '.compact-feedback', '.ilot-shape'];
+export const overlayGlassSurfaces = [
+  '.translation-bubble',
+  '.wait-pill',
+  '.working-pill',
+  '.action-pill',
+  '.more-menu',
+  '.notice-pill',
+  '.compact-feedback',
+  '.ilot-shape',
+];
 // The setup window: natively the page is the window.
 export const setupGlassSurfaces = ['.su-desk[data-native] .su-window'];
 
@@ -40,17 +49,26 @@ export function cornerRadius(computed: string, width: number, height: number): n
   const first = computed.trim().split(/\s+/)[0] ?? '';
   const value = Number.parseFloat(first);
   if (!Number.isFinite(value) || value <= 0) return 0;
-  const pixels = first.endsWith('%') ? Math.min(width, height) * value / 100 : value;
+  const pixels = first.endsWith('%') ? (Math.min(width, height) * value) / 100 : value;
   return Math.min(pixels, Math.min(width, height) / 2);
 }
 
 // The part of a surface common to two successive frames, or null when they share nothing: the
 // rectangle inside both, the rounder of the two corners, the fainter of the two opacities.
 export function overlap(before: GlassShape, now: GlassShape): GlassShape | null {
-  const x = Math.max(before.x, now.x), y = Math.max(before.y, now.y);
-  const width = round(Math.min(before.x + before.width, now.x + now.width) - x), height = round(Math.min(before.y + before.height, now.y + now.height) - y);
+  const x = Math.max(before.x, now.x),
+    y = Math.max(before.y, now.y);
+  const width = round(Math.min(before.x + before.width, now.x + now.width) - x),
+    height = round(Math.min(before.y + before.height, now.y + now.height) - y);
   if (!(width >= 1) || !(height >= 1)) return null;
-  return { x, y, width, height, radius: Math.min(Math.max(before.radius, now.radius), Math.min(width, height) / 2), opacity: Math.min(before.opacity, now.opacity) };
+  return {
+    x,
+    y,
+    width,
+    height,
+    radius: Math.min(Math.max(before.radius, now.radius), Math.min(width, height) / 2),
+    opacity: Math.min(before.opacity, now.opacity),
+  };
 }
 
 // One surface as it shows now, or null when nothing of it does.
@@ -68,10 +86,19 @@ export function measureGlass(element: HTMLElement): GlassShape | null {
   }
   if (!(opacity > 0.004)) return null;
   // The radius is written for the layout box; an entrance scales the whole surface with it.
-  const width = element.offsetWidth || box.width, height = element.offsetHeight || box.height;
+  const width = element.offsetWidth || box.width,
+    height = element.offsetHeight || box.height;
   const scale = Math.min(box.width / width, box.height / height);
-  const radius = cornerRadius(style.borderTopLeftRadius, width, height) * (Number.isFinite(scale) && scale > 0 ? scale : 1);
-  return { x: round(box.left), y: round(box.top), width: round(box.width), height: round(box.height), radius: round(Math.min(radius, Math.min(box.width, box.height) / 2)), opacity: round(Math.min(1, opacity)) };
+  const radius =
+    cornerRadius(style.borderTopLeftRadius, width, height) * (Number.isFinite(scale) && scale > 0 ? scale : 1);
+  return {
+    x: round(box.left),
+    y: round(box.top),
+    width: round(box.width),
+    height: round(box.height),
+    radius: round(Math.min(radius, Math.min(box.width, box.height) / 2)),
+    opacity: round(Math.min(1, opacity)),
+  };
 }
 
 // Starts the tracker for this page's window; returns how to stop it. `fallback`: the value of

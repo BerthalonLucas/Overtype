@@ -20,18 +20,32 @@ export const CURVES: Record<'out' | 'inOut' | 'fluent' | 'linear', Bezier> = {
   linear: [0, 0, 1, 1],
 };
 export type CurveName = keyof typeof CURVES;
-type Custom = { type?: 'spring' | 'tween'; duration?: number; bounce?: number; delay?: number; ease?: CurveName | Bezier };
+type Custom = {
+  type?: 'spring' | 'tween';
+  duration?: number;
+  bounce?: number;
+  delay?: number;
+  ease?: CurveName | Bezier;
+};
 export type Tx = { type: 'spring' | 'tween'; duration?: number; bounce?: number; delay?: number; ease?: Bezier };
 
 // tx('smooth') · tx('bouncy', { delay: .1 }) · tx({ duration: .2, ease: 'out' }) · tx(0.2)
 export function tx(spec: SpringName | CurveName | number | Custom = 'smooth', extra: { delay?: number } = {}): Tx {
   let base: Custom;
   if (typeof spec === 'number') base = { type: 'tween', duration: spec, ease: 'out' };
-  else if (typeof spec === 'string') base = spec in SPRINGS ? { type: 'spring', ...SPRINGS[spec as SpringName] } : { type: 'tween', duration: 0.2, ease: spec as CurveName };
+  else if (typeof spec === 'string')
+    base =
+      spec in SPRINGS
+        ? { type: 'spring', ...SPRINGS[spec as SpringName] }
+        : { type: 'tween', duration: 0.2, ease: spec as CurveName };
   else base = { ...spec };
   const { ease, ...rest } = { ...base, ...extra };
   const type = rest.type ?? (rest.bounce !== undefined ? 'spring' : 'tween');
-  return { ...rest, type, ...(ease ? { ease: typeof ease === 'string' ? CURVES[ease] : ease } : type === 'tween' ? { ease: CURVES.out } : {}) };
+  return {
+    ...rest,
+    type,
+    ...(ease ? { ease: typeof ease === 'string' ? CURVES[ease] : ease } : type === 'tween' ? { ease: CURVES.out } : {}),
+  };
 }
 export const useTx = () => tx;
 // Whether movement gives way to short fades (the setting « Animations », or Windows).

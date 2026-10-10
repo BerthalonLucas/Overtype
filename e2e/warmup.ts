@@ -8,16 +8,31 @@ export default async function warmup(config: FullConfig) {
   const baseURL = config.projects[0]?.use.baseURL;
   if (!baseURL) return;
   const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
-  const browser = await chromium.launch(executablePath ? { executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] } : undefined);
+  const browser = await chromium.launch(
+    executablePath ? { executablePath, args: ['--no-sandbox', '--disable-dev-shm-usage'] } : undefined,
+  );
   try {
     const page = await browser.newPage();
-    await page.route('**/?window=settings&fixture=1', async route => {
+    await page.route('**/?window=settings&fixture=1', async (route) => {
       const response = await route.fetch();
-      await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts') });
+      await route.fulfill({
+        response,
+        body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts'),
+      });
     });
-    for (const path of ['/?window=settings&fixture=1', '/?window=overlay&demo=1', '/', '/lab.html', '/lab-frame.html']) {
+    for (const path of [
+      '/?window=settings&fixture=1',
+      '/?window=overlay&demo=1',
+      '/',
+      '/lab.html',
+      '/lab-frame.html',
+    ]) {
       await page.goto(new URL(path, baseURL).href, { waitUntil: 'load', timeout: 90_000 });
-      await page.waitForFunction(() => (document.getElementById('root')?.childElementCount ?? 1) > 0, undefined, { timeout: 90_000 }).catch(() => undefined);
+      await page
+        .waitForFunction(() => (document.getElementById('root')?.childElementCount ?? 1) > 0, undefined, {
+          timeout: 90_000,
+        })
+        .catch(() => undefined);
     }
   } finally {
     await browser.close();

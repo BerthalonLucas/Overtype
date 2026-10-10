@@ -34,7 +34,13 @@ export type ChangedRanges = { mode: HighlightMode; ranges: TextRange[] };
 
 // Action ids of src/actionDefaults.ts (and the 0.4 translations a migrated file keeps).
 const wordActions: ReadonlySet<string> = new Set(['correct', 'professionalize', 'shorten']);
-const blockActions: ReadonlySet<string> = new Set(['translate', 'translate-fr', 'translate-en', 'email', 'instruction']);
+const blockActions: ReadonlySet<string> = new Set([
+  'translate',
+  'translate-fr',
+  'translate-en',
+  'email',
+  'instruction',
+]);
 
 export function highlightModeFor(actionId: string): 'words' | 'block' | 'auto' {
   if (wordActions.has(actionId)) return 'words';
@@ -95,7 +101,8 @@ export function insertedRanges(ops: readonly DiffOp[], result: string): TextRang
 
 // Visible characters of the new text kept from the original (the eq runs), over all of them.
 function keptShare(ops: readonly DiffOp[]): number {
-  let kept = 0, total = 0;
+  let kept = 0,
+    total = 0;
   for (const op of ops) {
     if (op.type === 'del') continue;
     const visible = op.text.replace(/\s+/g, '').length;

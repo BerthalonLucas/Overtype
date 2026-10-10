@@ -11,15 +11,33 @@ import type { Settings } from './types';
 let current: Settings | null = null;
 let started = false;
 const listeners = new Set<() => void>();
-function publish(next: Settings) { current = next; listeners.forEach(listener => listener()); }
+function publish(next: Settings) {
+  current = next;
+  listeners.forEach((listener) => listener());
+}
 function start() {
   if (started) return;
   started = true;
-  void bridge.getSettings().then(next => { if (!current) publish(next); }).catch(() => undefined);
+  void bridge
+    .getSettings()
+    .then((next) => {
+      if (!current) publish(next);
+    })
+    .catch(() => undefined);
   void bridge.on<Settings>('settings-changed', publish);
 }
-function subscribe(listener: () => void) { start(); listeners.add(listener); return () => { listeners.delete(listener); }; }
+function subscribe(listener: () => void) {
+  start();
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 const snapshot = () => current;
 
-export function shareSettings(next: Settings) { publish(next); }
-export function useSettings(): Settings | null { return useSyncExternalStore(subscribe, snapshot, snapshot); }
+export function shareSettings(next: Settings) {
+  publish(next);
+}
+export function useSettings(): Settings | null {
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}

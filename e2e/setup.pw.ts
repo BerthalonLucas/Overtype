@@ -8,7 +8,8 @@ const open = (page: Page, query = '') => page.goto(`/?window=setup&lang=fr&theme
 const screen = (page: Page, step: string) => page.locator(`.su-screen[data-screen="${step}"]`);
 const primary = (page: Page) => page.locator('.su-primary');
 // What the simulated bridge holds: the same module the page uses.
-const saved = (page: Page) => page.evaluate(async () => (await (await import('/src/bridge.ts' as string)).bridge.getSettings()) as Settings);
+const saved = (page: Page) =>
+  page.evaluate(async () => (await (await import('/src/bridge.ts' as string)).bridge.getSettings()) as Settings);
 async function fillServer(page: Page, address = 'llm.exemple.com/v1', key = 'sk-labo-7f3a9c2e') {
   await page.locator('.ft-connection input').first().fill(address);
   if (key) await page.locator('.ft-connection input[type="password"]').fill(key);
@@ -43,7 +44,12 @@ test.describe('the first-run setup', () => {
     await expect(page.locator('.su-rec .ft-keycap')).toHaveText(['Ctrl', 'Alt', 'Espace']);
     await page.getByRole('radio', { name: /Lancer directement une action/ }).click();
     await expect(page.getByRole('combobox', { name: 'Action lancée par le raccourci' })).toBeVisible();
-    expect((await saved(page)).shortcutBindings[0]).toMatchObject({ id: 'menu', kind: 'action', actionId: 'correct', shortcut: 'Ctrl+Alt+Space' });
+    expect((await saved(page)).shortcutBindings[0]).toMatchObject({
+      id: 'menu',
+      kind: 'action',
+      actionId: 'correct',
+      shortcut: 'Ctrl+Alt+Space',
+    });
     await page.getByRole('radio', { name: /Ouvrir le menu/ }).click();
     await expect(page.getByRole('combobox', { name: 'Action lancée par le raccourci' })).toHaveCount(0);
     expect((await saved(page)).shortcutBindings[0]).toMatchObject({ id: 'menu', kind: 'menu' });
@@ -58,10 +64,19 @@ test.describe('the first-run setup', () => {
     await expect(page.getByText('Connecté')).toBeVisible({ timeout: 8000 });
     await expect(primary(page)).toBeEnabled();
     // Saved without « /v1 », as Rust stores it.
-    await expect.poll(async () => (await saved(page)).servers[0]).toMatchObject({ endpoint: 'https://llm.exemple.com', apiKey: 'sk-labo-7f3a9c2e', noKey: false, model: 'unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL' });
+    await expect
+      .poll(async () => (await saved(page)).servers[0])
+      .toMatchObject({
+        endpoint: 'https://llm.exemple.com',
+        apiKey: 'sk-labo-7f3a9c2e',
+        noKey: false,
+        model: 'unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL',
+      });
     // One sentence to try it.
     await page.getByRole('button', { name: 'Essayer avec une phrase' }).click();
-    await expect(page.locator('.su-trial-bubble')).toHaveText('Bonjour, la réunion commence à dix heures.', { timeout: 8000 });
+    await expect(page.locator('.su-trial-bubble')).toHaveText('Bonjour, la réunion commence à dix heures.', {
+      timeout: 8000,
+    });
     await primary(page).click();
 
     // 4. Before the demo; skipped here (e2e/demo.pw.ts plays it).
@@ -103,7 +118,9 @@ test.describe('the first-run setup', () => {
     await expect(screen(page, 'shortcut')).toBeVisible();
     await expect(page.locator('.su-screen')).toHaveCount(1);
     // Ten presses of the big button in the same instant.
-    await primary(page).evaluate(button => { for (let i = 0; i < 10; i++) (button as HTMLButtonElement).click(); });
+    await primary(page).evaluate((button) => {
+      for (let i = 0; i < 10; i++) (button as HTMLButtonElement).click();
+    });
     await expect(screen(page, 'model')).toBeVisible();
     await page.waitForTimeout(500);
     await expect(page.locator('.su-screen')).toHaveCount(1);
@@ -142,7 +159,9 @@ test.describe('the first-run setup', () => {
     await expect(page.locator('.su-window')).toBeVisible();
   });
 
-  test('a refused key keeps the trace open on the failing step, with its journal; the server fixed, it continues', async ({ page }) => {
+  test('a refused key keeps the trace open on the failing step, with its journal; the server fixed, it continues', async ({
+    page,
+  }) => {
     await open(page, '&step=model&conn=cle-refusee');
     await fillServer(page);
     await expect(page.getByText('Clé refusée')).toBeVisible({ timeout: 8000 });
@@ -164,7 +183,9 @@ test.describe('the first-run setup', () => {
     await expect(primary(page)).toBeEnabled();
   });
 
-  test('a server that never answers does not hold the screen: typing elsewhere, leaving and coming back work', async ({ page }) => {
+  test('a server that never answers does not hold the screen: typing elsewhere, leaving and coming back work', async ({
+    page,
+  }) => {
     await open(page, '&step=model&conn=delai');
     await fillServer(page);
     await expect(page.locator('.ft-trace, .ft-check')).not.toHaveCount(0);
@@ -182,10 +203,14 @@ test.describe('the first-run setup', () => {
     await expect(page.getByRole('button', { name: 'Plus tard' })).toBeEnabled();
   });
 
-  test('« Voir la démo » clicked twice opens one demo; skipped, the setup comes back on « C’est prêt »', async ({ page }) => {
+  test('« Voir la démo » clicked twice opens one demo; skipped, the setup comes back on « C’est prêt »', async ({
+    page,
+  }) => {
     await open(page, '&step=demo');
     await expect(screen(page, 'demo')).toBeVisible();
-    await primary(page).evaluate(button => { for (let i = 0; i < 4; i++) (button as HTMLButtonElement).click(); });
+    await primary(page).evaluate((button) => {
+      for (let i = 0; i < 4; i++) (button as HTMLButtonElement).click();
+    });
     await expect(page.locator('.dm-root')).toHaveCount(1, { timeout: 8000 });
     await expect(page.locator('.su-window')).toHaveCount(0);
     await page.waitForTimeout(1500);
@@ -204,7 +229,9 @@ test.describe('the first-run setup', () => {
     await open(page, '&step=ready');
     await expect(screen(page, 'ready')).toBeVisible();
     await expect(page.locator('.su-recap')).toContainText('À configurer dans les Réglages');
-    const done = page.waitForFunction(async () => (await (await import('/src/bridge.ts' as string)).bridge.getSettings()).setupDone === true);
+    const done = page.waitForFunction(
+      async () => (await (await import('/src/bridge.ts' as string)).bridge.getSettings()).setupDone === true,
+    );
     await page.locator('.su-secondary').dblclick();
     await done;
     await expect(page).not.toHaveURL(/window=settings/);
@@ -217,8 +244,10 @@ test.describe('the first-run setup', () => {
     const button = await primary(page).boundingBox();
     expect(button!.y + button!.height).toBeLessThanOrEqual(520);
     const viewport = page.locator('.su-scroll-vp');
-    expect(await viewport.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
-    await viewport.evaluate(element => { element.scrollTop = element.scrollHeight; });
+    expect(await viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    await viewport.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
     await expect(page.getByRole('radio', { name: /Lancer directement une action/ })).toBeInViewport();
   });
 });

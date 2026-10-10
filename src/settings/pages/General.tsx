@@ -26,49 +26,135 @@ export function GeneralPage() {
     setResetting(true);
     try {
       const saved = await resetToDefaults();
-      const chord = saved.shortcutBindings.find(binding => binding.kind === 'menu' && binding.enabled)?.shortcut ?? null;
+      const chord =
+        saved.shortcutBindings.find((binding) => binding.kind === 'menu' && binding.enabled)?.shortcut ?? null;
       const kept = chord && chord !== menuShortcut ? chord : null;
-      setResetNote(kept ? { text: t('settings.resetDoneKept', { default: menuShortcut, shortcut: kept }), failed: false } : null);
+      setResetNote(
+        kept ? { text: t('settings.resetDoneKept', { default: menuShortcut, shortcut: kept }), failed: false } : null,
+      );
       showToast(t('settings.resetDone'));
-    } catch { setResetNote({ text: t('settings.resetFailed'), failed: true }); }
-    finally { setResetting(false); setConfirming(false); }
+    } catch {
+      setResetNote({ text: t('settings.resetFailed'), failed: true });
+    } finally {
+      setResetting(false);
+      setConfirming(false);
+    }
   };
   // One window, whatever the clicks: the button waits for the answer before it listens again.
   const replay = async () => {
     if (opening.current) return;
-    opening.current = true; setReplaying(true);
-    try { await bridge.openSetup(true); } catch { showToast(t('page.general.replayFailed')); }
-    finally { opening.current = false; setReplaying(false); }
+    opening.current = true;
+    setReplaying(true);
+    try {
+      await bridge.openSetup(true);
+    } catch {
+      showToast(t('page.general.replayFailed'));
+    } finally {
+      opening.current = false;
+      setReplaying(false);
+    }
   };
-  return <>
-    <Group title={t('page.general.startup')}>
-      <Row id="autostart" icon={<Power {...ICON} />} title={t('settings.autostart')} description={t('settings.autostartHelp')}
-        control={<Switch checked={settings.autostart} onCheckedChange={autostart => persist({ ...settings, autostart }, true)} label={t('settings.autostart')} />} />
-      <Row id="language" icon={<Globe {...ICON} />} title={t('page.general.language')} description={t('settings.languageHelp')}
-        control={<Select<Language> label={t('page.general.language')} value={settings.language} onChange={language => persist(withLanguage(settings, language), true)} width={150}
-          options={[{ value: 'fr', label: 'Français' }, { value: 'en', label: 'English' }]} />} />
-    </Group>
+  return (
+    <>
+      <Group title={t('page.general.startup')}>
+        <Row
+          id="autostart"
+          icon={<Power {...ICON} />}
+          title={t('settings.autostart')}
+          description={t('settings.autostartHelp')}
+          control={
+            <Switch
+              checked={settings.autostart}
+              onCheckedChange={(autostart) => persist({ ...settings, autostart }, true)}
+              label={t('settings.autostart')}
+            />
+          }
+        />
+        <Row
+          id="language"
+          icon={<Globe {...ICON} />}
+          title={t('page.general.language')}
+          description={t('settings.languageHelp')}
+          control={
+            <Select<Language>
+              label={t('page.general.language')}
+              value={settings.language}
+              onChange={(language) => persist(withLanguage(settings, language), true)}
+              width={150}
+              options={[
+                { value: 'fr', label: 'Français' },
+                { value: 'en', label: 'English' },
+              ]}
+            />
+          }
+        />
+      </Group>
 
-    <Group title={t('page.general.firstRun')}>
-      <Row id="replay" icon={<Sparkles {...ICON} />} title={t('page.general.replay')} description={t('page.general.replayHelp')}
-        control={<Button onClick={() => void replay()} busy={replaying}>{t('page.general.replay')}</Button>} />
-    </Group>
+      <Group title={t('page.general.firstRun')}>
+        <Row
+          id="replay"
+          icon={<Sparkles {...ICON} />}
+          title={t('page.general.replay')}
+          description={t('page.general.replayHelp')}
+          control={
+            <Button onClick={() => void replay()} busy={replaying}>
+              {t('page.general.replay')}
+            </Button>
+          }
+        />
+      </Group>
 
-    <Group title={t('page.general.resetGroup')}>
-      <Row id="reset" icon={<RotateCcw {...ICON} />} title={t('settings.reset')} description={resetNote && !resetNote.failed ? resetNote.text : t('settings.resetHelp')}
-        control={<Button variant="danger" onClick={() => { setResetNote(null); setConfirming(true); }} disabled={confirming}>{t('settings.resetAction')}</Button>}>
-        <InlineConfirm open={confirming} busy={resetting} text={t('settings.resetConfirm')} confirm={t('settings.resetConfirmAction')} keep={t('settings.resetKeep')}
-          onKeep={() => setConfirming(false)} onConfirm={() => void reset()} />
-        {resetNote?.failed && <p className="st-row-problem" role="alert">{resetNote.text}</p>}
-      </Row>
-    </Group>
+      <Group title={t('page.general.resetGroup')}>
+        <Row
+          id="reset"
+          icon={<RotateCcw {...ICON} />}
+          title={t('settings.reset')}
+          description={resetNote && !resetNote.failed ? resetNote.text : t('settings.resetHelp')}
+          control={
+            <Button
+              variant="danger"
+              onClick={() => {
+                setResetNote(null);
+                setConfirming(true);
+              }}
+              disabled={confirming}
+            >
+              {t('settings.resetAction')}
+            </Button>
+          }
+        >
+          <InlineConfirm
+            open={confirming}
+            busy={resetting}
+            text={t('settings.resetConfirm')}
+            confirm={t('settings.resetConfirmAction')}
+            keep={t('settings.resetKeep')}
+            onKeep={() => setConfirming(false)}
+            onConfirm={() => void reset()}
+          />
+          {resetNote?.failed && (
+            <p className="st-row-problem" role="alert">
+              {resetNote.text}
+            </p>
+          )}
+        </Row>
+      </Group>
 
-    <Group title={t('page.general.aboutGroup')}>
-      <UpdateRow />
-      <Row icon={<Info {...ICON} />} title={t('page.general.version', { version: __APP_VERSION__ })} description={t('page.general.versionHelp')}
-        control={<Button variant="ghost" icon={<LogOut {...ICON} size={15} />} onClick={() => void bridge.quit()}>{t('settings.quit')}</Button>} />
-    </Group>
-  </>;
+      <Group title={t('page.general.aboutGroup')}>
+        <UpdateRow />
+        <Row
+          icon={<Info {...ICON} />}
+          title={t('page.general.version', { version: __APP_VERSION__ })}
+          description={t('page.general.versionHelp')}
+          control={
+            <Button variant="ghost" icon={<LogOut {...ICON} size={15} />} onClick={() => void bridge.quit()}>
+              {t('settings.quit')}
+            </Button>
+          }
+        />
+      </Group>
+    </>
+  );
 }
 
 // « Mises à jour » (0.6.2): « Vérifier » asks GitHub now; a newer version lights « Mettre à jour
@@ -81,20 +167,60 @@ function UpdateRow() {
   const [installFailed, setInstallFailed] = useState(false);
   const available = status?.available ?? null;
   const installing = status?.installing ?? false;
-  const check = () => { setInstallFailed(false); void bridge.checkUpdate().catch(() => undefined); };
-  const install = () => { setInstallFailed(false); bridge.installUpdate().catch(() => setInstallFailed(true)); };
-  const percent = status?.total ? Math.min(100, Math.round(status.downloaded / status.total * 100)) : 0;
-  const time = status?.checkedAt ? new Date(status.checkedAt).toLocaleTimeString(settings.language, { hour: '2-digit', minute: '2-digit' }) : null;
-  const description = installing ? t('page.general.updateInstalling', { percent })
-    : installFailed ? t('page.general.updateInstallFailed')
-    : status?.checking ? t('page.general.updateChecking')
-    : available ? t('page.general.updateAvailable', { version: available })
-    : status?.failed ? t('page.general.updateFailed')
-    : time ? t('page.general.updateUpToDate', { time })
-    : t('page.general.updateNever');
-  return <Row id="update" icon={<Download {...ICON} />} title={t('page.general.updates')} description={description}
-    control={<div className="st-update-actions">
-      {available && <Button variant="primary" className="st-update-ready" icon={<Download {...ICON} size={15} />} busy={installing} onClick={install}>{t('page.general.updateInstall', { version: available })}</Button>}
-      <Button variant={available ? 'ghost' : 'secondary'} busy={status?.checking} disabled={installing} onClick={check}>{t('page.general.updateCheck')}</Button>
-    </div>} />;
+  const check = () => {
+    setInstallFailed(false);
+    void bridge.checkUpdate().catch(() => undefined);
+  };
+  const install = () => {
+    setInstallFailed(false);
+    bridge.installUpdate().catch(() => setInstallFailed(true));
+  };
+  const percent = status?.total ? Math.min(100, Math.round((status.downloaded / status.total) * 100)) : 0;
+  const time = status?.checkedAt
+    ? new Date(status.checkedAt).toLocaleTimeString(settings.language, { hour: '2-digit', minute: '2-digit' })
+    : null;
+  const description = installing
+    ? t('page.general.updateInstalling', { percent })
+    : installFailed
+      ? t('page.general.updateInstallFailed')
+      : status?.checking
+        ? t('page.general.updateChecking')
+        : available
+          ? t('page.general.updateAvailable', { version: available })
+          : status?.failed
+            ? t('page.general.updateFailed')
+            : time
+              ? t('page.general.updateUpToDate', { time })
+              : t('page.general.updateNever');
+  return (
+    <Row
+      id="update"
+      icon={<Download {...ICON} />}
+      title={t('page.general.updates')}
+      description={description}
+      control={
+        <div className="st-update-actions">
+          {available && (
+            <Button
+              variant="primary"
+              className="st-update-ready"
+              icon={<Download {...ICON} size={15} />}
+              busy={installing}
+              onClick={install}
+            >
+              {t('page.general.updateInstall', { version: available })}
+            </Button>
+          )}
+          <Button
+            variant={available ? 'ghost' : 'secondary'}
+            busy={status?.checking}
+            disabled={installing}
+            onClick={check}
+          >
+            {t('page.general.updateCheck')}
+          </Button>
+        </div>
+      }
+    />
+  );
 }

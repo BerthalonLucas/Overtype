@@ -6,17 +6,32 @@ const rect = { x: 10, y: 10, width: 80, height: 20 };
 
 describe('the ink of the changed words', () => {
   it('keeps the inks of the lab where they already read at 4.5:1: white and near-white, the dark grounds', () => {
-    for (const ground of [[255, 255, 255], [251, 251, 251], [243, 243, 243]] as Rgb[]) expect(inkFor('encre', 'light', ground)).toEqual(inkStops.encre.light);
-    for (const ground of [[32, 32, 32], [30, 30, 30], [13, 17, 23], [0, 0, 0]] as Rgb[]) expect(inkFor('encre', 'dark', ground)).toEqual(inkStops.encre.dark);
+    for (const ground of [
+      [255, 255, 255],
+      [251, 251, 251],
+      [243, 243, 243],
+    ] as Rgb[])
+      expect(inkFor('encre', 'light', ground)).toEqual(inkStops.encre.light);
+    for (const ground of [
+      [32, 32, 32],
+      [30, 30, 30],
+      [13, 17, 23],
+      [0, 0, 0],
+    ] as Rgb[])
+      expect(inkFor('encre', 'dark', ground)).toEqual(inkStops.encre.dark);
   });
 
   it('reads at 4.5:1 on every ground, both styles, whatever the tone Rust gave', () => {
-    for (let r = 0; r <= 255; r += 15) for (let g = 0; g <= 255; g += 15) for (let b = 0; b <= 255; b += 51) {
-      const ground: Rgb = [r, g, b];
-      for (const style of ['encre', 'eclat'] as const) for (const tone of ['light', 'dark'] as const) {
-        for (const stop of inkFor(style, tone, ground)) expect(contrast(stop, ground), `${style} ${tone} on ${ground}`).toBeGreaterThanOrEqual(4.5);
-      }
-    }
+    for (let r = 0; r <= 255; r += 15)
+      for (let g = 0; g <= 255; g += 15)
+        for (let b = 0; b <= 255; b += 51) {
+          const ground: Rgb = [r, g, b];
+          for (const style of ['encre', 'eclat'] as const)
+            for (const tone of ['light', 'dark'] as const) {
+              for (const stop of inkFor(style, tone, ground))
+                expect(contrast(stop, ground), `${style} ${tone} on ${ground}`).toBeGreaterThanOrEqual(4.5);
+            }
+        }
   });
 
   it('moves an ink no further than it must', () => {
@@ -37,8 +52,18 @@ describe('the masks the page accepts', () => {
     expect(usableMasks([{ rect, image: png }])).toHaveLength(1);
     expect(usableMasks(undefined)).toEqual([]);
     expect(usableMasks('x')).toEqual([]);
-    expect(usableMasks([null, { rect, image: 'https://example.invalid/a.png' }, { rect, image: 'data:image/svg+xml;base64,AAAA' }, { rect, image: `${png}"); background: url("x` },
-      { rect: { ...rect, width: 0 }, image: png }, { rect: { ...rect, x: Number.NaN }, image: png }, { image: png }, { rect, image: png + 'A'.repeat(MASK_MAX_LENGTH) }])).toEqual([]);
+    expect(
+      usableMasks([
+        null,
+        { rect, image: 'https://example.invalid/a.png' },
+        { rect, image: 'data:image/svg+xml;base64,AAAA' },
+        { rect, image: `${png}"); background: url("x` },
+        { rect: { ...rect, width: 0 }, image: png },
+        { rect: { ...rect, x: Number.NaN }, image: png },
+        { image: png },
+        { rect, image: png + 'A'.repeat(MASK_MAX_LENGTH) },
+      ]),
+    ).toEqual([]);
     expect(usableMasks(Array.from({ length: 100 }, () => ({ rect, image: png })))).toHaveLength(64);
   });
 

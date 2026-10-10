@@ -16,11 +16,36 @@ export type HaloMask = { rect: Rect; image: string };
 // The lab's inks (design-lab/reglages/src/demo/demo.css:71-87): deeper on a light ground, pastel
 // on a dark one. « Éclat » is one ink (a deep night blue, or white).
 export const inkStops: Record<ChangedWordsStyle, Record<HaloTone, readonly Rgb[]>> = {
-  encre: { light: [[74, 85, 214], [122, 63, 201], [168, 51, 106]], dark: [[174, 188, 255], [213, 182, 255], [245, 163, 181]] },
-  eclat: { light: [[13, 20, 64], [13, 20, 64], [13, 20, 64]], dark: [[255, 255, 255], [255, 255, 255], [255, 255, 255]] },
+  encre: {
+    light: [
+      [74, 85, 214],
+      [122, 63, 201],
+      [168, 51, 106],
+    ],
+    dark: [
+      [174, 188, 255],
+      [213, 182, 255],
+      [245, 163, 181],
+    ],
+  },
+  eclat: {
+    light: [
+      [13, 20, 64],
+      [13, 20, 64],
+      [13, 20, 64],
+    ],
+    dark: [
+      [255, 255, 255],
+      [255, 255, 255],
+      [255, 255, 255],
+    ],
+  },
 };
 
-const channel = (value: number) => { const c = value / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const channel = (value: number) => {
+  const c = value / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
 export const luminance = ([r, g, b]: Rgb) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 export function contrast(a: Rgb, b: Rgb): number {
   const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
@@ -34,7 +59,7 @@ export function readable(ink: Rgb, ground: Rgb, min = 4.5): Rgb {
   const towards = luminance(ground) > 0.179 ? 0 : 255;
   for (let step = 0; step <= 50; step++) {
     const k = step / 50;
-    const mixed = ink.map(value => Math.round(value + (towards - value) * k)) as unknown as Rgb;
+    const mixed = ink.map((value) => Math.round(value + (towards - value) * k)) as unknown as Rgb;
     if (contrast(mixed, ground) >= min) return mixed;
   }
   return [towards, towards, towards];
@@ -43,7 +68,7 @@ export function readable(ink: Rgb, ground: Rgb, min = 4.5): Rgb {
 // The three stops of the ink for a run: the lab's, made readable on the ground when it is known.
 export function inkFor(style: ChangedWordsStyle, tone: HaloTone, ground?: Rgb | null): readonly Rgb[] {
   const stops = inkStops[style][tone];
-  return ground ? stops.map(stop => readable(stop, ground)) : stops;
+  return ground ? stops.map((stop) => readable(stop, ground)) : stops;
 }
 
 // What the page accepts as a mask: a PNG data URL (nothing fetched, nothing else decoded), of a
@@ -52,21 +77,35 @@ export function inkFor(style: ChangedWordsStyle, tone: HaloTone, ground?: Rgb | 
 const MASK_PREFIX = 'data:image/png;base64,';
 export const MASK_MAX_LENGTH = 400_000;
 export const MASK_MAX_COUNT = 64;
-const real = (rect: Rect | undefined): rect is Rect => !!rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) && rect.width > 0 && rect.height > 0;
+const real = (rect: Rect | undefined): rect is Rect =>
+  !!rect && [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) && rect.width > 0 && rect.height > 0;
 export function usableMasks(masks: unknown): HaloMask[] {
   if (!Array.isArray(masks)) return [];
-  return (masks as Partial<HaloMask>[]).filter((mask): mask is HaloMask => !!mask && typeof mask.image === 'string' && mask.image.startsWith(MASK_PREFIX)
-    && mask.image.length <= MASK_MAX_LENGTH && /^[A-Za-z0-9+/=]+$/.test(mask.image.slice(MASK_PREFIX.length)) && real(mask.rect)).slice(0, MASK_MAX_COUNT);
+  return (masks as Partial<HaloMask>[])
+    .filter(
+      (mask): mask is HaloMask =>
+        !!mask &&
+        typeof mask.image === 'string' &&
+        mask.image.startsWith(MASK_PREFIX) &&
+        mask.image.length <= MASK_MAX_LENGTH &&
+        /^[A-Za-z0-9+/=]+$/.test(mask.image.slice(MASK_PREFIX.length)) &&
+        real(mask.rect),
+    )
+    .slice(0, MASK_MAX_COUNT);
 }
 
 // The mask that belongs to a line of changed words: the one covering most of it (half at least).
 export function maskOf(line: Rect, masks: readonly HaloMask[]): HaloMask | null {
-  let best: HaloMask | null = null, most = 0;
+  let best: HaloMask | null = null,
+    most = 0;
   for (const mask of masks) {
     const w = Math.min(line.x + line.width, mask.rect.x + mask.rect.width) - Math.max(line.x, mask.rect.x);
     const h = Math.min(line.y + line.height, mask.rect.y + mask.rect.height) - Math.max(line.y, mask.rect.y);
     const share = w > 0 && h > 0 ? (w * h) / (line.width * line.height) : 0;
-    if (share >= 0.5 && share > most) { best = mask; most = share; }
+    if (share >= 0.5 && share > most) {
+      best = mask;
+      most = share;
+    }
   }
   return best;
 }

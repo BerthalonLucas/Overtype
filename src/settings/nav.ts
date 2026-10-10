@@ -9,7 +9,9 @@ export type PageId = SettingsPage;
 export const isPage = (value: unknown): value is PageId => (allPages as readonly unknown[]).includes(value);
 
 export function visiblePages(settings: Pick<Settings, 'uiVersion'>, diagnostics: boolean): PageId[] {
-  return allPages.filter(page => (page !== 'after' || settings.uiVersion === 'ilot') && (page !== 'diagnostic' || diagnostics));
+  return allPages.filter(
+    (page) => (page !== 'after' || settings.uiVersion === 'ilot') && (page !== 'diagnostic' || diagnostics),
+  );
 }
 export const pageTitle = (page: PageId): MessageKey => `nav.${page}`;
 export const pageAbout = (page: PageId): MessageKey => `page.${page}.about`;
@@ -29,8 +31,17 @@ export function pageFromLocation(search: string): PageId | null {
 // so does the physical KeyM (a layout without that letter; keys injected by a remote keyboard
 // carry no code at all). Alt is left out (Ctrl+Alt is AltGr on many layouts), and a held key
 // does not flip it back and forth.
-export function isDiagnosticsChord(event: Pick<KeyboardEvent, 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey' | 'code' | 'key' | 'repeat'>): boolean {
-  return event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey && (event.key.toLowerCase() === 'm' || event.code === 'KeyM') && !event.repeat;
+export function isDiagnosticsChord(
+  event: Pick<KeyboardEvent, 'ctrlKey' | 'shiftKey' | 'altKey' | 'metaKey' | 'code' | 'key' | 'repeat'>,
+): boolean {
+  return (
+    event.ctrlKey &&
+    event.shiftKey &&
+    !event.altKey &&
+    !event.metaKey &&
+    (event.key.toLowerCase() === 'm' || event.code === 'KeyM') &&
+    !event.repeat
+  );
 }
 
 // Five clicks on the version, each within 700 ms of the previous one, reveal the Diagnostic too.
@@ -47,8 +58,17 @@ export function clickRun(previous: ClickRun, now: number): { run: ClickRun; fire
 // kept in the WebView's storage (never anything private); absent storage means hidden.
 const storageKey = 'flowtranslate.settings.diagnostics';
 export function loadDiagnosticsShown(): boolean {
-  try { return window.localStorage.getItem(storageKey) === '1'; } catch { return false; }
+  try {
+    return window.localStorage.getItem(storageKey) === '1';
+  } catch {
+    return false;
+  }
 }
 export function saveDiagnosticsShown(shown: boolean) {
-  try { if (shown) window.localStorage.setItem(storageKey, '1'); else window.localStorage.removeItem(storageKey); } catch { /* storage unavailable: shown for this opening only */ }
+  try {
+    if (shown) window.localStorage.setItem(storageKey, '1');
+    else window.localStorage.removeItem(storageKey);
+  } catch {
+    /* storage unavailable: shown for this opening only */
+  }
 }

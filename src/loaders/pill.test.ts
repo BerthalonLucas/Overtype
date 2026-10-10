@@ -15,7 +15,8 @@ describe('working pill shape (lot 8)', () => {
   // The lab's .pill-row: 12 px each side of the content, never under 44 px (app.css:155).
   it('keeps 12 px each side of every indicator and fits it in the height', () => {
     for (const indicator of indicators) {
-      const shape = workingPillShape(indicator), box = indicatorBox[indicator];
+      const shape = workingPillShape(indicator),
+        box = indicatorBox[indicator];
       expect(shape.width - box.width).toBeGreaterThanOrEqual(2 * workingPill.paddingX);
       expect(box.height).toBeLessThan(shape.height);
     }
@@ -50,10 +51,14 @@ describe('WorkingPill', () => {
     expect(pill().style.height).toBe('28px');
     expect(host.querySelector<HTMLElement>('.working-slot')!.style.cssText).toContain('width: 28px');
     expect(host.querySelector('.ldr')).toBeNull();
-    await act(async () => { vi.advanceTimersByTime(ORB_DELAY_MS - 1); });
+    await act(async () => {
+      vi.advanceTimersByTime(ORB_DELAY_MS - 1);
+    });
     expect(host.querySelector('.ldr')).toBeNull();
     expect(pill().dataset.orb).toBe('waiting');
-    await act(async () => { vi.advanceTimersByTime(1); });
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+    });
     expect(host.querySelector('.ldr.sinus.ruban')).not.toBeNull();
     expect(pill().dataset.orb).toBe('shown');
     expect(pill().style.width).toBe('52px');
@@ -64,9 +69,13 @@ describe('WorkingPill', () => {
 
   it('never shows the orb when the work ends first: the check stands in its place', async () => {
     await act(async () => root.render(createElement(WorkingPill, { indicator: 'perle' })));
-    await act(async () => { vi.advanceTimersByTime(120); });
+    await act(async () => {
+      vi.advanceTimersByTime(120);
+    });
     await act(async () => root.render(createElement(WorkingPill, { indicator: 'perle', done: true })));
-    await act(async () => { vi.advanceTimersByTime(1000); });
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
     expect(host.querySelector('.ldr')).toBeNull();
     expect(pill().dataset.done).toBe('true');
     expect(pill().querySelector('svg.lucide-check')).not.toBeNull();
@@ -79,10 +88,14 @@ describe('WorkingPill', () => {
     await act(async () => root.render(createElement(WorkingPill, { indicator: 'nebuleuse' })));
     expect(pill().dataset.paused).toBeUndefined();
     visibility.mockReturnValue('hidden');
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(pill().dataset.paused).toBe('true');
     visibility.mockReturnValue('visible');
-    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
     expect(pill().dataset.paused).toBeUndefined();
     visibility.mockRestore();
   });

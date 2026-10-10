@@ -8,7 +8,7 @@ export type SweepLine = Rect & { offset: number };
 
 export function sweepStrip(lines: readonly Rect[]): { lines: SweepLine[]; total: number } {
   let total = 0;
-  const strip = lines.map(line => {
+  const strip = lines.map((line) => {
     const placed = { ...line, offset: total };
     total += line.width;
     return placed;
@@ -31,5 +31,10 @@ export function pad(rect: Rect, dx: number, dy = 0): Rect {
 }
 
 export function inset(rect: Rect, n: number): Rect {
-  return { x: rect.x + n, y: rect.y + n, width: Math.max(0, rect.width - 2 * n), height: Math.max(0, rect.height - 2 * n) };
+  return {
+    x: rect.x + n,
+    y: rect.y + n,
+    width: Math.max(0, rect.width - 2 * n),
+    height: Math.max(0, rect.height - 2 * n),
+  };
 }

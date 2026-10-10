@@ -13,7 +13,9 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "lint": "biome ci",
+    "format": "biome format --write"
   },
   "dependencies": {
     "@radix-ui/react-collapsible": "1.1.20",
@@ -38,6 +40,7 @@
     "vite": "8.2.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.5.14",
     "@playwright/test": "1.63.0",
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3",

@@ -35,11 +35,34 @@ const french: IlotAction[] = [
 
 // What the Îlot gave, for the tests and the readout: action ids, and only the length of an
 // instruction (never its text, as everywhere in the app).
-type IlotEvent = { type: 'choose'; actionId: string } | { type: 'instruction'; length: number } | { type: 'close' } | { type: 'key'; key: string; used: boolean };
-declare global { interface Window { __ilotEvents?: IlotEvent[]; __ilotShapes?: ShapeChange[] } }
+type IlotEvent =
+  | { type: 'choose'; actionId: string }
+  | { type: 'instruction'; length: number }
+  | { type: 'close' }
+  | { type: 'key'; key: string; used: boolean };
+declare global {
+  interface Window {
+    __ilotEvents?: IlotEvent[];
+    __ilotShapes?: ShapeChange[];
+  }
+}
 
 // The keys Rust forwards when the window could not take the keyboard (menu-key, KeyboardEvent.key).
-const injectable: Array<[string, string]> = [['Enter', 'Entrée'], ['Tab', 'Tab'], ['ArrowLeft', '←'], ['ArrowUp', '↑'], ['ArrowDown', '↓'], ['ArrowRight', '→'], ['Escape', 'Échap'], ['f', 'F'], ['t', 'T'], ['e', 'E'], ['1', '1'], ['6', '6'], [' ', 'Espace']];
+const injectable: Array<[string, string]> = [
+  ['Enter', 'Entrée'],
+  ['Tab', 'Tab'],
+  ['ArrowLeft', '←'],
+  ['ArrowUp', '↑'],
+  ['ArrowDown', '↓'],
+  ['ArrowRight', '→'],
+  ['Escape', 'Échap'],
+  ['f', 'F'],
+  ['t', 'T'],
+  ['e', 'E'],
+  ['1', '1'],
+  ['6', '6'],
+  [' ', 'Espace'],
+];
 
 function describe(event: IlotEvent | undefined): string {
   if (!event) return 'Aucun événement';
@@ -65,12 +88,18 @@ export function IlotFixture({ scenario, params }: { scenario: IlotScenario; para
 
   const record = (event: IlotEvent) => {
     (window.__ilotEvents ??= []).push(event);
-    setEvents(list => [...list.slice(-4), event]);
+    setEvents((list) => [...list.slice(-4), event]);
   };
-  const later = (ms: number, run: () => void) => { window.clearTimeout(timer.current); if (!hold) timer.current = window.setTimeout(run, ms); };
+  const later = (ms: number, run: () => void) => {
+    window.clearTimeout(timer.current);
+    if (!hold) timer.current = window.setTimeout(run, ms);
+  };
   useEffect(() => () => window.clearTimeout(timer.current), []);
   // A choice turns the Îlot into the work pill, as the overlay will; here it comes back.
-  const work = () => { setShape('pill'); later(1600, () => setShape('menu')); };
+  const work = () => {
+    setShape('pill');
+    later(1600, () => setShape('menu'));
+  };
 
   // Rust's `menu-key` event, as a window event in the browser.
   useEffect(() => {
@@ -86,31 +115,83 @@ export function IlotFixture({ scenario, params }: { scenario: IlotScenario; para
   // The pill scenario goes back and forth on its own unless held.
   useEffect(() => {
     if (scenario !== 'ilot-pill' || hold) return;
-    const loop = window.setInterval(() => setShape(current => current === 'menu' ? 'pill' : 'menu'), 1800);
+    const loop = window.setInterval(() => setShape((current) => (current === 'menu' ? 'pill' : 'menu')), 1800);
     return () => window.clearInterval(loop);
   }, [scenario, hold]);
 
-  return <>
-    <div className={`ilot-demo is-${origin}`}>
-      <p className="ilot-demo-text">Could you send the <mark>updated proposal before Thursday?</mark></p>
-      <div className="ilot-demo-anchor">
-        <AnimatePresence>
-          {open && <Ilot ref={handle} actions={actions} lastActionId={last} keyboard={keyboard} initialMode={initialMode} origin={origin} shape={shape}
-            pill={{ key: 'working', size: ilotMetrics.pill, node: <span className="ilot-demo-orb" role="status" aria-label="Working" /> }}
-            onShapeChange={change => { (window.__ilotShapes ??= []).push(change); }}
-            onChoose={id => { record({ type: 'choose', actionId: id }); setLast(id); work(); }}
-            onInstruction={text => { record({ type: 'instruction', length: [...text].length }); work(); }}
-            onClose={() => { record({ type: 'close' }); setOpen(false); later(900, () => setOpen(true)); }} />}
-        </AnimatePresence>
+  return (
+    <>
+      <div className={`ilot-demo is-${origin}`}>
+        <p className="ilot-demo-text">
+          Could you send the <mark>updated proposal before Thursday?</mark>
+        </p>
+        <div className="ilot-demo-anchor">
+          <AnimatePresence>
+            {open && (
+              <Ilot
+                ref={handle}
+                actions={actions}
+                lastActionId={last}
+                keyboard={keyboard}
+                initialMode={initialMode}
+                origin={origin}
+                shape={shape}
+                pill={{
+                  key: 'working',
+                  size: ilotMetrics.pill,
+                  node: <span className="ilot-demo-orb" role="status" aria-label="Working" />,
+                }}
+                onShapeChange={(change) => {
+                  (window.__ilotShapes ??= []).push(change);
+                }}
+                onChoose={(id) => {
+                  record({ type: 'choose', actionId: id });
+                  setLast(id);
+                  work();
+                }}
+                onInstruction={(text) => {
+                  record({ type: 'instruction', length: [...text].length });
+                  work();
+                }}
+                onClose={() => {
+                  record({ type: 'close' });
+                  setOpen(false);
+                  later(900, () => setOpen(true));
+                }}
+              />
+            )}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
-    <div className="ilot-demo-bar">
-      <output aria-live="polite">{describe(events[events.length - 1])}</output>
-      <button type="button" onClick={() => setShape(current => current === 'menu' ? 'pill' : 'menu')}>Menu ⇄ pilule</button>
-      <button type="button" onClick={() => { setShape('menu'); setOpen(false); window.setTimeout(() => setOpen(true), 250); }}>Rouvrir</button>
-      {keyboard === 'injected' && <span className="ilot-demo-keys" aria-label="Touche reçue de Rust">
-        {injectable.map(([key, label]) => <button key={key} type="button" onClick={() => window.dispatchEvent(new CustomEvent('menu-key', { detail: { key } }))}>{label}</button>)}
-      </span>}
-    </div>
-  </>;
+      <div className="ilot-demo-bar">
+        <output aria-live="polite">{describe(events[events.length - 1])}</output>
+        <button type="button" onClick={() => setShape((current) => (current === 'menu' ? 'pill' : 'menu'))}>
+          Menu ⇄ pilule
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setShape('menu');
+            setOpen(false);
+            window.setTimeout(() => setOpen(true), 250);
+          }}
+        >
+          Rouvrir
+        </button>
+        {keyboard === 'injected' && (
+          <span className="ilot-demo-keys" aria-label="Touche reçue de Rust">
+            {injectable.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('menu-key', { detail: { key } }))}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        )}
+      </div>
+    </>
+  );
 }

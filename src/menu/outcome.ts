@@ -26,7 +26,10 @@ import type { AfterReplace, Capture, ErrorCode, Settings, UndoStatus } from '../
 
 // The Îlot's journey: a menu capture under uiVersion 'ilot'. The whole of it, from the menu to the
 // check or the error pill, lives on the Îlot's surface; the glass never opens for it.
-export function ilotJourney(settings: Pick<Settings, 'uiVersion'> | null | undefined, capture: Pick<Capture, 'menu'> | null | undefined): boolean {
+export function ilotJourney(
+  settings: Pick<Settings, 'uiVersion'> | null | undefined,
+  capture: Pick<Capture, 'menu'> | null | undefined,
+): boolean {
   return settings?.uiVersion === 'ilot' && Boolean(capture?.menu);
 }
 
@@ -48,9 +51,11 @@ export type IlotOutcome =
 
 // A result that exists but was not pasted always reads as a paste failure (Copy result): a code
 // of another family there (or none) would offer to translate again, which could paste twice.
-export const pasteCode = (code: ErrorCode | null | undefined): ErrorCode => code && errorFamily(code) === 'paste' ? code : 'paste_blocked';
+export const pasteCode = (code: ErrorCode | null | undefined): ErrorCode =>
+  code && errorFamily(code) === 'paste' ? code : 'paste_blocked';
 
-type State = Pick<TranslationState, 'phase' | 'delivery' | 'code' | 'requestId' | 'invalidated'> & Partial<Pick<TranslationState, 'undoLost'>> & { capture: Pick<Capture, 'canReplace' | 'execution'> | null };
+type State = Pick<TranslationState, 'phase' | 'delivery' | 'code' | 'requestId' | 'invalidated'> &
+  Partial<Pick<TranslationState, 'undoLost'>> & { capture: Pick<Capture, 'canReplace' | 'execution'> | null };
 
 // Why the frontend's own paste cannot even be tried: the watcher dropped the selection, or the
 // capture never had one that could be written. null: try it (Rust revalidates anyway).
@@ -60,19 +65,28 @@ export function ownPasteRefusal(state: State): ErrorCode | null {
   return null;
 }
 
-export function ilotOutcome(state: State, { chosen, paste, undo = null }: { chosen: boolean; paste: OwnPaste | null; undo?: UndoProgress | null }): IlotOutcome {
+export function ilotOutcome(
+  state: State,
+  { chosen, paste, undo = null }: { chosen: boolean; paste: OwnPaste | null; undo?: UndoProgress | null },
+): IlotOutcome {
   if (!chosen && !state.capture?.execution) return { stage: 'menu' };
   // An Undo asked from the pill decides; else the user's own Ctrl+Z (Rust saw it pass to the
   // source, which undid the paste itself) reads as Undone.
-  const pasted: IlotOutcome = undo && undo.status !== 'pending'
-    ? undo.status === 'undone' ? { stage: 'undone' } : { stage: 'error', code: errorCodeOf(undo.code), source: undo.status === 'failed' ? 'undo-sent' : 'undo' }
-    : !undo && state.undoLost === 'undo_key' ? { stage: 'undone' } : { stage: 'done' };
+  const pasted: IlotOutcome =
+    undo && undo.status !== 'pending'
+      ? undo.status === 'undone'
+        ? { stage: 'undone' }
+        : { stage: 'error', code: errorCodeOf(undo.code), source: undo.status === 'failed' ? 'undo-sent' : 'undo' }
+      : !undo && state.undoLost === 'undo_key'
+        ? { stage: 'undone' }
+        : { stage: 'done' };
   switch (state.phase) {
     case 'error': {
       const code = errorCodeOf(state.code);
       return errorFamily(code) === 'silent' ? { stage: 'leave' } : { stage: 'error', code };
     }
-    case 'cancelled': return { stage: 'leave' };
+    case 'cancelled':
+      return { stage: 'leave' };
     case 'complete':
       if (state.delivery === 'applied') return pasted;
       if (state.delivery === 'fallback') return { stage: 'error', code: pasteCode(state.code) };
@@ -83,9 +97,11 @@ export function ilotOutcome(state: State, { chosen, paste, undo = null }: { chos
         return refusal ? { stage: 'error', code: refusal } : { stage: 'working' };
       }
       if (paste.status === 'applied') return pasted;
-      if (paste.status === 'refused') return { stage: 'error', code: state.invalidated ? 'target_changed' : pasteCode(paste.code) };
+      if (paste.status === 'refused')
+        return { stage: 'error', code: state.invalidated ? 'target_changed' : pasteCode(paste.code) };
       return { stage: 'working' };
-    default: return { stage: 'working' };
+    default:
+      return { stage: 'working' };
   }
 }
 

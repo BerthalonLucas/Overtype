@@ -43,10 +43,26 @@ function useWorking({ indicator, done = false, delayMs = ORB_DELAY_MS }: Working
     const timer = window.setTimeout(() => setOrb(true), delayMs);
     return () => window.clearTimeout(timer);
   }, [orb, delayMs]);
-  const attributes = { role: 'img', 'aria-label': t(done ? 'glass.replaced' : 'pill.working'), 'data-indicator': indicator, 'data-orb': orb && !done ? 'shown' : 'waiting', 'data-done': done || undefined, 'data-paused': hidden || undefined };
+  const attributes = {
+    role: 'img',
+    'aria-label': t(done ? 'glass.replaced' : 'pill.working'),
+    'data-indicator': indicator,
+    'data-orb': orb && !done ? 'shown' : 'waiting',
+    'data-done': done || undefined,
+    'data-paused': hidden || undefined,
+  };
   const box = indicatorBox[indicator];
-  const content = done ? <Icon name="check" size={16} />
-    : <span className="working-slot" style={{ width: box.width, height: box.height }}>{orb && <span className="working-orb"><IndicatorView indicator={indicator} /></span>}</span>;
+  const content = done ? (
+    <Icon name="check" size={16} />
+  ) : (
+    <span className="working-slot" style={{ width: box.width, height: box.height }}>
+      {orb && (
+        <span className="working-orb">
+          <IndicatorView indicator={indicator} />
+        </span>
+      )}
+    </span>
+  );
   return { attributes, content };
 }
 
@@ -58,11 +74,33 @@ export function WorkingPill({ grow = 'up', ...props }: WorkingProps & { grow?: G
   const bornWaiting = useRef(grow === null).current;
   // Born waiting, it glides from the side learnt since, not from where it first stood unseen.
   const from = (enter.initial as { y?: number }).y;
-  const animate = grow === null ? enter.initial : bornWaiting && from !== undefined ? { ...enter.animate, y: [from, 0] } : enter.animate;
+  const animate =
+    grow === null
+      ? enter.initial
+      : bornWaiting && from !== undefined
+        ? { ...enter.animate, y: [from, 0] }
+        : enter.animate;
   const { attributes, content } = useWorking(props);
   const shape = workingPillShape(props.indicator);
-  const style = { width: shape.width, height: shape.height, borderRadius: shape.borderRadius, '--working-pill-width': `${shape.width}px` } as CSSProperties;
-  return <motion.span initial={enter.initial} animate={animate} exit={enter.exit} className="working-pill" style={style} {...attributes} data-grow={grow ?? 'waiting'}>
-    <span className="shape-clip"><span className="shape-layer working-layer">{content}</span></span>
-  </motion.span>;
+  const style = {
+    width: shape.width,
+    height: shape.height,
+    borderRadius: shape.borderRadius,
+    '--working-pill-width': `${shape.width}px`,
+  } as CSSProperties;
+  return (
+    <motion.span
+      initial={enter.initial}
+      animate={animate}
+      exit={enter.exit}
+      className="working-pill"
+      style={style}
+      {...attributes}
+      data-grow={grow ?? 'waiting'}
+    >
+      <span className="shape-clip">
+        <span className="shape-layer working-layer">{content}</span>
+      </span>
+    </motion.span>
+  );
 }

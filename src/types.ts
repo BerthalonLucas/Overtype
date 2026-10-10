@@ -337,6 +337,9 @@ export type ProbeResult = {
 // `probe-step`: the whole trace at each change, to the window that started the check.
 export type ProbeStepEvent = { run: string; steps: ProbeStep[] };
 // « Essayer avec une phrase »: reply is 200 characters at most, shown and never logged.
+// Settings Rust could not read at launch, set aside (settings_recovery): the name of the backup
+// file alone, never its path nor its content.
+export type SettingsRecovery = { backup: string };
 export type TryResult =
   | { run: string; ok: true; reply: string; ms: number }
   | { run: string; ok: false; problem: ProbeProblem };

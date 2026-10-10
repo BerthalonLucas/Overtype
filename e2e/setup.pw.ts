@@ -250,4 +250,47 @@ test.describe('the first-run setup', () => {
     });
     await expect(page.getByRole('radio', { name: /Lancer directement une action/ })).toBeInViewport();
   });
+  // R9 (audit Elio): the journal was a dialog of our own, with no focus trap nor aria-modal. It is
+  // the shared Dialog now: modal, the focus kept inside, Escape closes it first and gives the focus
+  // back to « Voir le journal ».
+  test('the journal sheet is a modal dialog: focus kept inside, Escape closes it first, focus back on its button', async ({
+    page,
+  }) => {
+    await open(page, '&step=model&conn=cle-refusee');
+    await fillServer(page);
+    await expect(page.getByText('Clé refusée')).toBeVisible({ timeout: 8000 });
+    const opener = page.getByRole('button', { name: 'Voir le journal' });
+    await opener.click();
+    const sheet = page.getByRole('dialog', { name: 'Journal de connexion' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toHaveAttribute('aria-modal', 'true');
+    await expect(sheet.getByRole('button', { name: 'Fermer le journal' })).toBeFocused();
+    for (let n = 0; n < 25; n++) {
+      await page.keyboard.press('Tab');
+      expect(await sheet.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+    }
+    await page.keyboard.press('Escape');
+    await expect(sheet).toHaveCount(0);
+    await expect(screen(page, 'model')).toBeVisible();
+    await expect(opener).toBeFocused();
+    // A second Escape is the window's again: back to the previous question.
+    await page.waitForTimeout(350);
+    await page.keyboard.press('Escape');
+    await expect(screen(page, 'shortcut')).toBeVisible();
+  });
+
+  // Contract settings_recovery: settings Rust could not read are kept aside, and the welcome says where.
+  test('the welcome says when unreadable settings were set aside, and only then', async ({ page }) => {
+    await open(page, '&step=welcome&recovered=1');
+    await expect(screen(page, 'welcome')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'illisibles' })).toHaveText(
+      'Vos réglages étaient illisibles : ils sont gardés dans settings.illisible-20261010-120000.json, et Overtype repart des réglages par défaut.',
+    );
+    await page.goto('/?window=setup&lang=en&theme=light&motion=full&step=welcome&recovered=1');
+    await expect(page.getByText('settings.illisible-20261010-120000.json')).toContainText('could not be read');
+    await open(page, '&step=welcome');
+    await expect(screen(page, 'welcome')).toBeVisible();
+    await page.waitForTimeout(300);
+    await expect(page.getByText('illisibles')).toHaveCount(0);
+  });
 });

@@ -27,8 +27,6 @@ const EXPECTED_FAIL = {
   'contenteditable-bornes-element': 'QA-03-A',
   // Dans un contenteditable riche, le texte collé n'est pas retrouvé : Annuler n'est pas proposé.
   'annulation-ctrl-z-contenteditable': 'QA-03-B',
-  // Une copie synthétique coupée (Ctrl+Inser parti, pas les relâchements) n'est jamais défaite.
-  'sendinput-partiel-copie-presse-papiers': 'QA-03-C',
   'uia-muette-revalidation': 'NATIVE-001',
   'vscode-ligne-sans-selection': 'NATIVE-002',
   'presse-papiers-non-conservable-collage': 'NATIVE-004',

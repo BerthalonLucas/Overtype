@@ -627,7 +627,20 @@ fn copy_and_restore() -> Result<Option<String>, &'static str> {
     let keeper = Keeper::take(read_clipboard);
     crate::host::suppress_clipboard_tracking(OWN_TRAFFIC);
     let before = crate::host::clipboard_sequence();
-    crate::host::send_copy_chord().map_err(|_| "SendInput refused")?;
+    if let Err(sent) = crate::host::send_copy_chord() {
+        // QA-03-C: Ctrl+Insert copies on its key down, so a chord cut part-way may still have
+        // copied the selection. The user's clipboard comes back as after any copy of ours (it
+        // used to stay overwritten); what was copied is not taken: the chord did not go through.
+        if sent > 0 && clipboard_guard::take_copy(&keeper, before, COPY_SETTLE) == Copied::Nothing {
+            clipboard_guard::watch_late(
+                keeper,
+                before,
+                crate::host::last_input_tick(),
+                crate::host::last_input_tick,
+            );
+        }
+        return Err("SendInput refused");
+    }
     match clipboard_guard::take_copy(&keeper, before, COPY_SETTLE) {
         Copied::Taken { text, .. } => Ok(text),
         Copied::Nothing => {

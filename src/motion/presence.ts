@@ -45,9 +45,3 @@ export function contentPresence(tokens: MotionTokens, reduced: boolean) {
     exit: { opacity: 0, transition: curveTransition({ ms: timing.outMs, ease: accelerate }) },
   };
 }
-
-// A state change that moves something in place (a switch thumb): the morph spring, or nothing
-// under reduced motion.
-export function stateTransition(tokens: MotionTokens, reduced: boolean) {
-  return reduced ? { duration: 0 } : springTransition(tokens.morph);
-}

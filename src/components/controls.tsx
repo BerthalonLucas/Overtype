@@ -395,42 +395,6 @@ export function MiddleEllipsis({ text, className }: { text: string; className?: 
   );
 }
 
-// ——— Popover (Radix), for anything else that floats ———
-export function Popover({
-  trigger,
-  children,
-  align = 'center',
-  side = 'bottom',
-  open,
-  onOpenChange,
-  className,
-}: {
-  trigger: ReactNode;
-  children: ReactNode;
-  align?: 'start' | 'center' | 'end';
-  side?: 'top' | 'right' | 'bottom' | 'left';
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  className?: string;
-}) {
-  return (
-    <PopoverPrimitive.Root open={open} onOpenChange={onOpenChange}>
-      <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
-      <PopoverPrimitive.Portal>
-        <PopoverPrimitive.Content
-          className={cx('ft-scope ft-popover ft-popover-panel', className)}
-          align={align}
-          side={side}
-          sideOffset={8}
-          collisionPadding={8}
-        >
-          {children}
-        </PopoverPrimitive.Content>
-      </PopoverPrimitive.Portal>
-    </PopoverPrimitive.Root>
-  );
-}
-
 // ——— Slider (Radix), shadcn look: 6 px track, filled range, white thumb ringed in the accent ———
 // The value shown and sent is always inside [min, max] on a step, whatever was stored.
 export const clampToStep = (value: number, min: number, max: number, step = 1) => {

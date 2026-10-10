@@ -32,7 +32,6 @@ import type {
   ProbeResult,
   Rect,
   Refusal,
-  Screen,
   Server,
   Settings,
   SettingsField,
@@ -257,7 +256,6 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   }
   // The preview registers every chord: its proposal is Rust's first.
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
-  if (name === 'capture_text') return structuredClone(demoCapture) as T;
   if (name === 'frontend_ready') return null as T;
   // The preview never updates; `?update=0.9.0` shows a version waiting.
   if (name === 'update_status' || name === 'check_update')
@@ -415,7 +413,6 @@ export const bridge = {
   native,
   getSettings: () => command<Settings>('get_settings'),
   saveSettings: (settings: Settings) => command<void>('save_settings', { settings }),
-  captureText: () => command<Capture>('capture_text'),
   frontendReady: () => command<Capture | null>('frontend_ready'),
   closeSettings: async () => {
     if (native) {
@@ -587,10 +584,6 @@ export const bridge = {
   // Browser preview only: what Rust emits when the shortcut finds nothing to translate.
   demoNotice: (message: string) => {
     if (!native) emit('capture-notice', { message });
-  },
-  // Browser preview only: what Rust emits when the cursor changes screen under a bottom form.
-  demoWorkArea: (screen: Screen) => {
-    if (!native) emit('work-area', screen);
   },
   // Lot 10: the state of every binding (a chord another application holds is 'taken').
   shortcutStatus: () => command<ShortcutStatus[]>('shortcut_status'),

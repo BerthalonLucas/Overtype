@@ -15,7 +15,6 @@ import { ActionGlyph } from './Shortcuts';
 export const actionLimit = 24;
 export const nameMaxLength = 60;
 export const shortNameMaxLength = 16;
-export const promptMaxLength = 8000;
 
 // The Îlot as it will open beside a selection: the app's own Îlot (src/menu/Ilot.tsx) on its
 // grid, with the menu's tiles in their order and the free instruction last while there is room.

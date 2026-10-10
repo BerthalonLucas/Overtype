@@ -309,7 +309,9 @@ const shortcutStatus = (): ShortcutStatus[] =>
     state: shortcutStates[b.id] ?? (b.enabled ? 'registered' : 'disabled'),
   }));
 mockIPC(
-  (command, args) => {
+  (command, invokeArgs) => {
+    // The app only ever invokes with named arguments.
+    const args = invokeArgs as Record<string, unknown> | undefined;
     calls.push({ command, args, at: performance.now() });
     // Rust places each capture afresh: the previous capture's move is forgotten.
     if (command === 'resize_overlay' && (args as { captureId?: string } | undefined)?.captureId !== movedFor) {
@@ -373,14 +375,9 @@ mockIPC(
     // 0.6: the connection commands answer from the simulated server of the preview (src/bridge.mock.ts),
     // its scenario chosen by `?conn=` or `nativeFixture.conn(id)`; steps and journal lines arrive as events.
     if (isConnectionCommand(command))
-      return connectionCommand(
-        command,
-        args,
-        (name, payload: ProbeStepEvent | DiagEntry) => {
-          void emit(name, payload);
-        },
-        (id) => settings.servers.find((server) => server.id === id),
-      );
+      return connectionCommand(command, args, (name, payload: ProbeStepEvent | DiagEntry) => {
+        void emit(name, payload);
+      });
     if (command === 'finish_setup') {
       settings = { ...settings, setupDone: true };
       void emit('settings-changed', settings);

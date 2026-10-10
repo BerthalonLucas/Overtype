@@ -19,7 +19,7 @@ declare global {
       capture: (id: string, text?: string) => Promise<void>;
       unanchored: (id: string) => Promise<void>;
       delta: (text: string, requestId?: string) => Promise<void>;
-      done: () => Promise<void>;
+      done: (text?: string) => Promise<void>;
       dismissEvent: (captureId: string) => Promise<void>;
       requestId: () => string;
       recoverSettings: () => void;

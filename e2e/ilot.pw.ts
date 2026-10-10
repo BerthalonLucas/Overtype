@@ -307,7 +307,7 @@ test('everything works with the mouse: resting 450 ms on the ✦ unfolds the gri
 test('AltGr characters, dead keys and IME composition reach the field as typed', async ({ page }) => {
   await open(page);
   // Compact: AltGr types (Windows reports it as Ctrl+Alt with the AltGraph modifier)…
-  const keydown = (init: KeyboardEventInit) =>
+  const keydown = (init: Omit<KeyboardEventInit, 'view'>) =>
     page.evaluate((init) => {
       const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init });
       (document.activeElement ?? document.body).dispatchEvent(event);

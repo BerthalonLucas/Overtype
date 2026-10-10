@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    // The tests import app modules inside page.evaluate by their Vite URL (/src/...).
+    "paths": { "/src/*": ["./src/*"] },
+    "types": ["vite/client", "node"]
+  },
+  // src/env.d.ts is not an imported module: it is the ambient declaration of __APP_VERSION__,
+  // injected by vite.config.ts. Without it, any test file that reaches src/App.tsx fails.
+  "include": ["e2e", "visual-tests", "src/env.d.ts", "playwright.config.ts", "playwright.visual.config.ts"]
+}

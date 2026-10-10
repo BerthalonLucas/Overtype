@@ -280,7 +280,7 @@ test('a fast paste shows the check in the same pill, never the orb', async ({ pa
   const pill = page.locator('.working-pill');
   await expect(pill).toHaveAttribute('data-done', 'true');
   await expect(pill).toHaveAttribute('aria-label', 'Selection replaced');
-  expect(await pill.evaluate((el) => [el.offsetWidth, el.offsetHeight])).toEqual([52, 28]);
+  expect(await pill.evaluate((el: HTMLElement) => [el.offsetWidth, el.offsetHeight])).toEqual([52, 28]);
   await expect
     .poll(() =>
       page.evaluate(
@@ -327,7 +327,9 @@ test('the 0.4 journey keeps its spinner pill', async ({ page }) => {
   await page.waitForTimeout(400);
   await expect(page.locator('.working-pill')).toHaveCount(0);
   await expect(page.locator('.ldr')).toHaveCount(0);
-  expect(await page.locator('.wait-pill').evaluate((el) => [el.offsetWidth, el.offsetHeight])).toEqual([60, 28]);
+  expect(await page.locator('.wait-pill').evaluate((el: HTMLElement) => [el.offsetWidth, el.offsetHeight])).toEqual([
+    60, 28,
+  ]);
   expect(await page.locator('.wait-pill svg').evaluate((el) => getComputedStyle(el).animationName)).toBe('wait-spin');
 });
 

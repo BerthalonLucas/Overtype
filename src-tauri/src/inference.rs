@@ -15,34 +15,56 @@ pub enum Item {
     Done,
 }
 
+/// One event of the stream at most (a delta is a few hundred bytes): past it without an end, the
+/// stream cannot be read (`StreamBroken`) rather than held whole in memory.
+const MAX_EVENT: usize = 1024 * 1024;
+/// The whole answer at most, far above any text the app captures (`capture::MAX_CHARS`): past
+/// it, the output reached a limit and the incomplete result is refused, never pasted (`Length`).
+const MAX_RESULT: usize = 16 * 1024 * 1024;
+/// The server's refusal is read for its first words only (the retry and the 404 need no more).
+const MAX_ERROR_BODY: usize = 64 * 1024;
+
+fn accumulate(result: &mut String, shown: &str) -> Result<(), AppError> {
+    if result.len() + shown.len() > MAX_RESULT {
+        return Err(AppError::new(
+            ErrorKind::Length,
+            "La sortie a atteint la limite; résultat incomplet refusé.",
+        ));
+    }
+    result.push_str(shown);
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct SseDecoder {
     buffer: Vec<u8>,
+    /// Where the search for a separator resumes: the bytes before it hold none.
+    scanned: usize,
 }
 impl SseDecoder {
     pub fn push(&mut self, bytes: &[u8]) -> Result<Vec<Item>, AppError> {
         self.buffer.extend_from_slice(bytes);
         let mut out = Vec::new();
+        let mut start = 0;
         loop {
-            let lf = self
-                .buffer
-                .windows(2)
-                .position(|w| w == b"\n\n")
-                .map(|p| (p, 2));
-            let crlf = self
-                .buffer
-                .windows(4)
-                .position(|w| w == b"\r\n\r\n")
-                .map(|p| (p, 4));
-            let sep = match (lf, crlf) {
-                (Some(a), Some(b)) => Some(if a.0 <= b.0 { a } else { b }),
-                (Some(a), None) => Some(a),
-                (None, Some(b)) => Some(b),
-                (None, None) => None,
+            // A separator may straddle the last push: back up by its length less one.
+            let from = self.scanned.saturating_sub(3).max(start);
+            let sep = self.buffer[from..].iter().enumerate().find_map(|(i, b)| {
+                let tail = &self.buffer[from + i..];
+                match b {
+                    b'\n' if tail.starts_with(b"\n\n") => Some((from + i, 2)),
+                    b'\r' if tail.starts_with(b"\r\n\r\n") => Some((from + i, 4)),
+                    _ => None,
+                }
+            });
+            let Some((end, sep_len)) = sep else {
+                self.scanned = self.buffer.len();
+                break;
             };
-            let Some((end, sep_len)) = sep else { break };
-            let frame: Vec<u8> = self.buffer.drain(..end + sep_len).collect();
-            let frame = String::from_utf8(frame[..end].to_vec())
+            if end - start > MAX_EVENT {
+                return Err(too_large_event());
+            }
+            let frame = std::str::from_utf8(&self.buffer[start..end])
                 .map_err(|_| broken("Le serveur a envoyé un flux UTF-8 invalide."))?;
             let data = frame
                 .lines()
@@ -50,6 +72,8 @@ impl SseDecoder {
                 .map(str::trim_start)
                 .collect::<Vec<_>>()
                 .join("\n");
+            start = end + sep_len;
+            self.scanned = start;
             if data.is_empty() {
                 continue;
             }
@@ -58,6 +82,13 @@ impl SseDecoder {
             } else {
                 Item::Data(data)
             });
+        }
+        self.buffer.drain(..start);
+        self.scanned -= start;
+        if self.buffer.len() > MAX_EVENT {
+            self.buffer = Vec::new();
+            self.scanned = 0;
+            return Err(too_large_event());
         }
         Ok(out)
     }
@@ -78,6 +109,9 @@ pub struct Chunk {
     pub message: Option<String>,
 }
 
+fn too_large_event() -> AppError {
+    broken("Le serveur a envoyé un événement trop long.")
+}
 fn broken(message: &str) -> AppError {
     AppError::new(ErrorKind::StreamBroken, message)
 }
@@ -193,6 +227,13 @@ impl ThinkFilter {
                 }
                 ThinkState::Thinking(close) => {
                     let Some(end) = self.buffer.find(close) else {
+                        // Only a start of the end marker can still matter: the rest of the
+                        // block is dropped as it arrives.
+                        let mut keep = self.buffer.len().saturating_sub(close.len() - 1);
+                        while !self.buffer.is_char_boundary(keep) {
+                            keep += 1;
+                        }
+                        self.buffer.drain(..keep);
                         return String::new();
                     };
                     let rest = self.buffer[end + close.len()..].trim_start().to_string();
@@ -306,7 +347,14 @@ where
         }
         let status = response.status().as_u16();
         // The server's own message decides the retry and the 404; it is never logged nor shown.
-        let detail = response.text().await.unwrap_or_default();
+        // Its first words only, and given up at once on a cancel.
+        let detail = match probe::read_bounded(response, &cancel, MAX_ERROR_BODY).await {
+            probe::Bounded::Read(body) | probe::Bounded::Truncated(body) => {
+                String::from_utf8_lossy(&body).into_owned()
+            }
+            probe::Bounded::Failed(_) => String::new(),
+            probe::Bounded::Cancelled => return Err(cancelled()),
+        };
         if extended && rejects_extended_sampling(status, &detail) {
             extended = false;
             continue;
@@ -326,13 +374,18 @@ where
     let mut filter = ThinkFilter::default();
     let mut done = false;
     let mut stop = false;
-    loop {
+    'read: loop {
         tokio::select! {
             _ = cancel.cancelled() => return Err(cancelled()),
             next = bytes.next() => match next {
                 Some(Ok(part)) => for item in decoder.push(&part)? {
                     match item {
-                        Item::Done => done = true,
+                        Item::Done => {
+                            done = true;
+                            // The server announced the end of a complete answer: whether it
+                            // closes the connection or not, nothing more is awaited.
+                            if stop { break 'read; }
+                        }
                         Item::Data(data) => {
                             let value: Value = serde_json::from_str(&data).map_err(|_| broken("Le serveur a envoyé un événement JSON invalide."))?;
                             if let Some(reason) = value.pointer("/choices/0/finish_reason").and_then(Value::as_str) {
@@ -343,7 +396,7 @@ where
                             }
                             if let Some(delta) = value.pointer("/choices/0/delta/content").and_then(Value::as_str) {
                                 let shown = filter.push(delta);
-                                if !shown.is_empty() { result.push_str(&shown); emit(Chunk { kind: StreamKind::Delta, text: Some(shown), message: None })?; }
+                                if !shown.is_empty() { accumulate(&mut result, &shown)?; emit(Chunk { kind: StreamKind::Delta, text: Some(shown), message: None })?; }
                             }
                         }
                     }
@@ -357,10 +410,12 @@ where
             }
         }
     }
-    decoder.finish()?;
+    if !(done && stop) {
+        decoder.finish()?;
+    }
     let tail = filter.finish();
     if !tail.is_empty() {
-        result.push_str(&tail);
+        accumulate(&mut result, &tail)?;
         emit(Chunk {
             kind: StreamKind::Delta,
             text: Some(tail),
@@ -939,6 +994,175 @@ mod tests {
         )
         .await;
         assert_eq!(ours.unwrap_err().kind, ErrorKind::Internal);
+    }
+
+    // The same fake server, which keeps the connection open for `open` after its answer (a
+    // server that does not close after [DONE], or a body that never ends).
+    fn lingering_server(answer: Vec<u8>, open: Duration) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            for connection in listener.incoming() {
+                let Ok(mut connection) = connection else {
+                    break;
+                };
+                let answer = answer.clone();
+                std::thread::spawn(move || {
+                    let mut head = Vec::new();
+                    let mut byte = [0u8; 1];
+                    while !head.ends_with(b"\r\n\r\n")
+                        && connection.read(&mut byte).is_ok_and(|n| n == 1)
+                    {
+                        head.push(byte[0]);
+                    }
+                    let length = String::from_utf8_lossy(&head)
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                        })
+                        .unwrap_or(0);
+                    let mut body = vec![0u8; length];
+                    let _ = connection.read_exact(&mut body);
+                    let _ = connection.write_all(&answer);
+                    let _ = connection.flush();
+                    std::thread::sleep(open);
+                });
+            }
+        });
+        format!("http://127.0.0.1:{port}/v1")
+    }
+    fn patient() -> Limits {
+        Limits {
+            connect: Duration::from_secs(2),
+            idle: Duration::from_secs(5),
+        }
+    }
+
+    #[tokio::test]
+    async fn a_stop_then_done_ends_the_answer_even_when_the_server_keeps_the_socket_open() {
+        let open = lingering_server(
+            events(&format!("{DELTA}{}data: [DONE]\n\n", finish("stop"))),
+            Duration::from_secs(10),
+        );
+        let started = std::time::Instant::now();
+        let result = run_with(open, CancellationToken::new(), patient()).await;
+        assert_eq!(result.unwrap(), "Bonjour");
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_done_without_stop_is_still_refused() {
+        let error = run(fake_server(
+            events(&format!("{DELTA}data: [DONE]\n\n")),
+            false,
+        ))
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::StreamBroken);
+    }
+
+    #[test]
+    fn an_event_without_end_past_the_ceiling_is_refused_without_growing() {
+        let mut d = SseDecoder::default();
+        let chunk = vec![b'a'; 64 * 1024];
+        let mut refused = false;
+        for _ in 0..64 {
+            match d.push(&chunk) {
+                Ok(items) => assert!(items.is_empty()),
+                Err(error) => {
+                    assert_eq!(error.kind, ErrorKind::StreamBroken);
+                    refused = true;
+                    break;
+                }
+            }
+            assert!(d.buffer.len() <= MAX_EVENT + chunk.len());
+        }
+        assert!(refused, "a 4 MiB event without end is refused");
+        // Frames that keep arriving whole are not limited by the ceiling as a total.
+        let mut d = SseDecoder::default();
+        for _ in 0..4096 {
+            assert_eq!(d.push(DELTA.as_bytes()).unwrap().len(), 1);
+        }
+        // A separator split between two pushes is still found.
+        let mut d = SseDecoder::default();
+        assert!(d.push(b"data: x\r\n").unwrap().is_empty());
+        assert_eq!(d.push(b"\r\n").unwrap(), vec![Item::Data("x".into())]);
+    }
+
+    #[test]
+    fn an_unclosed_thinking_block_keeps_only_what_the_end_marker_needs() {
+        let mut filter = ThinkFilter::default();
+        assert_eq!(filter.push("<think>"), "");
+        let long = "réflexion ".repeat(1024);
+        for _ in 0..200 {
+            assert_eq!(filter.push(&long), "");
+            assert!(filter.buffer.len() < 16, "{}", filter.buffer.len());
+        }
+        // A marker split across two deltas is still found.
+        assert_eq!(filter.push("</thi"), "");
+        assert_eq!(filter.push("nk>Bonjour"), "Bonjour");
+        let mut gemma = ThinkFilter::default();
+        assert_eq!(gemma.push("<|channel>thought"), "");
+        assert_eq!(gemma.push(&"é".repeat(5000)), "");
+        assert!(gemma.buffer.len() < 16);
+        assert_eq!(gemma.push("<chan"), "");
+        assert_eq!(gemma.push("nel|>Salut"), "Salut");
+    }
+
+    #[tokio::test]
+    async fn a_huge_error_body_is_read_in_part_and_fast() {
+        // A 404 whose first words name the model, then a body that never ends in time.
+        let mut answer = b"HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nContent-Length: 100000000\r\n\r\n{\"message\":\"The model `m` does not exist.\"".to_vec();
+        answer.extend(std::iter::repeat_n(b' ', 256 * 1024));
+        let server = lingering_server(answer, Duration::from_secs(10));
+        let started = std::time::Instant::now();
+        let error = run_with(server, CancellationToken::new(), patient())
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind, ErrorKind::ModelNotFound);
+        assert!(
+            started.elapsed() < Duration::from_secs(2),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_cancel_while_the_error_body_is_read_answers_at_once() {
+        let answer = b"HTTP/1.1 500 Error\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{\"err".to_vec();
+        let server = lingering_server(answer, Duration::from_secs(10));
+        let cancel = CancellationToken::new();
+        let trigger = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            trigger.cancel();
+        });
+        let started = std::time::Instant::now();
+        let error = run_with(server, cancel, patient()).await.unwrap_err();
+        assert_eq!(error.kind, ErrorKind::Cancelled);
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "{:?}",
+            started.elapsed()
+        );
+    }
+
+    #[test]
+    fn a_result_past_its_ceiling_is_refused() {
+        let mut result = String::new();
+        assert!(accumulate(&mut result, &"a".repeat(MAX_RESULT)).is_ok());
+        assert_eq!(
+            accumulate(&mut result, "b").unwrap_err().kind,
+            ErrorKind::Length
+        );
+        assert_eq!(result.len(), MAX_RESULT);
     }
 
     #[test]

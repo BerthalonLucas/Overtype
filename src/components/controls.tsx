@@ -873,12 +873,13 @@ export function Dialog({
   const t = useT();
   const tx = useTx();
   const opener = useRef<HTMLElement | null>(null);
-  const wasOpen = useRef(false);
-  if (open && !wasOpen.current) {
-    const active = typeof document === 'undefined' ? null : document.activeElement;
+  // A layout effect on `open` runs in the commit that opens the dialog, before Radix's portal
+  // mounts the content (and before any autoFocus inside it): the focus is still on the opener.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
     opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
-  }
-  wasOpen.current = open;
+  }, [open]);
   const focusBack = (event: Event) => {
     event.preventDefault();
     const target = opener.current;

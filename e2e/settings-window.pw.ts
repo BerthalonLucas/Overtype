@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { defaultActions, legacyActions } from '../src/actionDefaults';
 import type { Settings } from '../src/types';
 
@@ -43,6 +43,14 @@ const tab = (page: Page, name: string) => page.getByRole('tab', { name, exact: t
 const go = async (page: Page, name: string) => {
   await tab(page, name).click();
   await expect(page.getByRole('heading', { level: 2, name, exact: true })).toBeVisible();
+};
+// Unfolds a disclosure and waits until it has finished opening: during its animation the
+// content is clipped and grows, so a press in it can be released elsewhere and click nothing.
+const unfold = async (row: Locator, name: RegExp) => {
+  await row.getByRole('button', { name }).click();
+  await row
+    .locator('.st-collapse')
+    .evaluate((content) => Promise.all(content.getAnimations().map((animation) => animation.finished)));
 };
 const choose = async (page: Page, combobox: string, option: string) => {
   await page.getByRole('combobox', { name: combobox, exact: true }).click();
@@ -380,7 +388,7 @@ test('an instruction: its limits are said in place and never saved; Restore brin
   await set(page, { actions: [...defaultActions, { ...legacyActions[0], promptTemplate: 'Mine' }] });
   await go(page, 'Actions');
   const fix = page.locator('[data-action="correct"].st-instr');
-  await fix.getByRole('button', { name: /Fix grammar/ }).click();
+  await unfold(fix, /Fix grammar/);
   await expect(fix.getByRole('button', { name: 'Restore the instruction', exact: true })).toBeDisabled();
   await expect(fix.getByRole('button', { name: /Delete action/ })).toHaveCount(0);
   await expect(fix.locator('.st-chip')).toHaveText('Built-in');
@@ -410,7 +418,7 @@ test('an instruction: its limits are said in place and never saved; Restore brin
   await fix.getByRole('textbox', { name: 'Tile label', exact: true }).fill('t'.repeat(40));
   await expect(fix.getByRole('textbox', { name: 'Tile label', exact: true })).toHaveValue('t'.repeat(16));
   const old = page.locator('[data-action="translate-fr"].st-instr');
-  await old.getByRole('button', { name: /Traduire en français/ }).click();
+  await unfold(old, /Traduire en français/);
   await old.getByRole('button', { name: 'Restore the instruction', exact: true }).click();
   await expect
     .poll(async () => (await saved(page))?.actions.at(-1)?.promptTemplate)

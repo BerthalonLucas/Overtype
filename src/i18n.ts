@@ -442,7 +442,21 @@ export const locales: Record<Language, string> = { en: 'en-US', fr: 'fr-FR' };
 export const languageNames: Record<Language, string> = { en: 'English', fr: 'Français' };
 
 // The app's name is never written in a message: `{app}` reads it from src/brand.ts.
-export function translate(language: Language, key: MessageKey, params?: Params): string {
+// A message in a pair `…One` / `…Other` given a numeric `count` takes the form the language's
+// plural rules choose (Intl.PluralRules): in French 0 and 1 are singular, in English only 1.
+const pluralRules: Record<Language, Intl.PluralRules> = {
+  en: new Intl.PluralRules(locales.en),
+  fr: new Intl.PluralRules(locales.fr),
+};
+function pluralKey(language: Language, key: MessageKey, count: unknown): MessageKey {
+  const pair = /^(.*)(One|Other)$/.exec(key);
+  if (!pair || typeof count !== 'number') return key;
+  const chosen = `${pair[1]}${pluralRules[language].select(count) === 'one' ? 'One' : 'Other'}`;
+  return chosen in dictionary ? (chosen as MessageKey) : key;
+}
+
+export function translate(language: Language, asked: MessageKey, params?: Params): string {
+  const key = pluralKey(language, asked, params?.count);
   const text = dictionary[key][language] ?? dictionary[key].en;
   if (!params && !text.includes('{')) return text;
   return text.replace(/\{(\w+)\}/g, (whole, name: string) =>

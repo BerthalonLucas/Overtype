@@ -388,7 +388,7 @@ export function CheckLine({
     const count = probe.models.length;
     parts = [
       t('conn.connected'),
-      model ? shortModel(model) : t(count === 1 ? 'conn.modelsOne' : 'conn.modelsOther', { count }),
+      model ? shortModel(model) : t('conn.modelsOther', { count }),
       duration(probe.totalMs),
     ];
   } else if (probe.status === 'error') {

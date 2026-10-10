@@ -112,7 +112,7 @@ let resolveCopy: (() => void) | undefined;
 // rejected), in order. The next `move_overlay` refused. Each `move_overlay`, with what the page
 // showed at that moment: the corner's opacity and the shape's box.
 let pastedLines: Rect[] = [];
-let pillAnswers: Array<Partial<PillTarget> | 'refuse'> = [];
+const pillAnswers: Array<Partial<PillTarget> | 'refuse'> = [];
 let refuseMove = false;
 const moves: Array<{
   dx: number;
@@ -280,7 +280,7 @@ const windowNow = () => {
 // side. Every read, not the next one: the glass reads it too (the working pill's side), and its
 // read can come after the hold under load.
 let holdPosition = false;
-let heldReads: Array<() => void> = [];
+const heldReads: Array<() => void> = [];
 // The work area of the screen holding a point (`monitorFromPoint`, physical pixels), for the room
 // the Îlot has around its strip: one 1920 × 1080 screen, its taskbar 40 high.
 let workArea = { x: 0, y: 0, width: 1920, height: 1040 };

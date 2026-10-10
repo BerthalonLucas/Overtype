@@ -472,12 +472,13 @@ export function Demo({ settings, onDone }: DemoProps) {
     else if (!change.from) void animateCorner(element, { x, y: 0 }, motionNow.current.tokens, true, 'instant');
   }, []);
   // The pill glides under the new text (IlotStage `glide`: the corner moves, 420 ms).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: replays the glide on these scene changes only; the rest is read through refs
   useLayoutEffect(() => {
     const element = corner.current,
       g = geoRef.current;
     if (!element || !g || !scene.pasted || !scene.ilot) return;
     void animateCorner(element, g.place, motionNow.current.tokens, motionNow.current.reduced, 'move');
-  }, [scene.pasted, scene.ilot !== null, geo, run, slide]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scene.pasted, scene.ilot !== null, geo, run, slide]);
 
   // ——— The result pill's content ———
   const clock = useRef<Countdown | null>(null);
@@ -572,6 +573,7 @@ export function Demo({ settings, onDone }: DemoProps) {
   }, []);
 
   // ——— The player (full motion) ———
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the frame reads the scene through refs; it must stay stable for the player
   const frame = useCallback(
     (at: number) => {
       const root = fit.current;
@@ -597,7 +599,7 @@ export function Demo({ settings, onDone }: DemoProps) {
       time.set(at);
     },
     [hover, pointerNow, time],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
   useEffect(() => {
     if (reduced) return;
     hovered.current = null;
@@ -661,6 +663,7 @@ export function Demo({ settings, onDone }: DemoProps) {
   }, [reduced, playing, slide]);
   // Where the still pointer rests: read once the slide's components are laid out.
   const [stillPointer, setStillPointer] = useState<Pointer | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: read again only when the slide layout changes
   useLayoutEffect(() => {
     if (!reduced) {
       setStillPointer(null);
@@ -692,7 +695,7 @@ export function Demo({ settings, onDone }: DemoProps) {
     };
     frameId = requestAnimationFrame(read);
     return () => cancelAnimationFrame(frameId);
-  }, [reduced, slide, geo, run, places]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [reduced, slide, geo, run, places]);
 
   // ——— Pause: the script, the CSS loops (data-paused) and Undo's countdown stand still ———
   const paused = !playing || rail.open;
@@ -776,6 +779,7 @@ export function Demo({ settings, onDone }: DemoProps) {
   }, [finish, toggle]);
 
   // ——— The halo, as Rust would send it for this text ———
+  // biome-ignore lint/correctness/useExhaustiveDependencies: recomputed when the halo phase changes: a run keeps its tone
   const haloRun = useMemo((): HaloRun | null => {
     if (!geo || !scene.halo) return null;
     const dark = document.documentElement.dataset.theme === 'dark';
@@ -804,7 +808,7 @@ export function Demo({ settings, onDone }: DemoProps) {
       textBox: geo.textBox,
     };
     // The theme is read when the halo's phase changes: a run keeps its tone, as in the app.
-  }, [geo, scene.halo?.phase, run, marks]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [geo, scene.halo?.phase, run, marks]);
 
   const phaseIndex = usePhaseIndex(time, reduced ? slide : null);
   const ilot = scene.ilot;

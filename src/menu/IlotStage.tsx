@@ -213,6 +213,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
   // The first geometry places and shows the window with the strip as its region; the window's
   // position then tells the side and, with the work area, the room, read once.
   const sideAsked = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per capture: GlassOverlay keys it by capture
   useLayoutEffect(() => {
     if (!bridge.native) return;
     const anchor = capture.anchor;
@@ -239,7 +240,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     }
     const timer = window.setTimeout(() => setSide((known) => known ?? fallback), SIDE_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once per capture: GlassOverlay keys it by capture
+  }, []);
 
   // The corner moves with a shape the room on its left cannot hold (ilotShift): on the shape's
   // spring when it changes, at once for the first shape. After Rust's paste it goes to the pill's
@@ -359,6 +360,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
   );
   // The room learnt after the Îlot showed (Rust's placement answered late): the shape in place
   // takes its slide at once.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only when the room arrives
   useEffect(() => {
     const size = shapeNow.current;
     if (!side || !size) return;
@@ -366,10 +368,11 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     if ((to.shift ?? 0) === cornerAt.current.x && (to.dy ?? 0) === cornerAt.current.y) return;
     moveCorner({ x: to.shift ?? 0, y: to.dy ?? 0 }, 'instant');
     settle();
-  }, [room]); // eslint-disable-line react-hooks/exhaustive-deps -- only when the room arrives
+  }, [room]);
 
   // The keyboard, asked once; a capture already chosen (double press) never takes it.
   const asked = useRef(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per capture
   useEffect(() => {
     if (asked.current || capture.execution || closingRef.current) return;
     asked.current = true;
@@ -380,7 +383,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
       (focused) => answer(focused ? 'focused' : 'injected'),
       () => answer('injected'),
     );
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- once per capture
+  }, []);
 
   // The browser's own shortcuts (reload, print, find, zoom, history: keys.ts browserShortcut) and
   // Ctrl + wheel do nothing while the overlay has the keyboard, the field included: a reload would
@@ -863,6 +866,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
   // « Undone » back at the strip's corner: on the same side of the text, a glide; across it, or
   // out of sight, a hop. Whatever waited for the window's move is dropped.
   const undoneHere = outcome.stage === 'undone' && undoneAway.current === false && presentation === 'anchored';
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once, when « Undone » comes
   useLayoutEffect(() => {
     if (!undoneHere) return;
     windowMove.current = null;
@@ -871,7 +875,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
       if ((placedSide.current ?? side) === side) glide(null, null);
       else hop(null, null);
     }
-  }, [undoneHere]); // eslint-disable-line react-hooks/exhaustive-deps -- once, when « Undone » comes
+  }, [undoneHere]);
   const lastContent = useRef(content);
   if (content && !closing) lastContent.current = content;
   const pill = closing || !content ? lastContent.current : content;

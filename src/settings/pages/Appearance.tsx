@@ -59,13 +59,14 @@ function MiniIlot({ kind, selected }: { kind: MotionPreset; selected: boolean })
     timers.current.push(window.setTimeout(() => setPhase('menu'), 160 + 620));
   };
   const first = useRef(true);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: plays the preview when the selection changes only
   useEffect(() => {
     if (first.current) {
       first.current = false;
       return;
     }
     if (selected) play();
-  }, [selected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected]);
   useEffect(() => clear, []);
   const spring = (which: 'enter' | 'morph') => (reduced ? tx(0.12) : springTransition(preset[which]));
   const hidden = phase === 'hidden';

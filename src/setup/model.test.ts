@@ -100,7 +100,7 @@ describe('the navigation lock', () => {
     expect(Array.from({ length: 10 }, () => lock.locked()).filter((refused) => !refused)).toHaveLength(1);
   });
   it('can be released (the demo ended, the next screen is taken at once)', () => {
-    let now = 0;
+    const now = 0;
     const lock = createNavLock(() => now);
     lock.locked();
     lock.release();

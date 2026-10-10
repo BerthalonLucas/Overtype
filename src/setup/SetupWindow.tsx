@@ -254,6 +254,7 @@ function Setup({ initial }: { initial: string | null }) {
   );
   // « C'est prêt » is the end: the setup is done from here, however the window is closed (its
   // cross used to bring the whole setup back at the next launch, the server already saved).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once when the ready step is reached with settings loaded
   useEffect(() => {
     if (step !== 'ready' || !settings) return;
     setFinishFailed(false);
@@ -261,7 +262,7 @@ function Setup({ initial }: { initial: string | null }) {
       .flush()
       .then(() => bridge.completeSetup())
       .catch(() => undefined);
-  }, [step, settings !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, settings !== null]);
   const closeWindow = useCallback(async () => {
     await store.flush();
     void bridge.closeSettings().catch(() => undefined);
@@ -309,6 +310,7 @@ function Setup({ initial }: { initial: string | null }) {
 
   // Focus: each screen's heading (read first by a screen reader; Enter still presses the big
   // button), the address field on « Votre modèle ».
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focus moves when the screen changes, not on each settings edit
   useEffect(() => {
     if (phase !== 'setup' || !settings) return;
     const timer = window.setTimeout(
@@ -323,7 +325,7 @@ function Setup({ initial }: { initial: string | null }) {
       step === 'welcome' ? 700 : 380,
     );
     return () => window.clearTimeout(timer);
-  }, [phase, step, settings !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, step, settings !== null]);
 
   // Enter = the big button, Escape = Retour: never while a shortcut is being recorded, a list is
   // open, or the journal shows (Escape then closes the journal). Enter mashed (twelve presses

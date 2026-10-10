@@ -273,16 +273,18 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
     noKey: second.noKey,
     auto: opened && settings !== null && settings.servers.length > 1,
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed by the server ids, not the settings object
   const probes = useMemo(() => {
     const map: SettingsContextValue['probes'] = {};
     if (settings?.servers[0]) map[settings.servers[0].id] = probeA;
     if (settings?.servers[1]) map[settings.servers[1].id] = probeB;
     return map;
-  }, [settings?.servers[0]?.id, settings?.servers[1]?.id, probeA, probeB]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settings?.servers[0]?.id, settings?.servers[1]?.id, probeA, probeB]);
   // A server that answered and has no model yet takes the first of its list, card folded or not
   // (the form does the same while open). A model already chosen is never replaced.
   // Read from the store, not from the last render: a server added a moment ago (its render still
   // to come) must not be written away by this save.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reacts to the probes only; the settings are read from the store
   useEffect(() => {
     const now = store.current();
     if (!now) return;
@@ -297,7 +299,7 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
         };
     }
     if (next !== now) store.persist(next, true);
-  }, [probeA.status, probeA.models, probeB.status, probeB.models]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [probeA.status, probeA.models, probeB.status, probeB.models]);
   // Back in front after a while: what the cards say is checked again (never while one runs).
   const probesRef = useRef(probes);
   probesRef.current = probes;
@@ -327,10 +329,11 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
     [],
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the pages depend on uiVersion only, not the whole settings object
   const pages = useMemo(
     () => visiblePages(settings ?? { uiVersion: 'ilot' }, showDiag),
     [settings?.uiVersion, showDiag],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const current = pageOr(page, pages);
   const showToast = useCallback((text: string, extra?: ToastExtra) => {
     setToast({ text, ...extra });
@@ -414,7 +417,7 @@ export function SettingsWindow({ initialPage = 'general' }: { initialPage?: Page
     } finally {
       closing.current = false;
     }
-  }, [store.flush, showToast, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [store.flush, showToast, t]);
   useEffect(() => {
     if (store.saveStatus !== 'error') closeRefused.current = false;
   }, [store.saveStatus]);

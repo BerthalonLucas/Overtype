@@ -78,13 +78,14 @@ export function useSettingsStore(): SettingsStore {
       .then(adopt)
       .catch(() => setLoadError(true));
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once on mount: the first load
   useEffect(() => {
     reload();
     void bridge
       .getHistory()
       .then(setHistory)
       .catch(() => undefined);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(
     () => () => {
       window.clearTimeout(saveTimer.current);
@@ -95,6 +96,7 @@ export function useSettingsStore(): SettingsStore {
   // The window stays alive while hidden: settings changed elsewhere (another window, the tray,
   // the setup) must replace its copy, or its next save would write the old values back.
   // Adopted only when nothing is being typed or saved here: a pending edit wins, and is saved.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: subscribed once; current values are read through refs
   useEffect(() => {
     let live = true;
     let off: (() => void) | undefined;
@@ -129,7 +131,7 @@ export function useSettingsStore(): SettingsStore {
       live = false;
       off?.();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   const settle = () => {
     setSaveStatus('just-saved');
     window.clearTimeout(settledTimer.current);

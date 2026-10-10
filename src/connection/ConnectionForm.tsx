@@ -68,15 +68,17 @@ export function ConnectionForm({
   // chosen is never replaced behind the person's back, even when the server no longer lists it.
   const latest = useRef(value);
   latest.current = value;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reacts to the probe only; the value is read through latest
   useEffect(() => {
     if (probe.status === 'ok' && probe.models.length && !latest.current.model.trim())
       onChange({ ...latest.current, model: probe.models[0].id }, true);
-  }, [probe.status, probe.models]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [probe.status, probe.models]);
   const listed = probe.models.some((item) => item.id === model);
   const ready = probe.status === 'ok' && model.trim() !== '';
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reports readiness when it changes, not when the callback identity does
   useEffect(() => {
     onReady?.(ready);
-  }, [ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [ready]);
 
   const read = probe.endpoint;
   const typed = endpoint.trim() !== '';

@@ -119,6 +119,7 @@ function PillFixture({ scenario, params }: { scenario: ResultScenario; params: U
     setOpen(false);
     if (!hold) reopen.current = window.setTimeout(() => start(), 900);
   };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once on mount: the lab starts its own timers
   useEffect(() => {
     if (initial.stage === 'working' && !hold)
       work.current = window.setTimeout(() => setStage(latest.current()), latency);
@@ -126,7 +127,7 @@ function PillFixture({ scenario, params }: { scenario: ResultScenario; params: U
       window.clearTimeout(work.current);
       window.clearTimeout(reopen.current);
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const onAction = (action: ErrorAction) => {
     record({ type: 'action', action });

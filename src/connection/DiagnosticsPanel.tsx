@@ -105,6 +105,7 @@ export function DiagnosticsPanel({ landing, onCheck, limit }: Props) {
   // « Voir le journal »: errors only, the failure unfolded (its entry, else the check's first
   // error, else the latest error). The entry may arrive a moment after the landing.
   const landed = useRef<number | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on a new landing or new entries; openId is read, not watched
   useEffect(() => {
     if (!landing) return;
     if (landed.current !== landing.at) setFilter(landing.filter);
@@ -114,7 +115,7 @@ export function DiagnosticsPanel({ landing, onCheck, limit }: Props) {
       (landed.current !== landing.at ? entries.find((entry) => entry.level === 'error') : undefined);
     if (target && (landed.current !== landing.at || openId === null)) setOpenId(target.id);
     landed.current = landing.at;
-  }, [landing, entries]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [landing, entries]);
 
   const rows = entries.filter((entry) => filter === 'all' || entry.level === 'error');
   const shown = limit ? rows.slice(0, limit) : rows;

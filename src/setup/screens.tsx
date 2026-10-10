@@ -322,17 +322,19 @@ export function ModelScreen({
     }
   };
   // Whatever changes ends a try on its way: its answer would be about something else.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: any change to these fields ends the running try
   useEffect(() => {
     stopTrial();
     setTrial({ state: 'idle' });
-  }, [value.endpoint, value.apiKey, value.noKey, value.model, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [value.endpoint, value.apiKey, value.noKey, value.model, ready]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup on unmount only
   useEffect(
     () => () => {
       stopTrial();
       onReady(false);
     },
     [],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const tryIt = async () => {
     stopTrial();
     const id = `try-${Date.now().toString(36)}-${(trySerial++).toString(36)}`;

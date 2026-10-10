@@ -431,6 +431,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
   const pillGrow = placement === 'bottom' ? 'up' : pillSide === null ? null : pillSide === 'above' ? 'up' : 'down';
 
   // Decide the form on the real text, once per result (a relaunch may change it).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per result: the form is decided when a result settles, not on each render
   useLayoutEffect(() => {
     if (!settled) return;
     const text = state.result || state.error || '';
@@ -441,7 +442,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
         if (current === 'anchored') setMoving(true);
         return 'bottom';
       });
-  }, [settled, state.requestId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settled, state.requestId]);
   // Pasted: the pill shows its check for a moment, then the glass leaves by itself.
   useEffect(() => {
     if (state.delivery !== 'applied') return;
@@ -610,6 +611,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
     return () => window.removeEventListener('focus', onFocus);
   }, []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the observer is rebuilt only when the geometry inputs change
   useLayoutEffect(() => {
     const element = root.current;
     if (!element || !captureId) return;
@@ -723,7 +725,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
       observer.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [captureId, form, placement, moving, menuOpen, feedback, screen, preset]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [captureId, form, placement, moving, menuOpen, feedback, screen, preset]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

@@ -17,11 +17,12 @@ export function DataPage() {
   const { settings, persist, history, historyError, removeHistory, reloadHistory, showToast } = useSettingsContext();
   // The window is created hidden at startup and read the history then: read again each time the
   // page opens and each time the window comes back in front.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per page opening; the focus listener does the rest
   useEffect(() => {
     reloadHistory();
     window.addEventListener('focus', reloadHistory);
     return () => window.removeEventListener('focus', reloadHistory);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
   const [confirming, setConfirming] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);

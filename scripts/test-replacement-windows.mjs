@@ -30,7 +30,6 @@ const EXPECTED_FAIL = {
   'uia-muette-revalidation': 'NATIVE-001',
   'fermeture-urgence-collage-engage': 'NATIVE-006',
   'collage-bloque-resultat-deja-present': 'NATIVE-010',
-  'selection-multiple-uia-simulee': 'NATIVE-012',
 };
 
 if (process.platform !== 'win32') {
@@ -517,7 +516,7 @@ scenario('selection-multiple-uia-simulee', 'NATIVE-012 : sélection en plusieurs
   const result = await driver({ op: 'multi-range-sim' });
   details.sim = result;
   need(result.single, 'une plage unique reste acceptée');
-  assert.equal(result.multipleRefused, true, 'deux plages : sélection refusée (aujourd’hui la première est prise pour le tout)');
+  assert.equal(result.multipleRefused, true, 'deux plages : sélection refusée (la première ne vaut jamais pour le tout)');
   return 'refusée';
 });
 

@@ -135,13 +135,21 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
     Ok((text, rects, selection_len, range_editable))
 }
 
+/// What `selection` answers for a selection in several disjoint parts (Ctrl+drag in Word, the
+/// Add mode of Writer): never replaced (NATIVE-012).
+const MULTIPLE_SELECTION: &str = "La sélection compte plusieurs plages; remplacement impossible.";
+
 /// The range a capture acts on, among those `GetSelection` gives (one per disjoint part of the
-/// selection).
+/// selection): the only one. A selection in several ranges is refused, at the capture and at the
+/// revalidation (NATIVE-012: its first range used to be taken for the whole of it, and the paste
+/// wrote over that part alone).
 pub(crate) fn selected_range<R>(ranges: Vec<R>) -> Result<R, String> {
-    ranges
-        .into_iter()
-        .next()
-        .ok_or_else(|| NO_SELECTION.to_string())
+    let mut ranges = ranges.into_iter();
+    let range = ranges.next().ok_or_else(|| NO_SELECTION.to_string())?;
+    if ranges.next().is_some() {
+        return Err(MULTIPLE_SELECTION.into());
+    }
+    Ok(range)
 }
 
 /// The visible runs of a range, physical, as `GetBoundingRectangles` gives them (none when
@@ -513,6 +521,9 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                 Err(message) if message == UIA_TOO_LONG => {
                     return Err(AppError::new(ErrorKind::TooLong, message))
                 }
+                // NATIVE-012: a selection in several ranges is never replaced. The synthetic copy
+                // may still give its text (Word copies every part), for Copy only: UI Automation
+                // proves no single range there (`copy_proved`), never a replaceable copy.
                 Err(_) => {}
             }
         }
@@ -896,6 +907,7 @@ fn selection_changed(
         Ok((_, rects, _, _)) if anchor_moved(target.anchor, anchor_of(rects)) => Some("anchor"),
         Ok(_) => None,
         Err(message) if message == NO_SELECTION => Some("collapsed"),
+        Err(message) if message == MULTIPLE_SELECTION => Some("multiple"),
         Err(_) => None,
     }
 }
@@ -1623,23 +1635,38 @@ mod tests {
         );
     }
 
-    /// NATIVE-012 (Elio audit), KNOWN RISK, EXPECTED TO FAIL until it is fixed: a selection in
-    /// several ranges (a simulated provider giving two) must be refused, never cut down to its
-    /// first range. Today the first one is taken, so the assertion panics as declared. The fix
-    /// removes `should_panic`; the real bench reports the same risk
-    /// (`selection-multiple-uia-simulee`, scripts/test-replacement-windows.mjs).
+    /// NATIVE-012 (Elio audit): a selection in several ranges (a simulated provider giving two)
+    /// is refused, never cut down to its first range; at the revalidation it is a change. The
+    /// real bench says the same (`selection-multiple-uia-simulee`).
     #[test]
-    #[should_panic(expected = "NATIVE-012")]
-    fn known_risk_native_012_a_selection_in_several_ranges_is_refused() {
+    fn a_selection_in_several_ranges_is_refused() {
         assert_eq!(selected_range(vec!["bloc"]), Ok("bloc"));
         assert_eq!(
             selected_range(Vec::<&str>::new()),
             Err(NO_SELECTION.to_string())
         );
-        assert!(
-            selected_range(vec!["premier bloc", "second bloc"]).is_err(),
+        assert_eq!(
+            selected_range(vec!["premier bloc", "second bloc"]),
+            Err(MULTIPLE_SELECTION.to_string()),
             "NATIVE-012: the first of two selected ranges was taken for the whole selection"
         );
+        let target = TargetIdentity {
+            runtime_id: Some(vec![1]),
+            native_window: 1,
+            control: 0,
+            selected_text: "premier bloc".into(),
+            anchor: None,
+            selection_len: 12,
+            editable: true,
+            check: TargetCheck::Uia,
+        };
+        assert_eq!(
+            selection_changed(&target, &Err(MULTIPLE_SELECTION.into())),
+            Some("multiple"),
+            "a second range added since the capture"
+        );
+        // Never proved for a copy either (the copy of Word gives every part).
+        assert!(!proves_copy("", "premier bloc\nsecond bloc"));
     }
 
     #[test]

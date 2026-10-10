@@ -10,8 +10,8 @@ import {
 } from './actionDefaults';
 import { resetFrom } from './settings/reset';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import { listen as tauriListen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
 import {
   connectionCommand,
   isConnectionCommand,
@@ -399,10 +399,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
 // receive the settings with their API keys meant for the Settings window, and the Settings
 // window the keyless copy meant for the overlay (which it could then save back, losing the keys).
 async function event<T>(name: EventName, handler: Handler<T>): Promise<Unlisten> {
-  if (native)
-    return tauriListen<T>(name, (e) => handler(e.payload), {
-      target: { kind: 'WebviewWindow', label: getCurrentWebviewWindow().label },
-    });
+  if (native) return getCurrentWebviewWindow().listen<T>(name, (e) => handler(e.payload));
   const set = demoListeners.get(name) ?? new Set();
   set.add(handler as (payload: never) => void);
   demoListeners.set(name, set);
@@ -416,21 +413,18 @@ export const bridge = {
   frontendReady: () => command<Capture | null>('frontend_ready'),
   closeSettings: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       return getCurrentWindow().close();
     }
     location.assign('/');
   },
   resizeSettingsCorner: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().startResizeDragging('SouthEast');
     }
   },
   // The settings window's title bar text (taskbar, Alt+Tab) follows the interface language.
   setSettingsTitle: async (title: string) => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().setTitle(title);
     } else document.title = title;
   },
@@ -440,7 +434,6 @@ export const bridge = {
   windowShown: async (): Promise<boolean> => {
     if (!native) return true;
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       return await getCurrentWindow().isVisible();
     } catch {
       return true;
@@ -506,13 +499,11 @@ export const bridge = {
   // The framed windows without decorations (settings, setup): drag by their own title bar, minimise.
   dragWindow: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().startDragging();
     }
   },
   minimizeWindow: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().minimize();
     }
   },
@@ -534,7 +525,6 @@ export const bridge = {
   // so the Îlot knows on which side of the selection it opened; null outside the native app.
   windowPosition: async (): Promise<{ x: number; y: number } | null> => {
     if (!native) return null;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const position = await getCurrentWindow().innerPosition();
     return { x: position.x, y: position.y };
   },
@@ -543,7 +533,6 @@ export const bridge = {
   // it (src/layout.ts ilotShift). null outside the native app, or off every screen.
   workAreaAt: async (x: number, y: number): Promise<Rect | null> => {
     if (!native) return null;
-    const { monitorFromPoint } = await import('@tauri-apps/api/window');
     const monitor = await monitorFromPoint(x, y);
     if (!monitor) return null;
     const { position, size } = monitor.workArea;

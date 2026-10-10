@@ -16,6 +16,10 @@ const FILE: &str = "diagnostic.log";
 const ROTATED: &str = "diagnostic.1.log";
 /// settings.json was unreadable: set aside under this name (`detail`, never its content).
 pub const SETTINGS_RECOVERED: &str = "settings_recovered";
+/// The history database could not open: the app goes on without history (no content).
+pub const HISTORY_UNAVAILABLE: &str = "history_unavailable";
+/// A deletion's write-ahead log could not be emptied at once (a reader held it): retried later.
+pub const HISTORY_CHECKPOINT_BUSY: &str = "history_checkpoint_busy";
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

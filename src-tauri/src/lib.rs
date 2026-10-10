@@ -4328,7 +4328,8 @@ fn clear_diagnostics(
 }
 
 /// What the launch reads from the data folder. Unreadable settings are set aside and the
-/// defaults load (the setup shows again).
+/// defaults load (the setup shows again); a history that cannot open never stops the launch:
+/// it is tried again at its next use.
 fn open_stores(
     root: &std::path::Path,
     journal: &Arc<diagnostics::Diagnostics>,
@@ -4354,7 +4355,8 @@ fn open_stores(
         );
         SettingsRecovery { backup }
     });
-    let history = HistoryStore::new(root)?;
+    let history = HistoryStore::new(root, Some(journal.clone()));
+    let _ = history.ensure();
     Ok((store, settings, recovery, history))
 }
 #[tauri::command]
@@ -5248,20 +5250,37 @@ pub fn run() {
 mod tests {
     use super::*;
     #[test]
-    fn unreadable_settings_do_not_stop_the_launch() {
+    fn unreadable_settings_and_a_broken_history_do_not_stop_the_launch() {
         let root = std::env::temp_dir().join(format!("flowtranslate-launch-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("settings.json"), b"{ pas du json").unwrap();
+        std::fs::write(root.join("history.sqlite3"), vec![0x42u8; 8192]).unwrap();
         let journal = Arc::new(diagnostics::Diagnostics::new(None));
-        let (_, settings, recovery, _) = open_stores(&root, &journal).unwrap();
+        let (_, settings, recovery, history) = open_stores(&root, &journal).unwrap();
         assert_eq!(settings, Settings::default());
         let backup = recovery.expect("la récupération est annoncée").backup;
         assert!(root.join(&backup).exists());
-        assert!(journal
-            .list()
+        let codes = journal.list();
+        assert!(codes
             .iter()
             .any(|e| e.code == diagnostics::SETTINGS_RECOVERED
                 && e.detail.as_deref() == Some(backup.as_str())));
+        assert!(codes
+            .iter()
+            .any(|e| e.code == diagnostics::HISTORY_UNAVAILABLE));
+        // A translation finishing now writes no history, and nothing fails.
+        assert!(history
+            .add(&HistoryEntry {
+                id: "x".into(),
+                source_text: "a".into(),
+                translated_text: "b".into(),
+                action_name: "Traduire".into(),
+                server: String::new(),
+                created_at: Utc::now().to_rfc3339(),
+            })
+            .is_err());
+        assert!(history.list().is_err());
+        drop(history);
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]

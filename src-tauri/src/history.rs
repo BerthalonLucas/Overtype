@@ -1,12 +1,27 @@
-use crate::{crypto, types::HistoryEntry};
+use crate::{
+    crypto,
+    diagnostics::{self, Diag, DiagLevel, DiagStep, Diagnostics},
+    types::HistoryEntry,
+};
 use chrono::{Duration, Utc};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
+/// The history is optional: a database that cannot open never stops the app. It opens on first
+/// use and, after a failure, is tried again at the next one (`history_unavailable` in the
+/// journal each time, never any content).
 #[derive(Clone)]
 pub struct HistoryStore {
     path: PathBuf,
+    ready: Arc<AtomicBool>,
+    journal: Option<Arc<Diagnostics>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -16,16 +31,49 @@ struct SecretPayload {
     translated_text: String,
 }
 
+const UNAVAILABLE: &str = "L’historique est indisponible pour le moment.";
+
 impl HistoryStore {
-    pub fn new(root: &Path) -> Result<Self, String> {
-        std::fs::create_dir_all(root)
-            .map_err(|_| "Impossible de créer le dossier d’historique.".to_string())?;
-        let this = Self {
+    /// Nothing is opened here: see `ensure`.
+    pub fn new(root: &Path, journal: Option<Arc<Diagnostics>>) -> Self {
+        Self {
             path: root.join("history.sqlite3"),
-        };
-        let conn = this.connection()?;
+            ready: Arc::new(AtomicBool::new(false)),
+            journal,
+        }
+    }
+
+    /// Opens and prepares the database once; a failure is journaled and retried next time.
+    pub fn ensure(&self) -> Result<(), String> {
+        if self.ready.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        match self.initialize() {
+            Ok(()) => {
+                self.ready.store(true, Ordering::Release);
+                Ok(())
+            }
+            Err(_) => {
+                self.note(DiagLevel::Error, diagnostics::HISTORY_UNAVAILABLE);
+                Err(UNAVAILABLE.to_string())
+            }
+        }
+    }
+
+    fn note(&self, level: DiagLevel, code: &str) {
+        if let Some(journal) = &self.journal {
+            journal.add(Diag::new(DiagStep::App, level, code));
+        }
+    }
+
+    fn initialize(&self) -> Result<(), String> {
+        if let Some(root) = self.path.parent() {
+            std::fs::create_dir_all(root)
+                .map_err(|_| "Impossible de créer le dossier d’historique.".to_string())?;
+        }
+        let conn = self.connection()?;
         conn.execute_batch(
-            "PRAGMA journal_mode=WAL; PRAGMA secure_delete=ON;
+            "PRAGMA journal_mode=WAL;
              CREATE TABLE IF NOT EXISTS history(
                id TEXT PRIMARY KEY, created_at TEXT NOT NULL, target_language TEXT NOT NULL,
                mode TEXT NOT NULL, payload_dpapi BLOB NOT NULL
@@ -46,15 +94,34 @@ impl HistoryStore {
             conn.execute_batch("ALTER TABLE history ADD COLUMN action TEXT NOT NULL DEFAULT ''")
                 .map_err(|_| "Impossible de migrer l’historique.".to_string())?;
         }
-        Self::prune(&conn)?;
-        Ok(this)
+        self.prune(&conn)
     }
 
+    /// Every connection overwrites what it deletes: `secure_delete` holds per connection.
     fn connection(&self) -> Result<Connection, String> {
-        Connection::open(&self.path).map_err(|_| "Impossible d’ouvrir l’historique.".to_string())
+        let conn = Connection::open(&self.path)
+            .map_err(|_| "Impossible d’ouvrir l’historique.".to_string())?;
+        conn.execute_batch("PRAGMA secure_delete=ON;")
+            .map_err(|_| "Impossible d’ouvrir l’historique.".to_string())?;
+        Ok(conn)
+    }
+
+    /// After a deletion the write-ahead log still holds the deleted pages: fold it into the
+    /// database and empty it. A busy reader only delays that: journaled, not an error.
+    fn checkpoint(&self, conn: &Connection) {
+        let busy = conn
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .map(|busy| busy != 0)
+            .unwrap_or(true);
+        if busy {
+            self.note(DiagLevel::Info, diagnostics::HISTORY_CHECKPOINT_BUSY);
+        }
     }
 
     pub fn add(&self, entry: &HistoryEntry) -> Result<(), String> {
+        self.ensure()?;
         let payload = serde_json::to_vec(&SecretPayload {
             source_text: entry.source_text.clone(),
             translated_text: entry.translated_text.clone(),
@@ -65,25 +132,31 @@ impl HistoryStore {
         conn.execute("INSERT OR REPLACE INTO history(id,created_at,target_language,mode,payload_dpapi,action) VALUES(?1,?2,'',?3,?4,?5)",
             params![entry.id, entry.created_at, entry.server, cipher, entry.action_name])
             .map_err(|_| "Impossible d’ajouter l’entrée à l’historique.".to_string())?;
-        Self::prune(&conn)
+        self.prune(&conn)
     }
 
-    fn prune(conn: &Connection) -> Result<(), String> {
+    fn prune(&self, conn: &Connection) -> Result<(), String> {
         let cutoff = (Utc::now() - Duration::days(7)).to_rfc3339();
-        conn.execute("DELETE FROM history WHERE created_at < ?1", [cutoff])
+        let old = conn
+            .execute("DELETE FROM history WHERE created_at < ?1", [cutoff])
             .map_err(|_| "Impossible de purger l’historique.".to_string())?;
-        conn.execute("DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY created_at DESC LIMIT 100)", [])
+        let over = conn.execute("DELETE FROM history WHERE id NOT IN (SELECT id FROM history ORDER BY created_at DESC LIMIT 100)", [])
             .map_err(|_| "Impossible de limiter l’historique.".to_string())?;
+        if old + over > 0 {
+            self.checkpoint(conn);
+        }
         Ok(())
     }
 
     pub fn maintain(&self) -> Result<(), String> {
-        Self::prune(&self.connection()?)
+        self.ensure()?;
+        self.prune(&self.connection()?)
     }
 
     pub fn list(&self) -> Result<Vec<HistoryEntry>, String> {
+        self.ensure()?;
         let conn = self.connection()?;
-        Self::prune(&conn)?;
+        self.prune(&conn)?;
         let mut stmt = conn.prepare("SELECT id,created_at,action,mode,payload_dpapi FROM history ORDER BY created_at DESC")
             .map_err(|_| "Impossible de lire l’historique.".to_string())?;
         let rows = stmt
@@ -120,6 +193,7 @@ impl HistoryStore {
     }
 
     pub fn delete(&self, id: Option<&str>) -> Result<(), String> {
+        self.ensure()?;
         let conn = self.connection()?;
         match id {
             Some(id) => {
@@ -131,6 +205,7 @@ impl HistoryStore {
                     .map_err(|_| "Impossible de vider l’historique.".to_string())?;
             }
         }
+        self.checkpoint(&conn);
         Ok(())
     }
 }
@@ -153,7 +228,7 @@ mod tests {
             "flowtranslate-history-test-{}",
             uuid::Uuid::new_v4()
         ));
-        let store = HistoryStore::new(&root).unwrap();
+        let store = HistoryStore::new(&root, None);
         let old = HistoryEntry {
             id: "old".into(),
             source_text: "secret".into(),
@@ -193,6 +268,70 @@ mod tests {
         assert!(!entries.iter().any(|e| e.id == "old"));
         store.delete(None).unwrap();
         assert!(store.list().unwrap().is_empty());
+        drop(store);
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[test]
+    fn a_deleted_row_leaves_no_trace_in_the_database_files() {
+        let root = std::env::temp_dir().join(format!(
+            "flowtranslate-history-secure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = HistoryStore::new(&root, None);
+        let marker = "MARQUEUR-EFFACE-7f3a9c";
+        store
+            .add(&HistoryEntry {
+                id: "trace".into(),
+                source_text: "a".into(),
+                translated_text: "b".into(),
+                action_name: marker.into(),
+                server: String::new(),
+                created_at: Utc::now().to_rfc3339(),
+            })
+            .unwrap();
+        store.delete(Some("trace")).unwrap();
+        drop(store);
+        for name in ["history.sqlite3", "history.sqlite3-wal"] {
+            let bytes = std::fs::read(root.join(name)).unwrap_or_default();
+            assert!(
+                !bytes.windows(marker.len()).any(|w| w == marker.as_bytes()),
+                "{name} garde le marqueur"
+            );
+        }
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[test]
+    fn a_database_that_cannot_open_leaves_the_history_unavailable_and_retries() {
+        let root = std::env::temp_dir().join(format!(
+            "flowtranslate-history-broken-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        std::fs::write(&path, vec![0x42u8; 8192]).unwrap();
+        let journal = Arc::new(Diagnostics::new(None));
+        let store = HistoryStore::new(&root, Some(journal.clone()));
+        let entry = HistoryEntry {
+            id: "x".into(),
+            source_text: "texte".into(),
+            translated_text: "text".into(),
+            action_name: "Traduire".into(),
+            server: String::new(),
+            created_at: Utc::now().to_rfc3339(),
+        };
+        assert_eq!(store.ensure(), Err(UNAVAILABLE.to_string()));
+        assert_eq!(store.add(&entry), Err(UNAVAILABLE.to_string()));
+        assert_eq!(store.list(), Err(UNAVAILABLE.to_string()));
+        assert_eq!(store.delete(None), Err(UNAVAILABLE.to_string()));
+        let entries = journal.list();
+        assert_eq!(entries.len(), 4);
+        assert!(entries
+            .iter()
+            .all(|e| e.code == diagnostics::HISTORY_UNAVAILABLE && e.detail.is_none()));
+        // Repaired between two uses: the next one opens it.
+        std::fs::remove_file(&path).unwrap();
+        store.add(&entry).unwrap();
+        assert_eq!(store.list().unwrap().len(), 1);
         drop(store);
         let _ = std::fs::remove_dir_all(root);
     }

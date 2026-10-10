@@ -703,3 +703,10 @@ pub struct CompletedResult {
     pub server_id: String,
     pub complete: bool,
 }
+
+/// settings.json was unreadable at launch and set aside: `backup` is its new file name, no path.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsRecovery {
+    pub backup: String,
+}

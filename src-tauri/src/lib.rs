@@ -755,6 +755,8 @@ struct AppState {
     /// shortcut id: the settings window shows which binding does not work.
     refused_shortcuts: Mutex<std::collections::HashMap<u32, BindingState>>,
     history: HistoryStore,
+    /// settings.json was unreadable at this launch and set aside (BR-02).
+    settings_recovery: Option<SettingsRecovery>,
     /// The connection journal (0.6): the Diagnostic page and « Voir le journal ».
     diagnostics: Arc<diagnostics::Diagnostics>,
     /// The checks and tries in flight, so a newer one (or the interface) cancels them.
@@ -4325,6 +4327,40 @@ fn clear_diagnostics(
     Ok(())
 }
 
+/// What the launch reads from the data folder. Unreadable settings are set aside and the
+/// defaults load (the setup shows again).
+fn open_stores(
+    root: &std::path::Path,
+    journal: &Arc<diagnostics::Diagnostics>,
+) -> Result<
+    (
+        SettingsStore,
+        Settings,
+        Option<SettingsRecovery>,
+        HistoryStore,
+    ),
+    String,
+> {
+    let store = SettingsStore::new(root);
+    let (settings, backup) = store.load_or_recover()?;
+    let recovery = backup.map(|backup| {
+        journal.add(
+            diagnostics::Diag::new(
+                diagnostics::DiagStep::App,
+                diagnostics::DiagLevel::Error,
+                diagnostics::SETTINGS_RECOVERED,
+            )
+            .detail(backup.clone()),
+        );
+        SettingsRecovery { backup }
+    });
+    let history = HistoryStore::new(root)?;
+    Ok((store, settings, recovery, history))
+}
+#[tauri::command]
+fn settings_recovery(state: State<'_, AppState>) -> Option<SettingsRecovery> {
+    state.settings_recovery.clone()
+}
 #[tauri::command]
 fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
     state.history.list()
@@ -4906,8 +4942,20 @@ pub fn run() {
                     None => app.path().app_data_dir()?,
                 };
             std::fs::create_dir_all(&root)?;
-            let store = SettingsStore::new(&root);
-            let mut settings = store.load()?;
+            // The journal's files: beside the data in a test run, in the local (non roaming)
+            // data folder otherwise.
+            let logs =
+                match std::env::var_os("FLOWTRANSLATE_DATA_DIR").filter(|dir| !dir.is_empty()) {
+                    Some(_) => root.join("logs"),
+                    None => app
+                        .path()
+                        .app_local_data_dir()
+                        .unwrap_or_else(|_| root.clone())
+                        .join("logs"),
+                };
+            let diagnostics = Arc::new(diagnostics::Diagnostics::new(Some(logs)));
+            let (store, mut settings, settings_recovery, history) =
+                open_stores(&root, &diagnostics)?;
             // A fresh install speaks the language of Windows (French, or English otherwise).
             if !store.exists() {
                 settings.language = host::windows_language();
@@ -4927,18 +4975,6 @@ pub fn run() {
             }
             let language = settings.language;
             let setup_done = settings.setup_done;
-            // The journal's files: beside the data in a test run, in the local (non roaming)
-            // data folder otherwise.
-            let logs =
-                match std::env::var_os("FLOWTRANSLATE_DATA_DIR").filter(|dir| !dir.is_empty()) {
-                    Some(_) => root.join("logs"),
-                    None => app
-                        .path()
-                        .app_local_data_dir()
-                        .unwrap_or_else(|_| root.clone())
-                        .join("logs"),
-                };
-            let history = HistoryStore::new(&root)?;
             let args = std::env::args().collect::<Vec<_>>();
             let demo = args.iter().any(|a| {
                 matches!(
@@ -4964,7 +5000,8 @@ pub fn run() {
                 menu_memory: Mutex::new(MenuMemory::load(&root)),
                 refused_shortcuts: Mutex::new(std::collections::HashMap::new()),
                 history,
-                diagnostics: Arc::new(diagnostics::Diagnostics::new(Some(logs))),
+                settings_recovery,
+                diagnostics,
                 probes: Mutex::new(Vec::new()),
                 demo,
                 demo_clipboard,
@@ -5156,6 +5193,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            settings_recovery,
             glass_frame,
             save_settings,
             reset_settings,
@@ -5209,6 +5247,23 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unreadable_settings_do_not_stop_the_launch() {
+        let root = std::env::temp_dir().join(format!("flowtranslate-launch-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("settings.json"), b"{ pas du json").unwrap();
+        let journal = Arc::new(diagnostics::Diagnostics::new(None));
+        let (_, settings, recovery, _) = open_stores(&root, &journal).unwrap();
+        assert_eq!(settings, Settings::default());
+        let backup = recovery.expect("la récupération est annoncée").backup;
+        assert!(root.join(&backup).exists());
+        assert!(journal
+            .list()
+            .iter()
+            .any(|e| e.code == diagnostics::SETTINGS_RECOVERED
+                && e.detail.as_deref() == Some(backup.as_str())));
+        let _ = std::fs::remove_dir_all(root);
+    }
     #[test]
     fn cancel_revokes_automatic_delivery_even_after_inference_finishes() {
         let settings = Settings::default();

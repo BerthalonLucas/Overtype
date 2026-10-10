@@ -12,6 +12,12 @@ use std::{
 };
 use url::Url;
 
+/// Why the file did not load: it could not be read at all, or it was read and is unusable.
+enum LoadError {
+    Access(String),
+    Unreadable(String),
+}
+
 #[derive(Clone)]
 pub struct SettingsStore {
     path: PathBuf,
@@ -241,14 +247,44 @@ impl SettingsStore {
         self.path.with_file_name("settings.0.5.bak.json")
     }
 
+    #[cfg(test)]
     pub fn load(&self) -> Result<Settings, String> {
+        self.read().map_err(|error| match error {
+            LoadError::Access(message) | LoadError::Unreadable(message) => message,
+        })
+    }
+
+    /// The settings, or, when the file is there but unreadable (invalid JSON, a key DPAPI can no
+    /// longer decrypt, values `validate` refuses, no action), the defaults: the file is renamed
+    /// `settings.illisible-AAAAMMJJ-HHMMSS.json` beside it, never deleted, and its name (no path)
+    /// is returned. A file that cannot be accessed (locked, denied) is not corrupt: an error.
+    pub fn load_or_recover(&self) -> Result<(Settings, Option<String>), String> {
+        match self.read() {
+            Ok(settings) => Ok((settings, None)),
+            Err(LoadError::Access(message)) => Err(message),
+            Err(LoadError::Unreadable(message)) => {
+                let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S").to_string();
+                let mut name = format!("settings.illisible-{stamp}.json");
+                let mut n = 2;
+                while self.path.with_file_name(&name).exists() {
+                    name = format!("settings.illisible-{stamp}-{n}.json");
+                    n += 1;
+                }
+                fs::rename(&self.path, self.path.with_file_name(&name)).map_err(|_| message)?;
+                Ok((Settings::default(), Some(name)))
+            }
+        }
+    }
+
+    fn read(&self) -> Result<Settings, LoadError> {
         if !self.path.exists() {
             return Ok(Settings::default());
         }
-        let bytes =
-            fs::read(&self.path).map_err(|_| "Impossible de lire les paramètres.".to_string())?;
-        let raw: PersistedSettings = serde_json::from_slice(&bytes)
-            .map_err(|_| "Le fichier de paramètres est invalide.".to_string())?;
+        let bytes = fs::read(&self.path)
+            .map_err(|_| LoadError::Access("Impossible de lire les paramètres.".to_string()))?;
+        let invalid =
+            || LoadError::Unreadable("Le fichier de paramètres est invalide.".to_string());
+        let raw: PersistedSettings = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
         let bindings = raw.shortcut_bindings.unwrap_or_else(|| {
             let mut bindings =
                 actions::legacy_bindings(raw.shortcut.unwrap_or_else(|| "Ctrl+Alt+T".into()));
@@ -275,10 +311,12 @@ impl SettingsStore {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_else(actions::legacy_defaults);
+        // `actions: []` panicked here, before `validate` ever saw the file.
+        let first = actions.first().ok_or_else(invalid)?;
         let default_action_id = raw
             .default_action_id
             .filter(|id| actions.iter().any(|a| &a.id == id))
-            .unwrap_or_else(|| actions[0].id.clone());
+            .unwrap_or_else(|| first.id.clone());
         let ilot_known = raw.menu_action_ids.is_some();
         // The servers of 0.6, or the two profiles of a file of 0.5.1 or older turned into them.
         let from_0_5 = raw.servers.is_none();
@@ -287,7 +325,8 @@ impl SettingsStore {
                 let mut servers = Vec::new();
                 for server in stored {
                     servers.push(Server {
-                        api_key: decrypt_key(&server.api_key_dpapi)?,
+                        api_key: decrypt_key(&server.api_key_dpapi)
+                            .map_err(LoadError::Unreadable)?,
                         id: server.id,
                         name: server.name,
                         endpoint: server.endpoint,
@@ -310,7 +349,7 @@ impl SettingsStore {
                         (
                             profile.endpoint,
                             profile.model,
-                            decrypt_key(&profile.api_key_dpapi)?,
+                            decrypt_key(&profile.api_key_dpapi).map_err(LoadError::Unreadable)?,
                         ),
                     );
                 }
@@ -355,7 +394,7 @@ impl SettingsStore {
         if actions::localize_defaults(&mut settings.actions, settings.language) {
             migrated = true;
         }
-        validate(&settings)?;
+        validate(&settings).map_err(LoadError::Unreadable)?;
         if from_0_5 {
             // The file as 0.5 wrote it stays beside the new one, once: a way back.
             let backup = self.backup_path();
@@ -1809,6 +1848,73 @@ mod tests {
             store.load().unwrap().ui_version,
             crate::types::UiVersion::V4
         );
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[test]
+    fn an_empty_action_list_is_refused_instead_of_panicking() {
+        // `actions[0]` used to panic before `validate` had a chance to say no.
+        let root = temp_root("actions-vides");
+        let store = SettingsStore::new(&root);
+        store.save(&Settings::default()).unwrap();
+        let path = root.join("settings.json");
+        let mut raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        raw["actions"] = serde_json::json!([]);
+        std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
+        assert!(store.load().is_err());
+        let _ = std::fs::remove_dir_all(root);
+    }
+    /// A saved default file, changed by `edit`, then loaded with recovery.
+    fn recover_after(name: &str, edit: impl FnOnce(&mut serde_json::Value) -> Vec<u8>) {
+        let root = temp_root(name);
+        let store = SettingsStore::new(&root);
+        let saved = Settings {
+            setup_done: true,
+            ..Settings::default()
+        };
+        store.save(&saved).unwrap();
+        let path = root.join("settings.json");
+        let mut raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let broken = edit(&mut raw);
+        std::fs::write(&path, &broken).unwrap();
+        let (settings, backup) = store.load_or_recover().unwrap();
+        assert_eq!(settings, Settings::default());
+        assert!(!settings.setup_done, "l’accueil doit se relancer");
+        let backup = backup.expect("une sauvegarde est annoncée");
+        assert!(backup.starts_with("settings.illisible-") && backup.ends_with(".json"));
+        assert!(!backup.contains(['/', '\\']));
+        // The original is kept, byte for byte, and settings.json is gone (first launch again).
+        assert_eq!(std::fs::read(root.join(&backup)).unwrap(), broken);
+        assert!(!path.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[test]
+    fn invalid_json_is_set_aside_and_the_defaults_load() {
+        recover_after("recup-json", |_| b"{ pas du json".to_vec());
+    }
+    #[test]
+    fn an_empty_action_list_is_set_aside_and_the_defaults_load() {
+        recover_after("recup-actions", |raw| {
+            raw["actions"] = serde_json::json!([]);
+            serde_json::to_vec(raw).unwrap()
+        });
+    }
+    #[test]
+    fn refused_values_are_set_aside_and_the_defaults_load() {
+        recover_after("recup-validation", |raw| {
+            raw["afterReplace"]["undoSeconds"] = serde_json::json!(999);
+            serde_json::to_vec(raw).unwrap()
+        });
+    }
+    #[test]
+    fn readable_or_missing_settings_are_not_recovered() {
+        let root = temp_root("recup-rien");
+        let store = SettingsStore::new(&root);
+        assert_eq!(store.load_or_recover().unwrap().1, None);
+        store.save(&Settings::default()).unwrap();
+        assert_eq!(store.load_or_recover().unwrap().1, None);
+        assert!(root.join("settings.json").exists());
         let _ = std::fs::remove_dir_all(root);
     }
 }

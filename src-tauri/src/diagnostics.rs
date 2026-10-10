@@ -14,6 +14,8 @@ pub const CAPACITY: usize = 500;
 pub const ROTATE_BYTES: u64 = 1024 * 1024;
 const FILE: &str = "diagnostic.log";
 const ROTATED: &str = "diagnostic.1.log";
+/// settings.json was unreadable: set aside under this name (`detail`, never its content).
+pub const SETTINGS_RECOVERED: &str = "settings_recovered";
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

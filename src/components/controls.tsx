@@ -205,12 +205,7 @@ export function Select<T extends string>({
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
-        <SelectPrimitive.Content
-          className="ft-scope ft-popover ft-select-content"
-          position="popper"
-          sideOffset={6}
-          collisionPadding={8}
-        >
+        <SelectPrimitive.Content className="ft-scope ft-popover" position="popper" sideOffset={6} collisionPadding={8}>
           <SelectPrimitive.Viewport className="ft-select-viewport">
             {options.map((option) => (
               <SelectPrimitive.Item
@@ -311,10 +306,7 @@ export function Combobox({
               <Search {...ICON} aria-hidden="true" />
               <Command.Input placeholder={searchPlaceholder ?? t('ui.search')} maxLength={200} />
             </div>
-            <ScrollArea
-              className="ft-command-scroll"
-              maxHeight="min(300px, calc(var(--radix-popover-content-available-height, 400px) - 62px))"
-            >
+            <ScrollArea maxHeight="min(300px, calc(var(--radix-popover-content-available-height, 400px) - 62px))">
               <Command.List className="ft-command-list">
                 <Command.Empty className="ft-command-empty">{empty ?? t('ui.noResult')}</Command.Empty>
                 {options.map((option) => (
@@ -590,7 +582,6 @@ export function SecretInput({ value, onChange, note, ...props }: SecretProps) {
         <IconButton
           label={t(shown ? 'ui.hideKey' : 'ui.showKey')}
           size="sm"
-          className="ft-secret-eye"
           disabled={props.disabled}
           onClick={() => setShown((current) => !current)}
         >

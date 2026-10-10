@@ -939,7 +939,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
                   </IconButton>
                 )}
                 <BubbleMenuTrigger onClick={() => setMenuOpen((value) => !value)} pressed={menuVisible} />
-                <IconButton label={t('glass.close')} className="pill-close" onClick={cancelAndDismiss}>
+                <IconButton label={t('glass.close')} onClick={cancelAndDismiss}>
                   <Icon name="close" size={14} />
                 </IconButton>
               </motion.div>

@@ -407,7 +407,7 @@ export function Ilot({
           role="menuitem"
           type="button"
           tabIndex={focusable === 'ask' ? 0 : -1}
-          className="ilot-btn ilot-ask"
+          className="ilot-btn"
           data-item="ask"
           ref={(element) => {
             compactItems.current.ask = element;

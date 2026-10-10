@@ -282,7 +282,6 @@
 .st-mini-pill b { font-weight: 600; }
 .st-mini-dot { display: block; width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(var(--brand-stops)); box-shadow: 0 0 5px rgb(188 130 243 / .6); }
 .st-mini-sep { display: block; width: 1px; height: 12px; background: rgb(var(--ft-ink-rgb) / .14); }
-.st-mini-more { display: block; width: 14px; height: 6px; border-radius: 3px; background: rgb(var(--ft-ink-rgb) / .16); }
 .st-mini-grid { grid-template-columns: repeat(3, 32px); gap: 3px; padding: 4px; }
 .st-mini-grid > span { display: grid; place-items: center; width: 32px; height: 26px; border-radius: 8px; background: rgb(var(--ft-ink-rgb) / .05); color: rgb(var(--ft-ink-rgb) / .8); }
 

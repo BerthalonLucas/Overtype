@@ -4,9 +4,9 @@ use crate::{
     settings::{normalize_endpoint, Endpoint},
     types::{Server, StreamKind},
 };
-use std::time::Duration;
 use futures_util::StreamExt;
 use serde_json::{json, Value};
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, PartialEq)]
@@ -65,7 +65,9 @@ impl SseDecoder {
         if self.buffer.iter().all(u8::is_ascii_whitespace) {
             Ok(())
         } else {
-            Err(broken("Le flux du serveur s’est interrompu au milieu d’un événement."))
+            Err(broken(
+                "Le flux du serveur s’est interrompu au milieu d’un événement.",
+            ))
         }
     }
 }
@@ -87,10 +89,17 @@ fn cancelled() -> AppError {
 /// it is read the same). An address that is empty or does not read is the address's fault: the
 /// error opens its field.
 fn api_url(base: &str, route: &str) -> Result<(String, Endpoint), AppError> {
-    let endpoint = normalize_endpoint(base).map_err(|reason| AppError::new(ErrorKind::BadEndpoint, match reason {
-        crate::settings::EndpointReason::Empty => "Aucun serveur n’est réglé. Ouvrez les Réglages.",
-        _ => "L’adresse du serveur est invalide.",
-    }))?;
+    let endpoint = normalize_endpoint(base).map_err(|reason| {
+        AppError::new(
+            ErrorKind::BadEndpoint,
+            match reason {
+                crate::settings::EndpointReason::Empty => {
+                    "Aucun serveur n’est réglé. Ouvrez les Réglages."
+                }
+                _ => "L’adresse du serveur est invalide.",
+            },
+        )
+    })?;
     Ok((format!("{}/v1/{route}", endpoint.base), endpoint))
 }
 
@@ -106,7 +115,13 @@ const THINKING_SWITCH: &str = "chat_template_kwargs";
 /// The instruction is the system message, the text the user message (0.4.0): a small
 /// instruct model then transforms the text instead of answering it. Sampling is one
 /// conservative setting for any LLM (correction and rewriting want little variance).
-fn request_body(profile: &Server, instruction: &str, text: &str, extended: bool, thinking_switch: bool) -> Value {
+fn request_body(
+    profile: &Server,
+    instruction: &str,
+    text: &str,
+    extended: bool,
+    thinking_switch: bool,
+) -> Value {
     let mut body = json!({"model":profile.model,
         "messages":[{"role":"system","content":instruction},{"role":"user","content":text}],
         "stream":true,"temperature":0.3,"top_p":0.9});
@@ -132,10 +147,19 @@ fn rejects_thinking_switch(status: u16, detail: &str) -> bool {
 /// a reasoning parser) or Gemma's `<|channel>thought…<channel|>`. Deltas are kept while
 /// the beginning of the output may still turn into one of those markers.
 #[derive(Default)]
-pub struct ThinkFilter { buffer: String, state: ThinkState }
+pub struct ThinkFilter {
+    buffer: String,
+    state: ThinkState,
+}
 #[derive(Default, PartialEq)]
-enum ThinkState { #[default] Start, Thinking(&'static str), Passing }
-const THINK_MARKERS: [(&str, &str); 2] = [("<think>", "</think>"), ("<|channel>thought", "<channel|>")];
+enum ThinkState {
+    #[default]
+    Start,
+    Thinking(&'static str),
+    Passing,
+}
+const THINK_MARKERS: [(&str, &str); 2] =
+    [("<think>", "</think>"), ("<|channel>thought", "<channel|>")];
 impl ThinkFilter {
     /// Returns what may be shown now.
     pub fn push(&mut self, delta: &str) -> String {
@@ -152,18 +176,25 @@ impl ThinkFilter {
             match self.state {
                 ThinkState::Start => {
                     let head = self.buffer.trim_start();
-                    if let Some((_, close)) = THINK_MARKERS.iter().find(|(open, _)| head.starts_with(open)) {
+                    if let Some((_, close)) = THINK_MARKERS
+                        .iter()
+                        .find(|(open, _)| head.starts_with(open))
+                    {
                         self.state = ThinkState::Thinking(close);
                         continue;
                     }
-                    if head.is_empty() || THINK_MARKERS.iter().any(|(open, _)| open.starts_with(head)) {
+                    if head.is_empty()
+                        || THINK_MARKERS.iter().any(|(open, _)| open.starts_with(head))
+                    {
                         return String::new();
                     }
                     self.state = ThinkState::Passing;
                     return std::mem::take(&mut self.buffer);
                 }
                 ThinkState::Thinking(close) => {
-                    let Some(end) = self.buffer.find(close) else { return String::new() };
+                    let Some(end) = self.buffer.find(close) else {
+                        return String::new();
+                    };
                     let rest = self.buffer[end + close.len()..].trim_start().to_string();
                     self.buffer = rest;
                     self.state = ThinkState::Start;
@@ -177,7 +208,10 @@ impl ThinkFilter {
     /// unclosed thinking block is dropped.
     pub fn finish(&mut self) -> String {
         match self.state {
-            ThinkState::Thinking(_) => { self.buffer.clear(); String::new() }
+            ThinkState::Thinking(_) => {
+                self.buffer.clear();
+                String::new()
+            }
             _ => std::mem::take(&mut self.buffer),
         }
     }
@@ -206,7 +240,10 @@ pub struct Limits {
 }
 impl Default for Limits {
     fn default() -> Self {
-        Self { connect: Duration::from_secs(5), idle: Duration::from_secs(120) }
+        Self {
+            connect: Duration::from_secs(5),
+            idle: Duration::from_secs(120),
+        }
     }
 }
 
@@ -239,14 +276,24 @@ where
     let (endpoint, address) = api_url(&profile.endpoint, "chat/completions")?;
     // A server without a model chosen yet (0.6 allows it while setting up): the model's field.
     if profile.model.trim().is_empty() {
-        return Err(AppError::new(ErrorKind::ModelNotFound, "Aucun modèle n’est choisi pour ce serveur."));
+        return Err(AppError::new(
+            ErrorKind::ModelNotFound,
+            "Aucun modèle n’est choisi pour ce serveur.",
+        ));
     }
     // A server on this computer is reached directly, whatever proxy the environment names.
-    let client = probe::streaming_client(&probe::route(&address), limits.connect, limits.idle).map_err(AppError::internal)?;
+    let client = probe::streaming_client(&probe::route(&address), limits.connect, limits.idle)
+        .map_err(AppError::internal)?;
     let mut extended = true;
     let mut thinking_switch = true;
     let response = loop {
-        let mut req = client.post(&endpoint).json(&request_body(&profile, &instruction, &text, extended, thinking_switch));
+        let mut req = client.post(&endpoint).json(&request_body(
+            &profile,
+            &instruction,
+            &text,
+            extended,
+            thinking_switch,
+        ));
         if !profile.no_key && !profile.api_key.is_empty() {
             req = req.bearer_auth(&profile.api_key);
         }
@@ -268,7 +315,10 @@ where
             thinking_switch = false;
             continue;
         }
-        return Err(AppError::new(http_status(status, &detail), format!("Le serveur a répondu HTTP {status}.")));
+        return Err(AppError::new(
+            http_status(status, &detail),
+            format!("Le serveur a répondu HTTP {status}."),
+        ));
     };
     let mut bytes = response.bytes_stream();
     let mut decoder = SseDecoder::default();
@@ -309,14 +359,24 @@ where
     }
     decoder.finish()?;
     let tail = filter.finish();
-    if !tail.is_empty() { result.push_str(&tail); emit(Chunk { kind: StreamKind::Delta, text: Some(tail), message: None })?; }
+    if !tail.is_empty() {
+        result.push_str(&tail);
+        emit(Chunk {
+            kind: StreamKind::Delta,
+            text: Some(tail),
+            message: None,
+        })?;
+    }
     let result = clean_output(&result);
     if !done || !stop {
         return Err(broken("Le serveur n’a pas confirmé une réponse complète."));
     }
     if result.is_empty() {
         // A complete answer with nothing in it (a thinking block alone): the server's.
-        return Err(AppError::new(ErrorKind::ServerError, "Le serveur n’a pas confirmé une réponse complète."));
+        return Err(AppError::new(
+            ErrorKind::ServerError,
+            "Le serveur n’a pas confirmé une réponse complète.",
+        ));
     }
     if cancel.is_cancelled() {
         return Err(cancelled());
@@ -328,10 +388,20 @@ where
 /// connection that never opened in time) or a server that stopped answering in time.
 fn transport(endpoint: &str, error: &reqwest::Error) -> AppError {
     if error.is_timeout() && !error.is_connect() {
-        return AppError::new(ErrorKind::Timeout, unreachable_message(endpoint, ErrorKind::Timeout, Cause::Other));
+        return AppError::new(
+            ErrorKind::Timeout,
+            unreachable_message(endpoint, ErrorKind::Timeout, Cause::Other),
+        );
     }
-    let cause = if error.is_timeout() { Cause::Silent } else { cause(error) };
-    AppError::new(ErrorKind::Unreachable, unreachable_message(endpoint, ErrorKind::Unreachable, cause))
+    let cause = if error.is_timeout() {
+        Cause::Silent
+    } else {
+        cause(error)
+    };
+    AppError::new(
+        ErrorKind::Unreachable,
+        unreachable_message(endpoint, ErrorKind::Unreachable, cause),
+    )
 }
 
 /// Why a connection failed (25/09: an endpoint behind a firewall only said « injoignable »). Read
@@ -362,12 +432,18 @@ pub(crate) fn cause(error: &(dyn std::error::Error + 'static)) -> Cause {
     while let Some(current) = next {
         next = current.source();
         if let Some(io) = current.downcast_ref::<std::io::Error>() {
-            if let Some(found) = io.raw_os_error().map(os_cause).filter(|found| *found != Cause::Other) {
+            if let Some(found) = io
+                .raw_os_error()
+                .map(os_cause)
+                .filter(|found| *found != Cause::Other)
+            {
                 return found;
             }
             match io.kind() {
                 std::io::ErrorKind::ConnectionRefused => return Cause::Refused,
-                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted => return Cause::Reset,
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::ConnectionAborted => {
+                    return Cause::Reset
+                }
                 std::io::ErrorKind::TimedOut => return Cause::Silent,
                 _ => {}
             }
@@ -384,7 +460,9 @@ pub(crate) fn cause(error: &(dyn std::error::Error + 'static)) -> Cause {
 }
 
 pub(crate) fn tls_cause(text: &str) -> Cause {
-    let code = text.rsplit_once("(os error ").and_then(|(_, tail)| tail.trim_end_matches(')').trim().parse::<i32>().ok());
+    let code = text
+        .rsplit_once("(os error ")
+        .and_then(|(_, tail)| tail.trim_end_matches(')').trim().parse::<i32>().ok());
     match code.map(os_cause) {
         Some(Cause::Certificate) => Cause::Certificate,
         _ => Cause::Tls,
@@ -451,11 +529,17 @@ mod tests {
     use super::*;
     use crate::actions;
 
-    fn instruction() -> String { actions::defaults()[0].prompt_template.clone() }
+    fn instruction() -> String {
+        actions::defaults()[0].prompt_template.clone()
+    }
 
     #[test]
     fn the_instruction_is_the_system_message_and_the_extras_are_dropped_on_a_strict_endpoint() {
-        let profile = Server { endpoint: "http://127.0.0.1:8001".into(), model: "m".into(), ..Server::default() };
+        let profile = Server {
+            endpoint: "http://127.0.0.1:8001".into(),
+            model: "m".into(),
+            ..Server::default()
+        };
         let full = request_body(&profile, "Fix it.", "the txt", true, true);
         assert_eq!(full["messages"][0]["role"], "system");
         assert_eq!(full["messages"][0]["content"], "Fix it.");
@@ -470,11 +554,20 @@ mod tests {
         assert!(strict.get("chat_template_kwargs").is_none());
         assert_eq!(strict["temperature"], 0.3);
         assert_eq!(strict["stream"], true);
-        assert!(rejects_extended_sampling(400, "Unrecognized request argument supplied: top_k"));
-        assert!(rejects_extended_sampling(422, "repetition_penalty: extra inputs are not permitted"));
+        assert!(rejects_extended_sampling(
+            400,
+            "Unrecognized request argument supplied: top_k"
+        ));
+        assert!(rejects_extended_sampling(
+            422,
+            "repetition_penalty: extra inputs are not permitted"
+        ));
         assert!(!rejects_extended_sampling(400, "model not found"));
         assert!(!rejects_extended_sampling(500, "top_k"));
-        assert!(rejects_thinking_switch(400, "Unrecognized request argument supplied: chat_template_kwargs"));
+        assert!(rejects_thinking_switch(
+            400,
+            "Unrecognized request argument supplied: chat_template_kwargs"
+        ));
         assert!(!rejects_thinking_switch(400, "top_k"));
     }
     #[test]
@@ -510,15 +603,28 @@ mod tests {
         let mode = std::env::var("FLOWTRANSLATE_TEST_PROFILE").unwrap_or_else(|_| "fast".into());
         assert!(matches!(mode.as_str(), "fast" | "quality"));
         let profile = Server {
-            endpoint: format!("http://127.0.0.1:{}", if mode == "fast" { 8001 } else { 8002 }),
+            endpoint: format!(
+                "http://127.0.0.1:{}",
+                if mode == "fast" { 8001 } else { 8002 }
+            ),
             model: format!("flowtranslate-{mode}"),
             ..Server::default()
         };
         let mut deltas = String::new();
-        let result = stream(profile.clone(), instruction(), "Please confirm the budget of 1250 EUR for project Orion.".into(), CancellationToken::new(), |chunk| {
-            if let Some(text) = chunk.text { deltas.push_str(&text); }
-            Ok(())
-        }).await.expect("live native streaming translation");
+        let result = stream(
+            profile.clone(),
+            instruction(),
+            "Please confirm the budget of 1250 EUR for project Orion.".into(),
+            CancellationToken::new(),
+            |chunk| {
+                if let Some(text) = chunk.text {
+                    deltas.push_str(&text);
+                }
+                Ok(())
+            },
+        )
+        .await
+        .expect("live native streaming translation");
         assert_eq!(result, deltas);
         assert!(result.contains("Orion") && result.contains("EUR"));
         let cancel = CancellationToken::new();
@@ -546,11 +652,28 @@ mod tests {
     }
     #[test]
     fn v1_is_added_once_whatever_the_address_was_saved_as() {
-        for base in ["http://127.0.0.1:8001", "http://127.0.0.1:8001/", "http://127.0.0.1:8001/v1", "http://127.0.0.1:8001/v1/"] {
-            assert_eq!(api_url(base, "models").unwrap().0, "http://127.0.0.1:8001/v1/models", "{base}");
+        for base in [
+            "http://127.0.0.1:8001",
+            "http://127.0.0.1:8001/",
+            "http://127.0.0.1:8001/v1",
+            "http://127.0.0.1:8001/v1/",
+        ] {
+            assert_eq!(
+                api_url(base, "models").unwrap().0,
+                "http://127.0.0.1:8001/v1/models",
+                "{base}"
+            );
         }
-        assert_eq!(api_url("https://llm.exemple.com/openai", "chat/completions").unwrap().0, "https://llm.exemple.com/openai/v1/chat/completions");
-        assert_eq!(api_url("", "models").unwrap_err().kind, ErrorKind::BadEndpoint);
+        assert_eq!(
+            api_url("https://llm.exemple.com/openai", "chat/completions")
+                .unwrap()
+                .0,
+            "https://llm.exemple.com/openai/v1/chat/completions"
+        );
+        assert_eq!(
+            api_url("", "models").unwrap_err().kind,
+            ErrorKind::BadEndpoint
+        );
     }
     #[test]
     fn crlf_frame_is_supported() {
@@ -567,18 +690,32 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         std::thread::spawn(move || {
             for connection in listener.incoming() {
-                let Ok(mut connection) = connection else { break };
+                let Ok(mut connection) = connection else {
+                    break;
+                };
                 let answer = answer.clone();
                 std::thread::spawn(move || {
                     let mut head = Vec::new();
                     let mut byte = [0u8; 1];
-                    while !head.ends_with(b"\r\n\r\n") && connection.read(&mut byte).is_ok_and(|n| n == 1) { head.push(byte[0]); }
-                    let length = String::from_utf8_lossy(&head).lines()
-                        .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0)))
+                    while !head.ends_with(b"\r\n\r\n")
+                        && connection.read(&mut byte).is_ok_and(|n| n == 1)
+                    {
+                        head.push(byte[0]);
+                    }
+                    let length = String::from_utf8_lossy(&head)
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                        })
                         .unwrap_or(0);
                     let mut body = vec![0u8; length];
                     let _ = connection.read_exact(&mut body);
-                    if hold { std::thread::sleep(std::time::Duration::from_secs(5)); return; }
+                    if hold {
+                        std::thread::sleep(std::time::Duration::from_secs(5));
+                        return;
+                    }
                     let _ = connection.write_all(&answer);
                     let _ = connection.flush();
                 });
@@ -590,20 +727,48 @@ mod tests {
         format!("HTTP/1.1 {code} Status\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).into_bytes()
     }
     fn events(body: &str) -> Vec<u8> {
-        format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n{body}").into_bytes()
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n{body}"
+        )
+        .into_bytes()
     }
     const DELTA: &str = "data: {\"choices\":[{\"delta\":{\"content\":\"Bonjour\"}}]}\n\n";
     fn finish(reason: &str) -> String {
         format!("data: {{\"choices\":[{{\"delta\":{{}},\"finish_reason\":\"{reason}\"}}]}}\n\n")
     }
     fn profile(endpoint: String) -> Server {
-        Server { id: "s1".into(), endpoint, model: "m".into(), ..Server::default() }
+        Server {
+            id: "s1".into(),
+            endpoint,
+            model: "m".into(),
+            ..Server::default()
+        }
     }
-    async fn run_with(endpoint: String, cancel: CancellationToken, limits: Limits) -> Result<String, AppError> {
-        stream_within(profile(endpoint), "Fix it.".into(), "texte".into(), cancel, limits, |_| Ok(())).await
+    async fn run_with(
+        endpoint: String,
+        cancel: CancellationToken,
+        limits: Limits,
+    ) -> Result<String, AppError> {
+        stream_within(
+            profile(endpoint),
+            "Fix it.".into(),
+            "texte".into(),
+            cancel,
+            limits,
+            |_| Ok(()),
+        )
+        .await
     }
     async fn run(endpoint: String) -> Result<String, AppError> {
-        run_with(endpoint, CancellationToken::new(), Limits { connect: Duration::from_secs(2), idle: Duration::from_secs(5) }).await
+        run_with(
+            endpoint,
+            CancellationToken::new(),
+            Limits {
+                connect: Duration::from_secs(2),
+                idle: Duration::from_secs(5),
+            },
+        )
+        .await
     }
     async fn code(endpoint: String) -> ErrorKind {
         run(endpoint).await.expect_err("an error").kind
@@ -612,65 +777,167 @@ mod tests {
     #[tokio::test]
     async fn every_server_failure_carries_its_code_and_never_the_servers_words() {
         // The complete answer first: no code at all.
-        let ok = fake_server(events(&format!("{DELTA}{}data: [DONE]\n\n", finish("stop"))), false);
+        let ok = fake_server(
+            events(&format!("{DELTA}{}data: [DONE]\n\n", finish("stop"))),
+            false,
+        );
         assert_eq!(run(ok).await.unwrap(), "Bonjour");
         // Statuses: the body only splits the 404, and never reaches the message.
         let secret = "The model `m` does not exist. SECRET-BODY";
         for (answer, expected) in [
             (status(401, "{}"), ErrorKind::Unauthorized),
             (status(403, "{}"), ErrorKind::Unauthorized),
-            (status(404, &format!("{{\"message\":\"{secret}\"}}")), ErrorKind::ModelNotFound),
-            (status(404, "{\"detail\":\"Not Found\"}"), ErrorKind::BadEndpoint),
+            (
+                status(404, &format!("{{\"message\":\"{secret}\"}}")),
+                ErrorKind::ModelNotFound,
+            ),
+            (
+                status(404, "{\"detail\":\"Not Found\"}"),
+                ErrorKind::BadEndpoint,
+            ),
             (status(301, ""), ErrorKind::BadEndpoint),
             (status(429, "{}"), ErrorKind::Busy),
             (status(503, "{}"), ErrorKind::Busy),
             (status(500, "{}"), ErrorKind::ServerError),
-            (status(400, "{\"error\":\"bad request\"}"), ErrorKind::ServerError),
+            (
+                status(400, "{\"error\":\"bad request\"}"),
+                ErrorKind::ServerError,
+            ),
         ] {
-            let error = run(fake_server(answer, false)).await.expect_err("a refused request");
+            let error = run(fake_server(answer, false))
+                .await
+                .expect_err("a refused request");
             assert_eq!(error.kind, expected);
-            assert!(!error.message.contains("SECRET") && !error.message.contains("model `m`"), "the body stays out of the message");
+            assert!(
+                !error.message.contains("SECRET") && !error.message.contains("model `m`"),
+                "the body stays out of the message"
+            );
         }
         // The stream: the token limit, another finish reason (the server's word stays out),
         // an unreadable event, a cut in the middle of an event, no [DONE], a body cut short.
-        assert_eq!(code(fake_server(events(&format!("{DELTA}{}", finish("length"))), false)).await, ErrorKind::Length);
-        let filtered = run(fake_server(events(&format!("{DELTA}{}", finish("content_filter"))), false)).await.unwrap_err();
+        assert_eq!(
+            code(fake_server(
+                events(&format!("{DELTA}{}", finish("length"))),
+                false
+            ))
+            .await,
+            ErrorKind::Length
+        );
+        let filtered = run(fake_server(
+            events(&format!("{DELTA}{}", finish("content_filter"))),
+            false,
+        ))
+        .await
+        .unwrap_err();
         assert_eq!(filtered.kind, ErrorKind::ServerError);
         assert!(!filtered.message.contains("content_filter"));
-        assert_eq!(code(fake_server(events("data: {not json}\n\n"), false)).await, ErrorKind::StreamBroken);
-        assert_eq!(code(fake_server(events(&format!("{DELTA}data: {{\"choices\":")), false)).await, ErrorKind::StreamBroken);
-        assert_eq!(code(fake_server(events(DELTA), false)).await, ErrorKind::StreamBroken);
+        assert_eq!(
+            code(fake_server(events("data: {not json}\n\n"), false)).await,
+            ErrorKind::StreamBroken
+        );
+        assert_eq!(
+            code(fake_server(
+                events(&format!("{DELTA}data: {{\"choices\":")),
+                false
+            ))
+            .await,
+            ErrorKind::StreamBroken
+        );
+        assert_eq!(
+            code(fake_server(events(DELTA), false)).await,
+            ErrorKind::StreamBroken
+        );
         let short = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: 4000\r\n\r\n{DELTA}").into_bytes();
-        assert_eq!(code(fake_server(short, false)).await, ErrorKind::StreamBroken);
+        assert_eq!(
+            code(fake_server(short, false)).await,
+            ErrorKind::StreamBroken
+        );
         // A complete answer with nothing in it (a thinking block alone).
         let empty = "data: {\"choices\":[{\"delta\":{\"content\":\"<think>hmm</think>\"}}]}\n\n";
-        assert_eq!(code(fake_server(events(&format!("{empty}{}data: [DONE]\n\n", finish("stop"))), false)).await, ErrorKind::ServerError);
+        assert_eq!(
+            code(fake_server(
+                events(&format!("{empty}{}data: [DONE]\n\n", finish("stop"))),
+                false
+            ))
+            .await,
+            ErrorKind::ServerError
+        );
     }
 
     #[tokio::test]
     async fn transport_cancellation_and_our_own_failures_carry_their_codes() {
         // Nothing listens: a port taken then released.
-        let closed = { let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap(); listener.local_addr().unwrap().port() };
-        assert_eq!(code(format!("http://127.0.0.1:{closed}/v1")).await, ErrorKind::Unreachable);
+        let closed = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        assert_eq!(
+            code(format!("http://127.0.0.1:{closed}/v1")).await,
+            ErrorKind::Unreachable
+        );
         // A server that accepts and never answers.
         let silent = fake_server(Vec::new(), true);
-        let timeout = run_with(silent, CancellationToken::new(), Limits { connect: Duration::from_secs(2), idle: Duration::from_millis(400) }).await.unwrap_err();
+        let timeout = run_with(
+            silent,
+            CancellationToken::new(),
+            Limits {
+                connect: Duration::from_secs(2),
+                idle: Duration::from_millis(400),
+            },
+        )
+        .await
+        .unwrap_err();
         assert_eq!(timeout.kind, ErrorKind::Timeout);
         // An address that does not read, no address at all (nothing set up), and no model chosen:
         // each opens its field, and nothing leaves this computer.
-        assert_eq!(code("ftp://example.test/v1".into()).await, ErrorKind::BadEndpoint);
-        assert_eq!(code("https://user:pw@example.test".into()).await, ErrorKind::BadEndpoint);
+        assert_eq!(
+            code("ftp://example.test/v1".into()).await,
+            ErrorKind::BadEndpoint
+        );
+        assert_eq!(
+            code("https://user:pw@example.test".into()).await,
+            ErrorKind::BadEndpoint
+        );
         assert_eq!(code(String::new()).await, ErrorKind::BadEndpoint);
-        let unchosen = Server { model: "  ".into(), ..profile("http://127.0.0.1:9".into()) };
-        let error = stream_within(unchosen, "p".into(), "t".into(), CancellationToken::new(), Limits::default(), |_| Ok(())).await.unwrap_err();
+        let unchosen = Server {
+            model: "  ".into(),
+            ..profile("http://127.0.0.1:9".into())
+        };
+        let error = stream_within(
+            unchosen,
+            "p".into(),
+            "t".into(),
+            CancellationToken::new(),
+            Limits::default(),
+            |_| Ok(()),
+        )
+        .await
+        .unwrap_err();
         assert_eq!(error.kind, ErrorKind::ModelNotFound);
         // Cancelled before the request left.
         let cancel = CancellationToken::new();
         cancel.cancel();
-        let ok = fake_server(events(&format!("{DELTA}{}data: [DONE]\n\n", finish("stop"))), false);
-        assert_eq!(run_with(ok.clone(), cancel, Limits::default()).await.unwrap_err().kind, ErrorKind::Cancelled);
+        let ok = fake_server(
+            events(&format!("{DELTA}{}data: [DONE]\n\n", finish("stop"))),
+            false,
+        );
+        assert_eq!(
+            run_with(ok.clone(), cancel, Limits::default())
+                .await
+                .unwrap_err()
+                .kind,
+            ErrorKind::Cancelled
+        );
         // The display failed on our side while the answer streamed.
-        let ours = stream_within(profile(ok), "p".into(), "t".into(), CancellationToken::new(), Limits::default(), |_| Err(AppError::internal("Flux d’affichage indisponible."))).await;
+        let ours = stream_within(
+            profile(ok),
+            "p".into(),
+            "t".into(),
+            CancellationToken::new(),
+            Limits::default(),
+            |_| Err(AppError::internal("Flux d’affichage indisponible.")),
+        )
+        .await;
         assert_eq!(ours.unwrap_err().kind, ErrorKind::Internal);
     }
 
@@ -683,7 +950,13 @@ mod tests {
         assert_eq!(os_cause(10060), Cause::Silent);
         assert_eq!(os_cause(10054), Cause::Reset);
         // CERT_E_UNTRUSTEDROOT, CERT_E_CHAINING, CERT_E_EXPIRED, SEC_E_UNTRUSTED_ROOT, SEC_E_WRONG_PRINCIPAL.
-        for hresult in [0x800B_0109u32, 0x800B_010A, 0x800B_0101, 0x8009_0325, 0x8009_0322] {
+        for hresult in [
+            0x800B_0109u32,
+            0x800B_010A,
+            0x800B_0101,
+            0x8009_0325,
+            0x8009_0322,
+        ] {
             assert_eq!(os_cause(hresult as i32), Cause::Certificate, "{hresult:#x}");
         }
         // SEC_E_ILLEGAL_MESSAGE, SEC_E_ALGORITHM_MISMATCH: TLS, not the certificate.
@@ -692,38 +965,83 @@ mod tests {
         assert_eq!(os_cause(5), Cause::Other);
         // What std prints for schannel's code, whatever the language of Windows' own words.
         assert_eq!(tls_cause("Une chaîne de certificats a été émise par une autorité non approuvée. (os error -2146762487)"), Cause::Certificate);
-        assert_eq!(tls_cause("The message received was unexpected or badly formatted. (os error -2146893018)"), Cause::Tls);
+        assert_eq!(
+            tls_cause(
+                "The message received was unexpected or badly formatted. (os error -2146893018)"
+            ),
+            Cause::Tls
+        );
         assert_eq!(tls_cause("handshake failed"), Cause::Tls);
         // The message keeps the host and never the path.
-        let message = unreachable_message("https://inference.example.test:8443/v1", ErrorKind::Unreachable, Cause::Certificate);
-        assert!(message.contains("inference.example.test:8443") && message.contains("Certificat") && !message.contains("/v1"));
+        let message = unreachable_message(
+            "https://inference.example.test:8443/v1",
+            ErrorKind::Unreachable,
+            Cause::Certificate,
+        );
+        assert!(
+            message.contains("inference.example.test:8443")
+                && message.contains("Certificat")
+                && !message.contains("/v1")
+        );
     }
 
     #[tokio::test]
     async fn an_unreachable_server_says_why() {
         // Nothing listens: a port taken then released (Windows takes about 2 s to say so).
-        let closed = { let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap(); listener.local_addr().unwrap().port() };
-        let patient = Limits { connect: Duration::from_secs(5), idle: Duration::from_secs(8) };
-        let refused = run_with(format!("http://127.0.0.1:{closed}/v1"), CancellationToken::new(), patient).await.unwrap_err();
+        let closed = {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            listener.local_addr().unwrap().port()
+        };
+        let patient = Limits {
+            connect: Duration::from_secs(5),
+            idle: Duration::from_secs(8),
+        };
+        let refused = run_with(
+            format!("http://127.0.0.1:{closed}/v1"),
+            CancellationToken::new(),
+            patient,
+        )
+        .await
+        .unwrap_err();
         assert_eq!(refused.kind, ErrorKind::Unreachable);
-        assert!(refused.message.contains("rien n’écoute"), "{}", refused.message);
+        assert!(
+            refused.message.contains("rien n’écoute"),
+            "{}",
+            refused.message
+        );
         // A name that never resolves (.invalid is reserved for that).
-        let unknown = run("https://flowtranslate-test.invalid/v1".into()).await.unwrap_err();
+        let unknown = run("https://flowtranslate-test.invalid/v1".into())
+            .await
+            .unwrap_err();
         assert_eq!(unknown.kind, ErrorKind::Unreachable);
-        assert!(unknown.message.contains("introuvable"), "{}", unknown.message);
+        assert!(
+            unknown.message.contains("introuvable"),
+            "{}",
+            unknown.message
+        );
         // HTTPS to a server that answers plain HTTP at once: the handshake fails.
         let plain = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = plain.local_addr().unwrap().port();
         std::thread::spawn(move || {
             use std::io::Write;
             for connection in plain.incoming() {
-                let Ok(mut connection) = connection else { break };
-                let _ = connection.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                let Ok(mut connection) = connection else {
+                    break;
+                };
+                let _ = connection.write_all(
+                    b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                );
             }
         });
-        let tls = run(format!("https://127.0.0.1:{port}/v1")).await.unwrap_err();
+        let tls = run(format!("https://127.0.0.1:{port}/v1"))
+            .await
+            .unwrap_err();
         assert_eq!(tls.kind, ErrorKind::Unreachable);
-        assert!(tls.message.contains("Connexion sécurisée impossible"), "{}", tls.message);
+        assert!(
+            tls.message.contains("Connexion sécurisée impossible"),
+            "{}",
+            tls.message
+        );
     }
 
     /// Real certificates Windows refuses and a public one it accepts (badssl.com, example.com):
@@ -731,10 +1049,19 @@ mod tests {
     #[tokio::test]
     #[ignore = "reaches badssl.com and example.com"]
     async fn windows_refuses_bad_certificates_and_accepts_a_public_one() {
-        for host in ["self-signed.badssl.com", "untrusted-root.badssl.com", "expired.badssl.com", "wrong.host.badssl.com"] {
+        for host in [
+            "self-signed.badssl.com",
+            "untrusted-root.badssl.com",
+            "expired.badssl.com",
+            "wrong.host.badssl.com",
+        ] {
             let error = run(format!("https://{host}/v1")).await.unwrap_err();
             assert_eq!(error.kind, ErrorKind::Unreachable, "{host}");
-            assert!(error.message.starts_with("Certificat de"), "{host}: {}", error.message);
+            assert!(
+                error.message.starts_with("Certificat de"),
+                "{host}: {}",
+                error.message
+            );
         }
         // A public certificate: TLS passes, the server then answers 404 on /v1/models.
         let public = run("https://example.com/v1".into()).await.unwrap_err();

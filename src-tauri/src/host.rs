@@ -3,29 +3,35 @@ use crate::types::{Rect, SurfaceRegion};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, PhysicalPosition, PhysicalSize, WebviewWindow};
 use tauri::window::{Color, Effect, EffectsBuilder};
+use tauri::{AppHandle, Emitter, PhysicalPosition, PhysicalSize, WebviewWindow};
 use windows::core::{s, w, BOOL};
 use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
 use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
 use windows::Win32::{
     Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM},
-    Graphics::Gdi::{ClientToScreen, GetMonitorInfoW, MonitorFromPoint, HMONITOR, MONITORINFO, MONITOR_DEFAULTTONEAREST},
+    Graphics::Gdi::{
+        ClientToScreen, GetMonitorInfoW, MonitorFromPoint, HMONITOR, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST,
+    },
     UI::{
         HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI},
         Input::KeyboardAndMouse::{
-            GetAsyncKeyState, GetKeyboardLayout, MapVirtualKeyExW, MapVirtualKeyW, SendInput, ToUnicodeEx, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
-            KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL, VK_ESCAPE,
-            VK_INSERT, VK_LBUTTON, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT, VK_V,
+            GetAsyncKeyState, GetKeyboardLayout, MapVirtualKeyExW, MapVirtualKeyW, SendInput,
+            ToUnicodeEx, HKL, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
+            KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE, MAPVK_VK_TO_VSC, VIRTUAL_KEY, VK_CONTROL,
+            VK_ESCAPE, VK_INSERT, VK_LBUTTON, VK_LCONTROL, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU,
+            VK_RWIN, VK_SHIFT, VK_V,
         },
         Shell::{DefSubclassProc, SetWindowSubclass},
         WindowsAndMessaging::{
-            GetClassNameW, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW, GetWindowRect,
-            GetWindowThreadProcessId, IsWindow, IsWindowVisible, GUITHREADINFO,
-            SetForegroundWindow, SetWindowLongPtrW, ShowWindow, SW_HIDE,
-            SetWindowPos, GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, MA_NOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-            SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, WM_MOUSEACTIVATE, WM_NCACTIVATE, WM_NCPAINT,
-            WS_CAPTION, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
+            GetClassNameW, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW,
+            GetWindowRect, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
+            SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, GUITHREADINFO,
+            GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, MA_NOACTIVATE, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WM_MOUSEACTIVATE,
+            WM_NCACTIVATE, WM_NCPAINT, WS_CAPTION, WS_EX_APPWINDOW, WS_EX_LAYERED,
+            WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_MAXIMIZEBOX, WS_MINIMIZEBOX,
             WS_SYSMENU, WS_THICKFRAME,
         },
     },
@@ -57,7 +63,9 @@ unsafe extern "system" fn silent_frame_proc(
         match msg {
             WM_NCACTIVATE => DefSubclassProc(hwnd, msg, wparam, LPARAM(-1)),
             WM_NCPAINT | WM_NCUAHDRAWCAPTION | WM_NCUAHDRAWFRAME => LRESULT(0),
-            WM_MOUSEACTIVATE if no_activate_applies(hwnd.0 as isize) => LRESULT(MA_NOACTIVATE as isize),
+            WM_MOUSEACTIVATE if no_activate_applies(hwnd.0 as isize) => {
+                LRESULT(MA_NOACTIVATE as isize)
+            }
             _ => DefSubclassProc(hwnd, msg, wparam, lparam),
         }
     }
@@ -65,7 +73,12 @@ unsafe extern "system" fn silent_frame_proc(
 
 /// Keeps Windows from ever painting a frame on this window. Call from the window's thread.
 pub fn silence_frame(window: &WebviewWindow) -> Result<(), String> {
-    let hwnd = HWND(window.hwnd().map_err(|_| "Fenêtre indisponible.".to_string())?.0);
+    let hwnd = HWND(
+        window
+            .hwnd()
+            .map_err(|_| "Fenêtre indisponible.".to_string())?
+            .0,
+    );
     unsafe {
         SetWindowSubclass(hwnd, Some(silent_frame_proc), SILENT_FRAME_SUBCLASS, 0)
             .ok()
@@ -79,7 +92,12 @@ pub fn silence_frame(window: &WebviewWindow) -> Result<(), String> {
 /// material also shows through DOM fades. The glass therefore paints itself (no
 /// material); `FLOWTRANSLATE_GLASS=blur|acrylic|dwm` remains for experiments.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Glass { Blur, Acrylic, Dwm, None }
+pub enum Glass {
+    Blur,
+    Acrylic,
+    Dwm,
+    None,
+}
 
 pub fn glass_mode() -> Glass {
     match std::env::var("FLOWTRANSLATE_GLASS").as_deref() {
@@ -91,18 +109,41 @@ pub fn glass_mode() -> Glass {
 }
 
 #[repr(C)]
-struct AccentPolicy { state: u32, flags: u32, gradient: u32, animation: u32 }
+struct AccentPolicy {
+    state: u32,
+    flags: u32,
+    gradient: u32,
+    animation: u32,
+}
 #[repr(C)]
-struct CompositionAttribute { attribute: u32, data: *mut core::ffi::c_void, size: usize }
+struct CompositionAttribute {
+    attribute: u32,
+    data: *mut core::ffi::c_void,
+    size: usize,
+}
 
 unsafe fn set_accent(hwnd: HWND, state: u32, flags: u32, gradient: u32) {
-    type SetWindowCompositionAttribute = unsafe extern "system" fn(HWND, *mut CompositionAttribute) -> BOOL;
+    type SetWindowCompositionAttribute =
+        unsafe extern "system" fn(HWND, *mut CompositionAttribute) -> BOOL;
     unsafe {
-        let Ok(user32) = GetModuleHandleW(w!("user32.dll")) else { return };
-        let Some(entry) = GetProcAddress(user32, s!("SetWindowCompositionAttribute")) else { return };
+        let Ok(user32) = GetModuleHandleW(w!("user32.dll")) else {
+            return;
+        };
+        let Some(entry) = GetProcAddress(user32, s!("SetWindowCompositionAttribute")) else {
+            return;
+        };
         let set: SetWindowCompositionAttribute = std::mem::transmute(entry);
-        let mut policy = AccentPolicy { state, flags, gradient, animation: 0 };
-        let mut data = CompositionAttribute { attribute: 19, data: &mut policy as *mut _ as _, size: std::mem::size_of::<AccentPolicy>() };
+        let mut policy = AccentPolicy {
+            state,
+            flags,
+            gradient,
+            animation: 0,
+        };
+        let mut data = CompositionAttribute {
+            attribute: 19,
+            data: &mut policy as *mut _ as _,
+            size: std::mem::size_of::<AccentPolicy>(),
+        };
         let _ = set(hwnd, &mut data);
     }
 }
@@ -112,7 +153,14 @@ pub fn apply_glass(window: &WebviewWindow) {
     // ABGR tint packed as r | g << 8 | b << 16 | a << 24 (graphite, light alpha).
     let tint = 29u32 | (31u32 << 8) | (36u32 << 16) | (48u32 << 24);
     match glass_mode() {
-        Glass::Dwm => { let _ = window.set_effects(EffectsBuilder::new().effect(Effect::Acrylic).color(Color(29, 31, 36, 30)).build()); }
+        Glass::Dwm => {
+            let _ = window.set_effects(
+                EffectsBuilder::new()
+                    .effect(Effect::Acrylic)
+                    .color(Color(29, 31, 36, 30))
+                    .build(),
+            );
+        }
         Glass::Acrylic => unsafe { set_accent(hwnd, 4, 0, tint) },
         Glass::Blur => unsafe { set_accent(hwnd, 3, 2, tint) },
         Glass::None => {}
@@ -130,7 +178,11 @@ pub fn windows_language() -> crate::types::Language {
 }
 /// A Windows LANGID: its ten low bits name the language (0x0C: French, whatever the country).
 pub fn language_of(langid: u16) -> crate::types::Language {
-    if langid & 0x3ff == 0x0c { crate::types::Language::Fr } else { crate::types::Language::En }
+    if langid & 0x3ff == 0x0c {
+        crate::types::Language::Fr
+    } else {
+        crate::types::Language::En
+    }
 }
 
 pub fn foreground() -> isize {
@@ -140,20 +192,34 @@ pub fn foreground() -> isize {
 pub fn window_class(handle: isize) -> String {
     let mut class = [0u16; 256];
     let len = unsafe { GetClassNameW(HWND(handle as *mut _), &mut class) };
-    if len <= 0 { return String::new(); }
+    if len <= 0 {
+        return String::new();
+    }
     String::from_utf16_lossy(&class[..len as usize])
 }
 /// Windows consoles: Ctrl+Insert copies a selection there but Ctrl+V never replaces one.
 pub fn is_console_class(class: &str) -> bool {
-    matches!(class, "ConsoleWindowClass" | "CASCADIA_HOSTING_WINDOW_CLASS")
+    matches!(
+        class,
+        "ConsoleWindowClass" | "CASCADIA_HOSTING_WINDOW_CLASS"
+    )
 }
 /// The control that has the keyboard focus in the thread of `source`, with its class.
 pub fn focused_control(source: isize) -> Option<(isize, String)> {
     let thread = unsafe { GetWindowThreadProcessId(HWND(source as *mut _), None) };
-    if thread == 0 { return None; }
-    let mut info = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
-    unsafe { GetGUIThreadInfo(thread, &mut info).ok()?; }
-    if info.hwndFocus.0.is_null() { return None; }
+    if thread == 0 {
+        return None;
+    }
+    let mut info = GUITHREADINFO {
+        cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+        ..Default::default()
+    };
+    unsafe {
+        GetGUIThreadInfo(thread, &mut info).ok()?;
+    }
+    if info.hwndFocus.0.is_null() {
+        return None;
+    }
     let handle = info.hwndFocus.0 as isize;
     Some((handle, window_class(handle)))
 }
@@ -173,24 +239,24 @@ pub fn escape_down() -> bool {
     unsafe { GetAsyncKeyState(VK_ESCAPE.0 as i32) < 0 }
 }
 
-static ESCAPE_PENDING:AtomicBool=AtomicBool::new(false);
-static OVERLAY_VISIBLE:AtomicBool=AtomicBool::new(false);
-static SOURCE:AtomicIsize=AtomicIsize::new(0);
-static OVERLAY:AtomicIsize=AtomicIsize::new(0);
+static ESCAPE_PENDING: AtomicBool = AtomicBool::new(false);
+static OVERLAY_VISIBLE: AtomicBool = AtomicBool::new(false);
+static SOURCE: AtomicIsize = AtomicIsize::new(0);
+static OVERLAY: AtomicIsize = AtomicIsize::new(0);
 /// The Îlot menu is open and waits for a choice (lot 3): its keys belong to the frontend.
-static MENU_OPEN:AtomicBool=AtomicBool::new(false);
+static MENU_OPEN: AtomicBool = AtomicBool::new(false);
 /// The overlay held the foreground for this menu (review of da-ilot, n°2 and n°6): the keys of
 /// the source are then the user's again, the hook's fallback only serves a refused activation.
-static MENU_FOCUSED:AtomicBool=AtomicBool::new(false);
+static MENU_FOCUSED: AtomicBool = AtomicBool::new(false);
 /// Where the hook hands the menu keys it took from the source (a worker emits them).
-static MENU_KEYS:OnceLock<std::sync::mpsc::SyncSender<MenuKey>>=OnceLock::new();
+static MENU_KEYS: OnceLock<std::sync::mpsc::SyncSender<MenuKey>> = OnceLock::new();
 /// After a paste the Îlot can undo (lot 9): the source window whose keys end that offer. A
 /// key that is not ours reaching it (the user types, or another tool does) is reported once.
-static UNDO_WATCH:AtomicBool=AtomicBool::new(false);
-static UNDO_SOURCE:AtomicIsize=AtomicIsize::new(0);
-static TYPED:OnceLock<std::sync::mpsc::SyncSender<Typed>>=OnceLock::new();
+static UNDO_WATCH: AtomicBool = AtomicBool::new(false);
+static UNDO_SOURCE: AtomicIsize = AtomicIsize::new(0);
+static TYPED: OnceLock<std::sync::mpsc::SyncSender<Typed>> = OnceLock::new();
 /// Our own synthetic keys carry this in `dwExtraInfo`: the hook tells them from the user's.
-pub const OUR_KEYS:usize=0x464C_5754;
+pub const OUR_KEYS: usize = 0x464C_5754;
 
 /// After a choice in the Îlot (0.6): the keys of a hand still hammering (Enter mashed to
 /// choose, a head on the keyboard) must not land in the source, where the selection is still
@@ -198,24 +264,44 @@ pub const OUR_KEYS:usize=0x464C_5754;
 /// sentence by line breaks). For a short moment after the choice, slid along by each key and
 /// capped, the plain keys typed in the source are dropped. Never ours (the paste), never a
 /// chord with Ctrl, Alt or Windows, never a modifier, never Escape (it cancels the work).
-static GRACE_UNTIL:AtomicU64=AtomicU64::new(0);
-static GRACE_END:AtomicU64=AtomicU64::new(0);
-static GRACE_SOURCE:AtomicIsize=AtomicIsize::new(0);
-const GRACE_MS:u64=700;
-const GRACE_SLIDE_MS:u64=400;
-const GRACE_MAX_MS:u64=3_000;
-pub fn open_choice_grace(source:isize){
-    let now=now_ms();
-    GRACE_SOURCE.store(source,Ordering::Relaxed);
-    GRACE_END.store(now+GRACE_MAX_MS,Ordering::Relaxed);
-    GRACE_UNTIL.store(if source==0{0}else{now+GRACE_MS},Ordering::Release);
+static GRACE_UNTIL: AtomicU64 = AtomicU64::new(0);
+static GRACE_END: AtomicU64 = AtomicU64::new(0);
+static GRACE_SOURCE: AtomicIsize = AtomicIsize::new(0);
+const GRACE_MS: u64 = 700;
+const GRACE_SLIDE_MS: u64 = 400;
+const GRACE_MAX_MS: u64 = 3_000;
+pub fn open_choice_grace(source: isize) {
+    let now = now_ms();
+    GRACE_SOURCE.store(source, Ordering::Relaxed);
+    GRACE_END.store(now + GRACE_MAX_MS, Ordering::Relaxed);
+    GRACE_UNTIL.store(
+        if source == 0 { 0 } else { now + GRACE_MS },
+        Ordering::Release,
+    );
 }
-pub fn close_choice_grace(){GRACE_UNTIL.store(0,Ordering::Release);}
+pub fn close_choice_grace() {
+    GRACE_UNTIL.store(0, Ordering::Release);
+}
 /// Whether the key `vk` typed at `now` in the window `fg` is dropped by the grace that lasts
 /// until `until` (0: none) and `end` at most. `other`: Ctrl, Alt or Windows is held.
-pub fn grace_takes(now:u64,until:u64,end:u64,fg:isize,source:isize,vk:u32,other:bool,extra:usize)->bool{
-    until!=0&&now<until&&now<end&&fg!=0&&fg==source&&extra!=OUR_KEYS&&!other
-        &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
+pub fn grace_takes(
+    now: u64,
+    until: u64,
+    end: u64,
+    fg: isize,
+    source: isize,
+    vk: u32,
+    other: bool,
+    extra: usize,
+) -> bool {
+    until != 0
+        && now < until
+        && now < end
+        && fg != 0
+        && fg == source
+        && extra != OUR_KEYS
+        && !other
+        && !matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
 }
 
 /// While a request runs (0.6, 02/10): the selection is still live in the source, and an Enter
@@ -226,36 +312,68 @@ pub fn grace_takes(now:u64,until:u64,end:u64,fg:isize,source:isize,vk:u32,other:
 /// arrow or a navigation key (leaving the selection is the user's right: the watcher then drops
 /// the target and gives the keys back), never a function key. Capped: a request that lasts
 /// longer gives the keyboard back.
-static WORK_UNTIL:AtomicU64=AtomicU64::new(0);
-static WORK_SOURCE:AtomicIsize=AtomicIsize::new(0);
-const WORK_GRACE_MAX_MS:u64=20_000;
-pub fn open_work_grace(source:isize){
-    WORK_SOURCE.store(source,Ordering::Relaxed);
-    WORK_UNTIL.store(if source==0{0}else{now_ms()+WORK_GRACE_MAX_MS},Ordering::Release);
+static WORK_UNTIL: AtomicU64 = AtomicU64::new(0);
+static WORK_SOURCE: AtomicIsize = AtomicIsize::new(0);
+const WORK_GRACE_MAX_MS: u64 = 20_000;
+pub fn open_work_grace(source: isize) {
+    WORK_SOURCE.store(source, Ordering::Relaxed);
+    WORK_UNTIL.store(
+        if source == 0 {
+            0
+        } else {
+            now_ms() + WORK_GRACE_MAX_MS
+        },
+        Ordering::Release,
+    );
 }
-pub fn close_work_grace(){WORK_UNTIL.store(0,Ordering::Release);}
+pub fn close_work_grace() {
+    WORK_UNTIL.store(0, Ordering::Release);
+}
 /// Whether the key `vk` typed at `now` in the window `fg` is dropped while the request works
 /// (`until`: 0, none). `other`: Ctrl, Alt or Windows is held.
-pub fn work_takes(now:u64,until:u64,fg:isize,source:isize,vk:u32,other:bool,extra:usize)->bool{
-    until!=0&&now<until&&fg!=0&&fg==source&&extra!=OUR_KEYS&&!other
-        &&!matches!(vk,0x10..=0x12|0x14|0x1B|0x21..=0x28|0x2C|0x5B..=0x5D|0x70..=0x87|0x90|0x91|0xA0..=0xB7|0xE8)
+pub fn work_takes(
+    now: u64,
+    until: u64,
+    fg: isize,
+    source: isize,
+    vk: u32,
+    other: bool,
+    extra: usize,
+) -> bool {
+    until != 0
+        && now < until
+        && fg != 0
+        && fg == source
+        && extra != OUR_KEYS
+        && !other
+        && !matches!(vk,0x10..=0x12|0x14|0x1B|0x21..=0x28|0x2C|0x5B..=0x5D|0x70..=0x87|0x90|0x91|0xA0..=0xB7|0xE8)
 }
 
 /// The chords registered as global shortcuts (virtual key, and Ctrl 1 | Alt 2 | Shift 4 in the
 /// high word), for the hook: a press of one of them never reaches the application in front
 /// (Windows keeps it), so it is neither « a key typed in the text » for Undo nor for the marks
 /// (02/10: the shortcut hammered after a replacement took Undo away from the pill).
-static HOTKEYS:[AtomicU32;12]=[const{AtomicU32::new(0)};12];
-pub fn set_hotkeys(chords:&[(u32,u32)]){
-    for (slot,chord) in HOTKEYS.iter().zip(chords.iter().map(Some).chain(std::iter::repeat(None))){
-        slot.store(chord.map_or(0,|(vk,mods)|(vk&0xFFFF)|(mods<<16)),Ordering::Release);
+static HOTKEYS: [AtomicU32; 12] = [const { AtomicU32::new(0) }; 12];
+pub fn set_hotkeys(chords: &[(u32, u32)]) {
+    for (slot, chord) in HOTKEYS
+        .iter()
+        .zip(chords.iter().map(Some).chain(std::iter::repeat(None)))
+    {
+        slot.store(
+            chord.map_or(0, |(vk, mods)| (vk & 0xFFFF) | (mods << 16)),
+            Ordering::Release,
+        );
     }
 }
 /// A chord as the hook compares it.
-pub fn hotkey_code(vk:u32,ctrl:bool,alt:bool,shift:bool)->u32{(vk&0xFFFF)|((u32::from(ctrl)|u32::from(alt)<<1|u32::from(shift)<<2)<<16)}
-fn hotkey_pressed(vk:u32)->bool{
-    let code=hotkey_code(vk,held(VK_CONTROL),held(VK_MENU),held(VK_SHIFT));
-    HOTKEYS.iter().any(|chord|chord.load(Ordering::Acquire)==code)
+pub fn hotkey_code(vk: u32, ctrl: bool, alt: bool, shift: bool) -> u32 {
+    (vk & 0xFFFF) | ((u32::from(ctrl) | u32::from(alt) << 1 | u32::from(shift) << 2) << 16)
+}
+fn hotkey_pressed(vk: u32) -> bool {
+    let code = hotkey_code(vk, held(VK_CONTROL), held(VK_MENU), held(VK_SHIFT));
+    HOTKEYS
+        .iter()
+        .any(|chord| chord.load(Ordering::Acquire) == code)
 }
 
 /// A shortcut that holds Alt was just pressed (0.6, 02/10): released with nothing typed between,
@@ -265,23 +383,53 @@ fn hotkey_pressed(vk:u32)->bool{
 /// the shortcut's own key for itself, so the application saw Alt go down and up alone. One
 /// press of a key that means nothing (0xE8, unassigned: what AutoHotkey sends for the same
 /// reason), while Alt is still down, and the release is no longer a lone Alt.
-pub fn mask_alt_release(){
-    if !held(VK_MENU){return;}
-    let key=|up:bool|INPUT{r#type:INPUT_KEYBOARD,Anonymous:INPUT_0{ki:KEYBDINPUT{wVk:VIRTUAL_KEY(0xE8),wScan:0,dwFlags:if up{KEYEVENTF_KEYUP}else{Default::default()},time:0,dwExtraInfo:OUR_KEYS}}};
-    unsafe{SendInput(&[key(false),key(true)],std::mem::size_of::<INPUT>() as i32);}
+pub fn mask_alt_release() {
+    if !held(VK_MENU) {
+        return;
+    }
+    let key = |up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: VIRTUAL_KEY(0xE8),
+                wScan: 0,
+                dwFlags: if up {
+                    KEYEVENTF_KEYUP
+                } else {
+                    Default::default()
+                },
+                time: 0,
+                dwExtraInfo: OUR_KEYS,
+            },
+        },
+    };
+    unsafe {
+        SendInput(
+            &[key(false), key(true)],
+            std::mem::size_of::<INPUT>() as i32,
+        );
+    }
 }
 
 /// A key that reached the source while Undo was offered: the user's own Ctrl+Z (the
 /// application undoes the paste itself), or any other key.
-#[derive(Clone,Copy,Debug,PartialEq,Eq)]
-pub enum Typed{UndoKey,Other}
-pub fn arm_undo_watch(source:isize){UNDO_SOURCE.store(source,Ordering::Relaxed);UNDO_WATCH.store(source!=0,Ordering::Release);}
-pub fn disarm_undo_watch(){UNDO_WATCH.store(false,Ordering::Release);}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Typed {
+    UndoKey,
+    Other,
+}
+pub fn arm_undo_watch(source: isize) {
+    UNDO_SOURCE.store(source, Ordering::Relaxed);
+    UNDO_WATCH.store(source != 0, Ordering::Release);
+}
+pub fn disarm_undo_watch() {
+    UNDO_WATCH.store(false, Ordering::Release);
+}
 
 /// Whether a key down ends the Undo offer: not one of ours, not a lone modifier or lock
 /// key, not Escape (it closes the pill; it writes nothing).
-pub fn ends_undo(vk:u32,extra:usize)->bool{
-    extra!=OUR_KEYS&&!matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
+pub fn ends_undo(vk: u32, extra: usize) -> bool {
+    extra != OUR_KEYS && !matches!(vk,0x10..=0x12|0x14|0x1B|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
 }
 
 /// The marks of a paste (« mise en valeur », Lucas 25/09) last until the user's next action:
@@ -289,98 +437,168 @@ pub fn ends_undo(vk:u32,extra:usize)->bool{
 /// the keyboard hook; clicks and the wheel through a mouse hook that only lives while the
 /// marks show, on its own thread (a low-level mouse hook sees every move: none stays
 /// installed for nothing). The action is reported once per arming.
-static MARKS_WATCH:AtomicBool=AtomicBool::new(false);
-static MARKS_OVERLAY:AtomicIsize=AtomicIsize::new(0);
-static MARKS_ENDED:OnceLock<std::sync::mpsc::SyncSender<()>>=OnceLock::new();
+static MARKS_WATCH: AtomicBool = AtomicBool::new(false);
+static MARKS_OVERLAY: AtomicIsize = AtomicIsize::new(0);
+static MARKS_ENDED: OnceLock<std::sync::mpsc::SyncSender<()>> = OnceLock::new();
 /// The mouse hook's thread: its id while it pumps, `MOUSE_STARTING` while it starts or stops.
-static MOUSE_THREAD:AtomicU32=AtomicU32::new(0);
-const MOUSE_STARTING:u32=u32::MAX;
+static MOUSE_THREAD: AtomicU32 = AtomicU32::new(0);
+const MOUSE_STARTING: u32 = u32::MAX;
 
 /// Whether a key down ends the marks: not one of ours, not a lone modifier or lock key.
 /// Escape counts, unlike for Undo: the user acts in the text's window.
-pub fn ends_marks(vk:u32,extra:usize)->bool{
-    extra!=OUR_KEYS&&!matches!(vk,0x10..=0x12|0x14|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
+pub fn ends_marks(vk: u32, extra: usize) -> bool {
+    extra != OUR_KEYS && !matches!(vk,0x10..=0x12|0x14|0x5B|0x5C|0x90|0x91|0xA0..=0xA5)
 }
 
 /// Whether a low-level mouse message ends the marks: a button pressed, the wheel turned.
-pub fn ends_marks_mouse(message:u32)->bool{
-    use windows::Win32::UI::WindowsAndMessaging::{WM_LBUTTONDOWN,WM_MBUTTONDOWN,WM_MOUSEHWHEEL,WM_MOUSEWHEEL,WM_RBUTTONDOWN,WM_XBUTTONDOWN};
-    [WM_LBUTTONDOWN,WM_RBUTTONDOWN,WM_MBUTTONDOWN,WM_XBUTTONDOWN,WM_MOUSEWHEEL,WM_MOUSEHWHEEL].contains(&message)
+pub fn ends_marks_mouse(message: u32) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        WM_LBUTTONDOWN, WM_MBUTTONDOWN, WM_MOUSEHWHEEL, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
+        WM_XBUTTONDOWN,
+    };
+    [
+        WM_LBUTTONDOWN,
+        WM_RBUTTONDOWN,
+        WM_MBUTTONDOWN,
+        WM_XBUTTONDOWN,
+        WM_MOUSEWHEEL,
+        WM_MOUSEHWHEEL,
+    ]
+    .contains(&message)
 }
 
 /// Where the marks' end is reported: `on_action` runs on its own thread.
-pub fn install_marks_watch(on_action:impl Fn()+Send+'static)->Result<(),String>{
-    let (sender,receiver)=std::sync::mpsc::sync_channel::<()>(1);
-    let _=MARKS_ENDED.set(sender);
-    std::thread::Builder::new().name("marks-watch".into()).spawn(move||{for ()in receiver{on_action();}})
-        .map(|_|()).map_err(|_|"La fin des marques est indisponible.".to_string())
+pub fn install_marks_watch(on_action: impl Fn() + Send + 'static) -> Result<(), String> {
+    let (sender, receiver) = std::sync::mpsc::sync_channel::<()>(1);
+    let _ = MARKS_ENDED.set(sender);
+    std::thread::Builder::new()
+        .name("marks-watch".into())
+        .spawn(move || {
+            for () in receiver {
+                on_action();
+            }
+        })
+        .map(|_| ())
+        .map_err(|_| "La fin des marques est indisponible.".to_string())
 }
 
 /// The marks show: their watch starts, the keys at once, the mouse once its thread runs.
 /// `overlay`: our pill, whose clicks leave the marks alone.
-pub fn arm_marks_watch(overlay:isize){
-    MARKS_OVERLAY.store(overlay,Ordering::Relaxed);
-    MARKS_WATCH.store(true,Ordering::Release);
-    if MOUSE_THREAD.compare_exchange(0,MOUSE_STARTING,Ordering::AcqRel,Ordering::Acquire).is_ok()
-        &&std::thread::Builder::new().name("marks-mouse".into()).spawn(watch_mouse).is_err(){
-        MOUSE_THREAD.store(0,Ordering::Release);
+pub fn arm_marks_watch(overlay: isize) {
+    MARKS_OVERLAY.store(overlay, Ordering::Relaxed);
+    MARKS_WATCH.store(true, Ordering::Release);
+    if MOUSE_THREAD
+        .compare_exchange(0, MOUSE_STARTING, Ordering::AcqRel, Ordering::Acquire)
+        .is_ok()
+        && std::thread::Builder::new()
+            .name("marks-mouse".into())
+            .spawn(watch_mouse)
+            .is_err()
+    {
+        MOUSE_THREAD.store(0, Ordering::Release);
     }
 }
 
 /// The marks left or hid: nothing is reported any more and the mouse hook goes away.
-pub fn disarm_marks_watch(){
-    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW,WM_QUIT};
-    MARKS_WATCH.store(false,Ordering::Release);
-    let thread=MOUSE_THREAD.load(Ordering::Acquire);
-    if thread!=0&&thread!=MOUSE_STARTING{unsafe{let _=PostThreadMessageW(thread,WM_QUIT,WPARAM(0),LPARAM(0));}}
+pub fn disarm_marks_watch() {
+    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
+    MARKS_WATCH.store(false, Ordering::Release);
+    let thread = MOUSE_THREAD.load(Ordering::Acquire);
+    if thread != 0 && thread != MOUSE_STARTING {
+        unsafe {
+            let _ = PostThreadMessageW(thread, WM_QUIT, WPARAM(0), LPARAM(0));
+        }
+    }
 }
 
-fn marks_action(){
-    if MARKS_WATCH.swap(false,Ordering::AcqRel){if let Some(ended)=MARKS_ENDED.get(){let _=ended.try_send(());}}
+fn marks_action() {
+    if MARKS_WATCH.swap(false, Ordering::AcqRel) {
+        if let Some(ended) = MARKS_ENDED.get() {
+            let _ = ended.try_send(());
+        }
+    }
 }
 
 /// The mouse hook's thread: installs the hook, pumps until `disarm_marks_watch` posts
 /// WM_QUIT, removes it. Armed again meanwhile, it starts over rather than leave the marks
 /// without their mouse. The hook itself stays minimal: one comparison, and for a press or
 /// the wheel, the window under the pointer (our thread owns no window: nothing is sent).
-fn watch_mouse(){
-    use windows::Win32::{Foundation::HINSTANCE,System::Threading::GetCurrentThreadId,UI::WindowsAndMessaging::{CallNextHookEx,GetAncestor,GetMessageW,PeekMessageW,SetWindowsHookExW,UnhookWindowsHookEx,WindowFromPoint,GA_ROOT,MSG,MSLLHOOKSTRUCT,PM_NOREMOVE,WH_MOUSE_LL}};
-    unsafe extern "system" fn mouse(code:i32,wparam:WPARAM,lparam:LPARAM)->LRESULT{
-        if code>=0&&MARKS_WATCH.load(Ordering::Acquire)&&ends_marks_mouse(wparam.0 as u32){
-            let point=unsafe{(*(lparam.0 as *const MSLLHOOKSTRUCT)).pt};
-            let overlay=MARKS_OVERLAY.load(Ordering::Relaxed);
-            if overlay==0||unsafe{GetAncestor(WindowFromPoint(point),GA_ROOT)}.0 as isize!=overlay{marks_action();}
+fn watch_mouse() {
+    use windows::Win32::{
+        Foundation::HINSTANCE,
+        System::Threading::GetCurrentThreadId,
+        UI::WindowsAndMessaging::{
+            CallNextHookEx, GetAncestor, GetMessageW, PeekMessageW, SetWindowsHookExW,
+            UnhookWindowsHookEx, WindowFromPoint, GA_ROOT, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE,
+            WH_MOUSE_LL,
+        },
+    };
+    unsafe extern "system" fn mouse(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code >= 0 && MARKS_WATCH.load(Ordering::Acquire) && ends_marks_mouse(wparam.0 as u32) {
+            let point = unsafe { (*(lparam.0 as *const MSLLHOOKSTRUCT)).pt };
+            let overlay = MARKS_OVERLAY.load(Ordering::Relaxed);
+            if overlay == 0
+                || unsafe { GetAncestor(WindowFromPoint(point), GA_ROOT) }.0 as isize != overlay
+            {
+                marks_action();
+            }
         }
-        unsafe{CallNextHookEx(None,code,wparam,lparam)}
+        unsafe { CallNextHookEx(None, code, wparam, lparam) }
     }
-    unsafe{
-        let thread=GetCurrentThreadId();
-        let mut message=MSG::default();
+    unsafe {
+        let thread = GetCurrentThreadId();
+        let mut message = MSG::default();
         // The queue exists before the id is published: a WM_QUIT posted right then is kept.
-        let _=PeekMessageW(&mut message,None,0,0,PM_NOREMOVE);
-        let module=GetModuleHandleW(None).ok().map(|module|HINSTANCE(module.0));
-        loop{
-            let Ok(hook)=SetWindowsHookExW(WH_MOUSE_LL,Some(mouse),module,0) else{MOUSE_THREAD.store(0,Ordering::Release);return};
-            MOUSE_THREAD.store(thread,Ordering::Release);
-            if MARKS_WATCH.load(Ordering::Acquire){while GetMessageW(&mut message,None,0,0).0>0{}}
-            let _=UnhookWindowsHookEx(hook);
-            MOUSE_THREAD.store(MOUSE_STARTING,Ordering::Release);
-            if MARKS_WATCH.load(Ordering::Acquire){continue;}
-            MOUSE_THREAD.store(0,Ordering::Release);
+        let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+        let module = GetModuleHandleW(None)
+            .ok()
+            .map(|module| HINSTANCE(module.0));
+        loop {
+            let Ok(hook) = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse), module, 0) else {
+                MOUSE_THREAD.store(0, Ordering::Release);
+                return;
+            };
+            MOUSE_THREAD.store(thread, Ordering::Release);
+            if MARKS_WATCH.load(Ordering::Acquire) {
+                while GetMessageW(&mut message, None, 0, 0).0 > 0 {}
+            }
+            let _ = UnhookWindowsHookEx(hook);
+            MOUSE_THREAD.store(MOUSE_STARTING, Ordering::Release);
+            if MARKS_WATCH.load(Ordering::Acquire) {
+                continue;
+            }
+            MOUSE_THREAD.store(0, Ordering::Release);
             // Armed again right then: start over, unless that arming started a thread itself.
-            if !(MARKS_WATCH.load(Ordering::Acquire)&&MOUSE_THREAD.compare_exchange(0,MOUSE_STARTING,Ordering::AcqRel,Ordering::Acquire).is_ok()){return;}
+            if !(MARKS_WATCH.load(Ordering::Acquire)
+                && MOUSE_THREAD
+                    .compare_exchange(0, MOUSE_STARTING, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok())
+            {
+                return;
+            }
         }
     }
 }
 
-pub fn escape_scope(source:isize,overlay:isize){
-    SOURCE.store(source,Ordering::Relaxed);OVERLAY.store(overlay,Ordering::Relaxed);OVERLAY_VISIBLE.store(true,Ordering::Release);
+pub fn escape_scope(source: isize, overlay: isize) {
+    SOURCE.store(source, Ordering::Relaxed);
+    OVERLAY.store(overlay, Ordering::Relaxed);
+    OVERLAY_VISIBLE.store(true, Ordering::Release);
 }
-pub fn close_escape_scope(){OVERLAY_VISIBLE.store(false,Ordering::Release);ESCAPE_PENDING.store(false,Ordering::Release);}
+pub fn close_escape_scope() {
+    OVERLAY_VISIBLE.store(false, Ordering::Release);
+    ESCAPE_PENDING.store(false, Ordering::Release);
+}
 /// Whether a scope (Escape, or the menu's) is open.
-pub fn escape_open()->bool{OVERLAY_VISIBLE.load(Ordering::Acquire)}
-pub fn take_escape()->bool{ESCAPE_PENDING.swap(false,Ordering::AcqRel)}
-pub fn handle(window:&WebviewWindow)->isize{window.hwnd().map(|h|h.0 as isize).unwrap_or(0)}
+pub fn escape_open() -> bool {
+    OVERLAY_VISIBLE.load(Ordering::Acquire)
+}
+pub fn take_escape() -> bool {
+    ESCAPE_PENDING.swap(false, Ordering::AcqRel)
+}
+pub fn handle(window: &WebviewWindow) -> isize {
+    window.hwnd().map(|h| h.0 as isize).unwrap_or(0)
+}
 
 /// Opens or closes the menu's scope. A menu binding opens it at its press, before the capture
 /// is even taken (review of da-ilot, n°4 and n°7): a key typed right after the shortcut never
@@ -388,102 +606,144 @@ pub fn handle(window:&WebviewWindow)->isize{window.hwnd().map(|h|h.0 as isize).u
 /// it again for its own source. While it is open the hook never swallows Escape for itself:
 /// the WebView owns it when the overlay has the foreground, the frontend receives it as a
 /// `menu-key` otherwise.
-pub fn set_menu_open(open:bool,source:isize,overlay:isize){
-    if open{SOURCE.store(source,Ordering::Relaxed);OVERLAY.store(overlay,Ordering::Relaxed);OVERLAY_VISIBLE.store(true,Ordering::Release);ESCAPE_PENDING.store(false,Ordering::Release);}
-    MENU_FOCUSED.store(false,Ordering::Release);
-    MENU_OPEN.store(open,Ordering::Release);
+pub fn set_menu_open(open: bool, source: isize, overlay: isize) {
+    if open {
+        SOURCE.store(source, Ordering::Relaxed);
+        OVERLAY.store(overlay, Ordering::Relaxed);
+        OVERLAY_VISIBLE.store(true, Ordering::Release);
+        ESCAPE_PENDING.store(false, Ordering::Release);
+    }
+    MENU_FOCUSED.store(false, Ordering::Release);
+    MENU_OPEN.store(open, Ordering::Release);
 }
-pub fn menu_open()->bool{MENU_OPEN.load(Ordering::Acquire)}
+pub fn menu_open() -> bool {
+    MENU_OPEN.load(Ordering::Acquire)
+}
 /// The overlay took the foreground for the open menu (`focus_overlay`, or seen by the hook).
-pub fn set_menu_focused(){if MENU_OPEN.load(Ordering::Acquire){MENU_FOCUSED.store(true,Ordering::Release);}}
-pub fn menu_focused()->bool{MENU_FOCUSED.load(Ordering::Acquire)}
+pub fn set_menu_focused() {
+    if MENU_OPEN.load(Ordering::Acquire) {
+        MENU_FOCUSED.store(true, Ordering::Release);
+    }
+}
+pub fn menu_focused() -> bool {
+    MENU_FOCUSED.load(Ordering::Acquire)
+}
 /// Whether the hook takes a menu key from the source: only while the menu waits over a source
 /// that kept the foreground because the overlay never got it. Once the overlay had it, the
 /// user coming back to the source (a click in the document) means he left the menu: his keys
 /// are his (the context watcher then closes the menu).
-pub fn takes_source_keys(fg:isize,source:isize,focused:bool)->bool{fg!=0&&fg==source&&!focused}
+pub fn takes_source_keys(fg: isize, source: isize, focused: bool) -> bool {
+    fg != 0 && fg == source && !focused
+}
 
 /// A menu key taken from the source window while the overlay could not hold the
 /// foreground: `key` is written like `KeyboardEvent.key` (« Enter », « Tab », « ArrowDown »,
 /// « 3 », « f »…), `shift` tells Shift+Tab from Tab. Never a text: one key at a time, and
 /// only the keys the menu understands.
-#[derive(Clone,Debug,PartialEq,Eq)]
-pub struct MenuKey{pub key:String,pub shift:bool}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuKey {
+    pub key: String,
+    pub shift: bool,
+}
 
 /// Which keys the menu takes from the source (the keyboard fallback of lot 3). `other`:
 /// Ctrl, Alt or Windows is held, and then nothing is taken (shortcuts, Alt+Tab and AltGr
 /// stay the user's). Digits are the physical keys 1 to 6 of the row or the keypad, so
 /// AZERTY needs no Shift; letters are read through the active layout, without modifier,
 /// and only when they are letters. `letter` is only called for the letter keys.
-pub fn menu_key(vk:u32,shift:bool,other:bool,letter:impl FnOnce()->Option<char>)->Option<String>{
-    if other{return None;}
-    Some(match vk{
-        0x0D=>"Enter".into(),
-        0x1B=>"Escape".into(),
-        0x09=>"Tab".into(),
-        0x25=>"ArrowLeft".into(),
-        0x26=>"ArrowUp".into(),
-        0x27=>"ArrowRight".into(),
-        0x28=>"ArrowDown".into(),
-        0x31..=0x36=>char::from_u32(vk).map(String::from)?,
-        0x61..=0x66=>char::from_u32(vk-0x30).map(String::from)?,
-        0x41..=0x5A if !shift=>letter().filter(|c|c.is_alphabetic()).map(String::from)?,
-        _=>return None,
+pub fn menu_key(
+    vk: u32,
+    shift: bool,
+    other: bool,
+    letter: impl FnOnce() -> Option<char>,
+) -> Option<String> {
+    if other {
+        return None;
+    }
+    Some(match vk {
+        0x0D => "Enter".into(),
+        0x1B => "Escape".into(),
+        0x09 => "Tab".into(),
+        0x25 => "ArrowLeft".into(),
+        0x26 => "ArrowUp".into(),
+        0x27 => "ArrowRight".into(),
+        0x28 => "ArrowDown".into(),
+        0x31..=0x36 => char::from_u32(vk).map(String::from)?,
+        0x61..=0x66 => char::from_u32(vk - 0x30).map(String::from)?,
+        0x41..=0x5A if !shift => letter().filter(|c| c.is_alphabetic()).map(String::from)?,
+        _ => return None,
     })
 }
 
 /// The character a key gives with the layout of the window `fg` (no modifier), read
 /// without touching any keyboard state (ToUnicodeEx flag 4, Windows 10 1607+).
-fn layout_letter(vk:u32,scan:u32,fg:isize)->Option<char>{
-    unsafe{
-        let thread=GetWindowThreadProcessId(HWND(fg as *mut _),None);
-        character(vk,scan,&[0u8;256],GetKeyboardLayout(thread))
+fn layout_letter(vk: u32, scan: u32, fg: isize) -> Option<char> {
+    unsafe {
+        let thread = GetWindowThreadProcessId(HWND(fg as *mut _), None);
+        character(vk, scan, &[0u8; 256], GetKeyboardLayout(thread))
     }
 }
 
-unsafe fn character(vk:u32,scan:u32,state:&[u8;256],layout:HKL)->Option<char>{
-    let mut buffer=[0u16;8];
-    let count=unsafe{ToUnicodeEx(vk,scan,state,&mut buffer,4,Some(layout))};
+unsafe fn character(vk: u32, scan: u32, state: &[u8; 256], layout: HKL) -> Option<char> {
+    let mut buffer = [0u16; 8];
+    let count = unsafe { ToUnicodeEx(vk, scan, state, &mut buffer, 4, Some(layout)) };
     // A dead key answers -1 with its own character in the buffer.
-    let length=match count{1=>1,-1=>1,_=>return None};
-    char::decode_utf16(buffer[..length].iter().copied()).next()?.ok().filter(|c|!c.is_control())
+    let length = match count {
+        1 => 1,
+        -1 => 1,
+        _ => return None,
+    };
+    char::decode_utf16(buffer[..length].iter().copied())
+        .next()?
+        .ok()
+        .filter(|c| !c.is_control())
 }
 
-fn held(key:VIRTUAL_KEY)->bool{unsafe{GetAsyncKeyState(key.0 as i32)<0}}
+fn held(key: VIRTUAL_KEY) -> bool {
+    unsafe { GetAsyncKeyState(key.0 as i32) < 0 }
+}
 
 /// The character Ctrl+Alt (+Shift) + `vk` types with `layout` (lot 4): on a layout with
 /// AltGr (AZERTY, QWERTZ…) Windows reads Ctrl+Alt as AltGr, so a global shortcut on that
 /// chord steals a character (€, {, @…). None when the chord types nothing. A dead key
 /// counts: it is a character the user types.
-pub fn altgr_character_in(layout:HKL,vk:u32,shift:bool)->Option<char>{
-    let mut state=[0u8;256];
-    for key in [VK_CONTROL,VK_LCONTROL,VK_MENU,VK_LMENU]{state[key.0 as usize]=0x80;}
-    if shift{for key in [VK_SHIFT,VK_LSHIFT]{state[key.0 as usize]=0x80;}}
-    unsafe{
-        let scan=MapVirtualKeyExW(vk,MAPVK_VK_TO_VSC,Some(layout));
-        character(vk,scan,&state,layout)
+pub fn altgr_character_in(layout: HKL, vk: u32, shift: bool) -> Option<char> {
+    let mut state = [0u8; 256];
+    for key in [VK_CONTROL, VK_LCONTROL, VK_MENU, VK_LMENU] {
+        state[key.0 as usize] = 0x80;
+    }
+    if shift {
+        for key in [VK_SHIFT, VK_LSHIFT] {
+            state[key.0 as usize] = 0x80;
+        }
+    }
+    unsafe {
+        let scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, Some(layout));
+        character(vk, scan, &state, layout)
     }
 }
 
 /// `altgr_character_in` with the layout of the foreground window's thread (the settings
 /// window, whose recorder asks while the user types the chord).
-pub fn altgr_character(vk:u32,shift:bool)->Option<char>{
-    unsafe{
-        let thread=GetWindowThreadProcessId(GetForegroundWindow(),None);
-        altgr_character_in(GetKeyboardLayout(thread),vk,shift)
+pub fn altgr_character(vk: u32, shift: bool) -> Option<char> {
+    unsafe {
+        let thread = GetWindowThreadProcessId(GetForegroundWindow(), None);
+        altgr_character_in(GetKeyboardLayout(thread), vk, shift)
     }
 }
 
 /// The keyboard layouts loaded in this session (a test looks for a known one; nothing is
 /// ever loaded for it).
 #[cfg(test)]
-fn keyboard_layouts()->Vec<HKL>{
+fn keyboard_layouts() -> Vec<HKL> {
     use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyboardLayoutList;
-    unsafe{
-        let count=GetKeyboardLayoutList(None);
-        if count<=0{return Vec::new();}
-        let mut layouts=vec![HKL::default();count as usize];
-        let filled=GetKeyboardLayoutList(Some(&mut layouts));
+    unsafe {
+        let count = GetKeyboardLayoutList(None);
+        if count <= 0 {
+            return Vec::new();
+        }
+        let mut layouts = vec![HKL::default(); count as usize];
+        let filled = GetKeyboardLayoutList(Some(&mut layouts));
         layouts.truncate(filled.max(0) as usize);
         layouts
     }
@@ -491,114 +751,225 @@ fn keyboard_layouts()->Vec<HKL>{
 
 /// The executable name of the process that owns a window, lowercase (« notepad.exe »):
 /// the key of the Îlot's memory per application (lot 4). Never a path, never a title.
-pub fn process_name(handle:isize)->Option<String>{
-    use windows::Win32::{Foundation::CloseHandle,System::Threading::{OpenProcess,QueryFullProcessImageNameW,PROCESS_NAME_WIN32,PROCESS_QUERY_LIMITED_INFORMATION}};
-    if handle==0{return None;}
-    let mut pid=0u32;
-    unsafe{GetWindowThreadProcessId(HWND(handle as *mut _),Some(&mut pid));}
-    if pid==0{return None;}
-    let mut path=[0u16;1024];
-    let mut length=path.len() as u32;
-    unsafe{
-        let process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,false,pid).ok()?;
-        let read=QueryFullProcessImageNameW(process,PROCESS_NAME_WIN32,windows::core::PWSTR(path.as_mut_ptr()),&mut length);
-        let _=CloseHandle(process);
+pub fn process_name(handle: isize) -> Option<String> {
+    use windows::Win32::{
+        Foundation::CloseHandle,
+        System::Threading::{
+            OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+            PROCESS_QUERY_LIMITED_INFORMATION,
+        },
+    };
+    if handle == 0 {
+        return None;
+    }
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid));
+    }
+    if pid == 0 {
+        return None;
+    }
+    let mut path = [0u16; 1024];
+    let mut length = path.len() as u32;
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
+        let read = QueryFullProcessImageNameW(
+            process,
+            PROCESS_NAME_WIN32,
+            windows::core::PWSTR(path.as_mut_ptr()),
+            &mut length,
+        );
+        let _ = CloseHandle(process);
         read.ok()?;
     }
     executable_name(&String::from_utf16_lossy(&path[..length as usize]))
 }
 
 /// The file name of an executable path, lowercase; None for anything implausible.
-pub fn executable_name(path:&str)->Option<String>{
-    let name=path.rsplit(['\\','/']).next()?.trim().to_lowercase();
-    (!name.is_empty()&&name.len()<=260&&!name.chars().any(char::is_control)).then_some(name)
+pub fn executable_name(path: &str) -> Option<String> {
+    let name = path.rsplit(['\\', '/']).next()?.trim().to_lowercase();
+    (!name.is_empty() && name.len() <= 260 && !name.chars().any(char::is_control)).then_some(name)
 }
 
 /// The low-level keyboard hook, on the main thread. It stays minimal (LowLevelHooksTimeout):
 /// a few atomics, the async state of the modifiers and, for a letter while the menu is
 /// open over the source, one ToUnicodeEx. `on_menu_key` runs on its own thread.
-pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:impl Fn(Typed)+Send+'static)->Result<(),String>{
-    use windows::Win32::{Foundation::{HINSTANCE,LRESULT,LPARAM,WPARAM},System::LibraryLoader::GetModuleHandleW,UI::WindowsAndMessaging::{CallNextHookEx,SetWindowsHookExW,KBDLLHOOKSTRUCT,WH_KEYBOARD_LL,WM_KEYDOWN,WM_SYSKEYDOWN,WM_KEYUP,WM_SYSKEYUP}};
-    unsafe extern "system" fn keyboard(code:i32,wparam:WPARAM,lparam:LPARAM)->LRESULT{
-        if code>=0&&MARKS_WATCH.load(Ordering::Acquire){
-            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
-            let message=wparam.0 as u32;
-            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_marks(key.vkCode,key.dwExtraInfo)&&!hotkey_pressed(key.vkCode){marks_action();}
-        }
-        if code>=0&&UNDO_WATCH.load(Ordering::Acquire){
-            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
-            let message=wparam.0 as u32;
-            if (message==WM_KEYDOWN||message==WM_SYSKEYDOWN)&&ends_undo(key.vkCode,key.dwExtraInfo)&&!hotkey_pressed(key.vkCode)&&foreground()==UNDO_SOURCE.load(Ordering::Relaxed){
-                UNDO_WATCH.store(false,Ordering::Release);
-                let undo=key.vkCode==0x5A&&held(VK_CONTROL)&&!held(VK_MENU)&&!held(VK_SHIFT)&&!held(VK_LWIN)&&!held(VK_RWIN);
-                if let Some(typed)=TYPED.get(){let _=typed.try_send(if undo{Typed::UndoKey}else{Typed::Other});}
+pub fn install_keyboard_hook(
+    on_menu_key: impl Fn(MenuKey) + Send + 'static,
+    on_typed: impl Fn(Typed) + Send + 'static,
+) -> Result<(), String> {
+    use windows::Win32::{
+        Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM},
+        System::LibraryLoader::GetModuleHandleW,
+        UI::WindowsAndMessaging::{
+            CallNextHookEx, SetWindowsHookExW, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, WM_KEYDOWN,
+            WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+        },
+    };
+    unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code >= 0 && MARKS_WATCH.load(Ordering::Acquire) {
+            let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+            let message = wparam.0 as u32;
+            if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+                && ends_marks(key.vkCode, key.dwExtraInfo)
+                && !hotkey_pressed(key.vkCode)
+            {
+                marks_action();
             }
         }
-        if code>=0&&GRACE_UNTIL.load(Ordering::Acquire)!=0&&!MENU_OPEN.load(Ordering::Acquire){
-            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
-            let message=wparam.0 as u32;
-            let (now,until)=(now_ms(),GRACE_UNTIL.load(Ordering::Acquire));
-            if now>=until{GRACE_UNTIL.store(0,Ordering::Release);}
-            else{
-                let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
-                if grace_takes(now,until,GRACE_END.load(Ordering::Relaxed),foreground(),GRACE_SOURCE.load(Ordering::Relaxed),key.vkCode,other,key.dwExtraInfo){
-                    if message==WM_KEYDOWN||message==WM_SYSKEYDOWN{GRACE_UNTIL.store(until.max(now+GRACE_SLIDE_MS),Ordering::Release);}
+        if code >= 0 && UNDO_WATCH.load(Ordering::Acquire) {
+            let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+            let message = wparam.0 as u32;
+            if (message == WM_KEYDOWN || message == WM_SYSKEYDOWN)
+                && ends_undo(key.vkCode, key.dwExtraInfo)
+                && !hotkey_pressed(key.vkCode)
+                && foreground() == UNDO_SOURCE.load(Ordering::Relaxed)
+            {
+                UNDO_WATCH.store(false, Ordering::Release);
+                let undo = key.vkCode == 0x5A
+                    && held(VK_CONTROL)
+                    && !held(VK_MENU)
+                    && !held(VK_SHIFT)
+                    && !held(VK_LWIN)
+                    && !held(VK_RWIN);
+                if let Some(typed) = TYPED.get() {
+                    let _ = typed.try_send(if undo { Typed::UndoKey } else { Typed::Other });
+                }
+            }
+        }
+        if code >= 0
+            && GRACE_UNTIL.load(Ordering::Acquire) != 0
+            && !MENU_OPEN.load(Ordering::Acquire)
+        {
+            let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+            let message = wparam.0 as u32;
+            let (now, until) = (now_ms(), GRACE_UNTIL.load(Ordering::Acquire));
+            if now >= until {
+                GRACE_UNTIL.store(0, Ordering::Release);
+            } else {
+                let other = held(VK_CONTROL) || held(VK_MENU) || held(VK_LWIN) || held(VK_RWIN);
+                if grace_takes(
+                    now,
+                    until,
+                    GRACE_END.load(Ordering::Relaxed),
+                    foreground(),
+                    GRACE_SOURCE.load(Ordering::Relaxed),
+                    key.vkCode,
+                    other,
+                    key.dwExtraInfo,
+                ) {
+                    if message == WM_KEYDOWN || message == WM_SYSKEYDOWN {
+                        GRACE_UNTIL.store(until.max(now + GRACE_SLIDE_MS), Ordering::Release);
+                    }
                     return LRESULT(1);
                 }
             }
         }
-        if code>=0&&WORK_UNTIL.load(Ordering::Acquire)!=0&&!MENU_OPEN.load(Ordering::Acquire){
-            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
-            let (now,until)=(now_ms(),WORK_UNTIL.load(Ordering::Acquire));
-            if now>=until{WORK_UNTIL.store(0,Ordering::Release);}
-            else{
-                let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
-                if work_takes(now,until,foreground(),WORK_SOURCE.load(Ordering::Relaxed),key.vkCode,other,key.dwExtraInfo){return LRESULT(1);}
+        if code >= 0
+            && WORK_UNTIL.load(Ordering::Acquire) != 0
+            && !MENU_OPEN.load(Ordering::Acquire)
+        {
+            let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+            let (now, until) = (now_ms(), WORK_UNTIL.load(Ordering::Acquire));
+            if now >= until {
+                WORK_UNTIL.store(0, Ordering::Release);
+            } else {
+                let other = held(VK_CONTROL) || held(VK_MENU) || held(VK_LWIN) || held(VK_RWIN);
+                if work_takes(
+                    now,
+                    until,
+                    foreground(),
+                    WORK_SOURCE.load(Ordering::Relaxed),
+                    key.vkCode,
+                    other,
+                    key.dwExtraInfo,
+                ) {
+                    return LRESULT(1);
+                }
             }
         }
-        if code>=0&&OVERLAY_VISIBLE.load(Ordering::Acquire){
-            let key=unsafe{&*(lparam.0 as *const KBDLLHOOKSTRUCT)};
-            let message=wparam.0 as u32;
-            let fg=foreground();
-            if MENU_OPEN.load(Ordering::Acquire){
-                if fg!=0&&fg==OVERLAY.load(Ordering::Relaxed){MENU_FOCUSED.store(true,Ordering::Release);}
+        if code >= 0 && OVERLAY_VISIBLE.load(Ordering::Acquire) {
+            let key = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
+            let message = wparam.0 as u32;
+            let fg = foreground();
+            if MENU_OPEN.load(Ordering::Acquire) {
+                if fg != 0 && fg == OVERLAY.load(Ordering::Relaxed) {
+                    MENU_FOCUSED.store(true, Ordering::Release);
+                }
                 // The source kept the foreground (the overlay could not take it, or not yet):
                 // the menu keys go to the frontend, down and up, and never reach the source.
-                if takes_source_keys(fg,SOURCE.load(Ordering::Relaxed),MENU_FOCUSED.load(Ordering::Acquire)){
-                    let other=held(VK_CONTROL)||held(VK_MENU)||held(VK_LWIN)||held(VK_RWIN);
-                    let shift=held(VK_SHIFT);
-                    if let Some(name)=menu_key(key.vkCode,shift,other,||layout_letter(key.vkCode,key.scanCode,fg)){
-                        if message==WM_KEYDOWN||message==WM_SYSKEYDOWN{
-                            if let Some(keys)=MENU_KEYS.get(){let _=keys.try_send(MenuKey{key:name,shift});}
+                if takes_source_keys(
+                    fg,
+                    SOURCE.load(Ordering::Relaxed),
+                    MENU_FOCUSED.load(Ordering::Acquire),
+                ) {
+                    let other = held(VK_CONTROL) || held(VK_MENU) || held(VK_LWIN) || held(VK_RWIN);
+                    let shift = held(VK_SHIFT);
+                    if let Some(name) = menu_key(key.vkCode, shift, other, || {
+                        layout_letter(key.vkCode, key.scanCode, fg)
+                    }) {
+                        if message == WM_KEYDOWN || message == WM_SYSKEYDOWN {
+                            if let Some(keys) = MENU_KEYS.get() {
+                                let _ = keys.try_send(MenuKey { key: name, shift });
+                            }
                         }
                         return LRESULT(1);
                     }
                 }
                 // With the overlay in front, every key (Escape included) belongs to the WebView.
-            }else if key.vkCode==VK_ESCAPE.0 as u32&&fg!=0&&[SOURCE.load(Ordering::Relaxed),OVERLAY.load(Ordering::Relaxed)].contains(&fg){
-                if [WM_KEYDOWN,WM_SYSKEYDOWN].contains(&message){ESCAPE_PENDING.store(true,Ordering::Release);return LRESULT(1);}
-                if [WM_KEYUP,WM_SYSKEYUP].contains(&message){return LRESULT(1);}
-            }else if key.vkCode==VK_ESCAPE.0 as u32&&[WM_KEYDOWN,WM_SYSKEYDOWN].contains(&message)&&key.dwExtraInfo!=OUR_KEYS{
+            } else if key.vkCode == VK_ESCAPE.0 as u32
+                && fg != 0
+                && [
+                    SOURCE.load(Ordering::Relaxed),
+                    OVERLAY.load(Ordering::Relaxed),
+                ]
+                .contains(&fg)
+            {
+                if [WM_KEYDOWN, WM_SYSKEYDOWN].contains(&message) {
+                    ESCAPE_PENDING.store(true, Ordering::Release);
+                    return LRESULT(1);
+                }
+                if [WM_KEYUP, WM_SYSKEYUP].contains(&message) {
+                    return LRESULT(1);
+                }
+            } else if key.vkCode == VK_ESCAPE.0 as u32
+                && [WM_KEYDOWN, WM_SYSKEYDOWN].contains(&message)
+                && key.dwExtraInfo != OUR_KEYS
+            {
                 // 0.6: Escape in front of any other window closes the bubble too (02/10: a
                 // working pill over a silent server, a click on the desktop, and Escape did
                 // nothing: the watcher polls the key every 35 ms and a short tap fell between
                 // two looks). Seen here, at its press, and left to the application in front.
-                ESCAPE_PENDING.store(true,Ordering::Release);
+                ESCAPE_PENDING.store(true, Ordering::Release);
             }
         }
-        unsafe{CallNextHookEx(None,code,wparam,lparam)}
+        unsafe { CallNextHookEx(None, code, wparam, lparam) }
     }
-    let (sender,receiver)=std::sync::mpsc::sync_channel::<MenuKey>(32);
-    let _=MENU_KEYS.set(sender);
-    std::thread::Builder::new().name("menu-keys".into()).spawn(move||{for key in receiver{on_menu_key(key);}})
-        .map_err(|_|"La gestion du clavier est indisponible.".to_string())?;
-    let (sender,receiver)=std::sync::mpsc::sync_channel::<Typed>(4);
-    let _=TYPED.set(sender);
-    std::thread::Builder::new().name("undo-watch".into()).spawn(move||{for typed in receiver{on_typed(typed);}})
-        .map_err(|_|"La gestion du clavier est indisponible.".to_string())?;
-    unsafe{
-        let module=GetModuleHandleW(None).map_err(|_|"Module clavier indisponible.".to_string())?;
-        SetWindowsHookExW(WH_KEYBOARD_LL,Some(keyboard),Some(HINSTANCE(module.0)),0).map_err(|_|"La gestion d’Échap est indisponible.".to_string())?;
+    let (sender, receiver) = std::sync::mpsc::sync_channel::<MenuKey>(32);
+    let _ = MENU_KEYS.set(sender);
+    std::thread::Builder::new()
+        .name("menu-keys".into())
+        .spawn(move || {
+            for key in receiver {
+                on_menu_key(key);
+            }
+        })
+        .map_err(|_| "La gestion du clavier est indisponible.".to_string())?;
+    let (sender, receiver) = std::sync::mpsc::sync_channel::<Typed>(4);
+    let _ = TYPED.set(sender);
+    std::thread::Builder::new()
+        .name("undo-watch".into())
+        .spawn(move || {
+            for typed in receiver {
+                on_typed(typed);
+            }
+        })
+        .map_err(|_| "La gestion du clavier est indisponible.".to_string())?;
+    unsafe {
+        let module =
+            GetModuleHandleW(None).map_err(|_| "Module clavier indisponible.".to_string())?;
+        SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), Some(HINSTANCE(module.0)), 0)
+            .map_err(|_| "La gestion d’Échap est indisponible.".to_string())?;
     }
     Ok(())
 }
@@ -607,42 +978,60 @@ pub fn install_keyboard_hook(on_menu_key:impl Fn(MenuKey)+Send+'static,on_typed:
 // must never take the focus back from the source: WS_EX_NOACTIVATE on the window and
 // MA_NOACTIVATE in `silent_frame_proc`. The hit tester rewrites the extended style every
 // few milliseconds, so it re-applies the bit from these atomics (Tao may rebuild it too).
-static NO_ACTIVATE:AtomicBool=AtomicBool::new(false);
-static NO_ACTIVATE_WINDOW:AtomicIsize=AtomicIsize::new(0);
+static NO_ACTIVATE: AtomicBool = AtomicBool::new(false);
+static NO_ACTIVATE_WINDOW: AtomicIsize = AtomicIsize::new(0);
 
-fn no_activate_applies(handle:isize)->bool{
-    handle!=0&&NO_ACTIVATE.load(Ordering::Acquire)&&NO_ACTIVATE_WINDOW.load(Ordering::Relaxed)==handle
+fn no_activate_applies(handle: isize) -> bool {
+    handle != 0
+        && NO_ACTIVATE.load(Ordering::Acquire)
+        && NO_ACTIVATE_WINDOW.load(Ordering::Relaxed) == handle
 }
 
-fn with_no_activate(handle:isize,style:isize)->isize{
-    if handle==0||NO_ACTIVATE_WINDOW.load(Ordering::Relaxed)!=handle{return style;}
-    let bit=WS_EX_NOACTIVATE.0 as isize;
-    if NO_ACTIVATE.load(Ordering::Acquire){style|bit}else{style&!bit}
+fn with_no_activate(handle: isize, style: isize) -> isize {
+    if handle == 0 || NO_ACTIVATE_WINDOW.load(Ordering::Relaxed) != handle {
+        return style;
+    }
+    let bit = WS_EX_NOACTIVATE.0 as isize;
+    if NO_ACTIVATE.load(Ordering::Acquire) {
+        style | bit
+    } else {
+        style & !bit
+    }
 }
 
 /// Raises (after a choice) or lowers (at the next capture) the overlay's no-activate state.
-pub fn set_no_activate(handle:isize,on:bool){
-    if handle==0{return;}
-    NO_ACTIVATE_WINDOW.store(handle,Ordering::Relaxed);
-    NO_ACTIVATE.store(on,Ordering::Release);
-    let hwnd=HWND(handle as *mut _);
-    unsafe{
-        let current=GetWindowLongPtrW(hwnd,GWL_EXSTYLE);
-        let next=with_no_activate(handle,current);
-        if next!=current{SetWindowLongPtrW(hwnd,GWL_EXSTYLE,next);}
+pub fn set_no_activate(handle: isize, on: bool) {
+    if handle == 0 {
+        return;
+    }
+    NO_ACTIVATE_WINDOW.store(handle, Ordering::Relaxed);
+    NO_ACTIVATE.store(on, Ordering::Release);
+    let hwnd = HWND(handle as *mut _);
+    unsafe {
+        let current = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let next = with_no_activate(handle, current);
+        if next != current {
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+        }
     }
 }
 
 /// Gives the foreground back to `target` (the source window). Allowed while this process
 /// owns the foreground (the overlay has it); true when `target` holds it afterwards.
-pub fn give_foreground(target:isize)->bool{
-    if target==0{return false;}
-    let hwnd=HWND(target as *mut _);
-    unsafe{
-        if !IsWindow(Some(hwnd)).as_bool(){return false;}
-        if GetForegroundWindow()==hwnd{return true;}
-        let _=SetForegroundWindow(hwnd);
-        GetForegroundWindow()==hwnd
+pub fn give_foreground(target: isize) -> bool {
+    if target == 0 {
+        return false;
+    }
+    let hwnd = HWND(target as *mut _);
+    unsafe {
+        if !IsWindow(Some(hwnd)).as_bool() {
+            return false;
+        }
+        if GetForegroundWindow() == hwnd {
+            return true;
+        }
+        let _ = SetForegroundWindow(hwnd);
+        GetForegroundWindow() == hwnd
     }
 }
 pub fn belongs_to(window: &WebviewWindow, handle: isize) -> bool {
@@ -684,8 +1073,8 @@ pub fn compensate_pointer_drag(
     let dx = cursor.x - (client_origin.x + x.round() as i32);
     let dy = cursor.y - (client_origin.y + y.round() as i32);
     if dx != 0 || dy != 0 {
-        let rect = window_rect(hwnd.0 as isize)
-            .ok_or_else(|| "Fenêtre indisponible.".to_string())?;
+        let rect =
+            window_rect(hwnd.0 as isize).ok_or_else(|| "Fenêtre indisponible.".to_string())?;
         unsafe {
             SetWindowPos(
                 hwnd,
@@ -713,8 +1102,20 @@ pub fn monitor(location: Option<Rect>) -> (Rect, f64) {
 /// in physical pixels, DPI scale and the HMONITOR that identifies the screen.
 pub fn monitor_at(location: Option<Rect>) -> (Rect, f64, isize) {
     let location = location
-        .or_else(|| cursor_position().map(|p| Rect { x: p.x as f64, y: p.y as f64, width: 1., height: 1. }))
-        .unwrap_or(Rect { x: 0., y: 0., width: 1., height: 1. });
+        .or_else(|| {
+            cursor_position().map(|p| Rect {
+                x: p.x as f64,
+                y: p.y as f64,
+                width: 1.,
+                height: 1.,
+            })
+        })
+        .unwrap_or(Rect {
+            x: 0.,
+            y: 0.,
+            width: 1.,
+            height: 1.,
+        });
     let handle = unsafe {
         MonitorFromPoint(
             POINT {
@@ -799,7 +1200,10 @@ fn remember_surface(handle: isize, surface: Surface) {
 }
 
 fn surfaces() -> Vec<(isize, Surface)> {
-    SURFACES.lock().map(|surfaces| surfaces.clone()).unwrap_or_default()
+    SURFACES
+        .lock()
+        .map(|surfaces| surfaces.clone())
+        .unwrap_or_default()
 }
 
 /// Whether a client point (physical pixels) lies in one of the rounded surfaces.
@@ -826,7 +1230,9 @@ pub fn override_cursor(point: Option<(i32, i32)>) -> Result<(), String> {
     if std::env::var_os("FLOWTRANSLATE_CDP_URL").is_none() {
         return Err("Indisponible hors test.".into());
     }
-    *CURSOR_OVERRIDE.lock().map_err(|_| "Verrou indisponible.".to_string())? = point;
+    *CURSOR_OVERRIDE
+        .lock()
+        .map_err(|_| "Verrou indisponible.".to_string())? = point;
     Ok(())
 }
 
@@ -861,7 +1267,10 @@ unsafe fn cursor_client(hwnd: HWND) -> Option<(f64, f64)> {
     if unsafe { !ClientToScreen(hwnd, &mut origin).as_bool() } {
         return None;
     }
-    Some(((cursor.x - origin.x) as f64 + 0.5, (cursor.y - origin.y) as f64 + 0.5))
+    Some((
+        (cursor.x - origin.x) as f64 + 0.5,
+        (cursor.y - origin.y) as f64 + 0.5,
+    ))
 }
 
 unsafe fn cursor_inside(hwnd: HWND, surface: &Surface) -> bool {
@@ -897,57 +1306,78 @@ unsafe fn pass_through(hwnd: HWND, on: bool) {
 /// (`glass-near`): the frontend holds the glass open while it does. No point is logged.
 /// `on_screen` is called from the poller's thread whenever the cursor changes screen
 /// while a surface is visible (2026-09-14): the bottom forms follow the mouse.
-pub fn start_hit_tester(app: AppHandle, overlay: isize, on_screen: impl Fn(&AppHandle, isize) + Send + 'static) {
-    let _ = std::thread::Builder::new().name("hit-tester".into()).spawn(move || {
-        let mut was_near: Option<bool> = None;
-        let mut last_monitor = 0isize;
-        loop {
-            let mut any_visible = false;
-            for (handle, surface) in surfaces() {
-                let hwnd = HWND(handle as *mut _);
-                unsafe {
-                    if !IsWindowVisible(hwnd).as_bool() {
+pub fn start_hit_tester(
+    app: AppHandle,
+    overlay: isize,
+    on_screen: impl Fn(&AppHandle, isize) + Send + 'static,
+) {
+    let _ = std::thread::Builder::new()
+        .name("hit-tester".into())
+        .spawn(move || {
+            let mut was_near: Option<bool> = None;
+            let mut last_monitor = 0isize;
+            loop {
+                let mut any_visible = false;
+                for (handle, surface) in surfaces() {
+                    let hwnd = HWND(handle as *mut _);
+                    unsafe {
+                        if !IsWindowVisible(hwnd).as_bool() {
+                            if handle == overlay {
+                                was_near = None;
+                            }
+                            continue;
+                        }
+                        any_visible = true;
+                        let client = cursor_client(hwnd);
                         if handle == overlay {
-                            was_near = None;
+                            let near = client.is_some_and(|(x, y)| {
+                                near(&surface.regions, surface.scale, x, y, NEAR_MARGIN)
+                            });
+                            if near {
+                                POINTER_NEAR_AT.store(now_ms(), Ordering::Release);
+                            }
+                            if was_near != Some(near) {
+                                was_near = Some(near);
+                                let _ = app.emit_to("overlay", "glass-near", GlassNear { near });
+                            }
                         }
-                        continue;
-                    }
-                    any_visible = true;
-                    let client = cursor_client(hwnd);
-                    if handle == overlay {
-                        let near = client.is_some_and(|(x, y)| near(&surface.regions, surface.scale, x, y, NEAR_MARGIN));
-                        if near { POINTER_NEAR_AT.store(now_ms(), Ordering::Release); }
-                        if was_near != Some(near) {
-                            was_near = Some(near);
-                            let _ = app.emit_to("overlay", "glass-near", GlassNear { near });
+                        if GetAsyncKeyState(VK_LBUTTON.0 as i32) < 0 {
+                            continue;
                         }
+                        let inside = client
+                            .is_some_and(|(x, y)| contains(&surface.regions, surface.scale, x, y));
+                        pass_through(hwnd, !inside);
                     }
-                    if GetAsyncKeyState(VK_LBUTTON.0 as i32) < 0 {
-                        continue;
+                }
+                if any_visible {
+                    let monitor = cursor_monitor();
+                    if monitor != 0 && monitor != last_monitor {
+                        last_monitor = monitor;
+                        on_screen(&app, monitor);
                     }
-                    let inside = client.is_some_and(|(x, y)| contains(&surface.regions, surface.scale, x, y));
-                    pass_through(hwnd, !inside);
                 }
+                std::thread::sleep(std::time::Duration::from_millis(if any_visible {
+                    8
+                } else {
+                    50
+                }));
             }
-            if any_visible {
-                let monitor = cursor_monitor();
-                if monitor != 0 && monitor != last_monitor {
-                    last_monitor = monitor;
-                    on_screen(&app, monitor);
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(if any_visible { 8 } else { 50 }));
-        }
-    });
+        });
 }
 
 pub fn is_visible(window: &WebviewWindow) -> bool {
-    window.hwnd().is_ok_and(|hwnd| unsafe { IsWindowVisible(HWND(hwnd.0)).as_bool() })
+    window
+        .hwnd()
+        .is_ok_and(|hwnd| unsafe { IsWindowVisible(HWND(hwnd.0)).as_bool() })
 }
 
 pub fn hide(window: &WebviewWindow) -> Result<(), String> {
-    let hwnd = window.hwnd().map_err(|_| "Fenêtre indisponible.".to_string())?;
-    unsafe { let _ = ShowWindow(HWND(hwnd.0), SW_HIDE); }
+    let hwnd = window
+        .hwnd()
+        .map_err(|_| "Fenêtre indisponible.".to_string())?;
+    unsafe {
+        let _ = ShowWindow(HWND(hwnd.0), SW_HIDE);
+    }
     Ok(())
 }
 
@@ -974,8 +1404,12 @@ pub fn activate(window: &WebviewWindow) -> Result<bool, String> {
     repair_handle(handle)?;
     let deadline = Instant::now() + Duration::from_millis(40);
     loop {
-        if unsafe { GetForegroundWindow() } == hwnd { return Ok(true); }
-        if Instant::now() >= deadline { return Ok(false); }
+        if unsafe { GetForegroundWindow() } == hwnd {
+            return Ok(true);
+        }
+        if Instant::now() >= deadline {
+            return Ok(false);
+        }
         std::thread::sleep(Duration::from_millis(5));
     }
 }
@@ -996,7 +1430,12 @@ pub fn place(window: &WebviewWindow, rect: Rect) -> Result<(), String> {
         })
         .map_err(|_| "Placement indisponible.".to_string())?;
     unsafe {
-        let hwnd = HWND(window.hwnd().map_err(|_| "Fenêtre indisponible.".to_string())?.0);
+        let hwnd = HWND(
+            window
+                .hwnd()
+                .map_err(|_| "Fenêtre indisponible.".to_string())?
+                .0,
+        );
         let chrome_changed = strip_chrome_hwnd(hwnd);
         let mut flags = SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW;
         if chrome_changed {
@@ -1012,7 +1451,8 @@ pub fn place(window: &WebviewWindow, rect: Rect) -> Result<(), String> {
 /// button or an Alt+Tab entry (a tool window, without the WS_EX_APPWINDOW Tao gives every
 /// top-level window). Its styles are set once and never touched by the hit tester (it
 /// publishes no surface); `place_below` re-applies them should Tao have rebuilt them.
-const HALO_EX_STYLE: isize = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0) as isize;
+const HALO_EX_STYLE: isize =
+    (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0 | WS_EX_NOACTIVATE.0 | WS_EX_TOOLWINDOW.0) as isize;
 
 unsafe fn halo_style_hwnd(hwnd: HWND) {
     unsafe {
@@ -1025,7 +1465,12 @@ unsafe fn halo_style_hwnd(hwnd: HWND) {
 }
 
 pub fn halo_style(window: &WebviewWindow) -> Result<(), String> {
-    let hwnd = HWND(window.hwnd().map_err(|_| "Fenêtre indisponible.".to_string())?.0);
+    let hwnd = HWND(
+        window
+            .hwnd()
+            .map_err(|_| "Fenêtre indisponible.".to_string())?
+            .0,
+    );
     unsafe { halo_style_hwnd(hwnd) };
     Ok(())
 }
@@ -1035,19 +1480,40 @@ pub fn halo_style(window: &WebviewWindow) -> Result<(), String> {
 /// still hidden first: on a screen of another DPI, Tao resizes the window when
 /// WM_DPICHANGED arrives, and the second call restores the exact rectangle.
 pub fn place_below(window: &WebviewWindow, rect: Rect, above: isize) -> Result<(), String> {
-    let hwnd = HWND(window.hwnd().map_err(|_| "Fenêtre indisponible.".to_string())?.0);
+    let hwnd = HWND(
+        window
+            .hwnd()
+            .map_err(|_| "Fenêtre indisponible.".to_string())?
+            .0,
+    );
     let (x, y) = (rect.x.round() as i32, rect.y.round() as i32);
-    let (width, height) = (rect.width.round().max(1.) as i32, rect.height.round().max(1.) as i32);
+    let (width, height) = (
+        rect.width.round().max(1.) as i32,
+        rect.height.round().max(1.) as i32,
+    );
     unsafe {
         halo_style_hwnd(hwnd);
         let mut flags = SWP_NOACTIVATE | SWP_NOZORDER;
         if strip_chrome_hwnd(hwnd) {
             flags |= SWP_FRAMECHANGED;
         }
-        SetWindowPos(hwnd, None, x, y, width, height, flags).map_err(|_| "Placement indisponible.".to_string())?;
-        let after = if above != 0 { HWND(above as *mut _) } else { HWND_TOPMOST };
-        SetWindowPos(hwnd, Some(after), x, y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW)
+        SetWindowPos(hwnd, None, x, y, width, height, flags)
             .map_err(|_| "Placement indisponible.".to_string())?;
+        let after = if above != 0 {
+            HWND(above as *mut _)
+        } else {
+            HWND_TOPMOST
+        };
+        SetWindowPos(
+            hwnd,
+            Some(after),
+            x,
+            y,
+            width,
+            height,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        )
+        .map_err(|_| "Placement indisponible.".to_string())?;
     }
     Ok(())
 }
@@ -1055,10 +1521,19 @@ pub fn place_below(window: &WebviewWindow, rect: Rect, above: isize) -> Result<(
 /// Publishes the surfaces the hit tester reads. The pass-through state is set at once:
 /// the cursor is almost always outside the glass when it appears, and a surface that
 /// just vanished under the pointer must stop catching clicks before the next poll.
-pub fn set_regions(window: &WebviewWindow, regions: &[SurfaceRegion], scale: f64) -> Result<(), String> {
-    let h = window.hwnd().map_err(|_| "Fenêtre indisponible.".to_string())?;
+pub fn set_regions(
+    window: &WebviewWindow,
+    regions: &[SurfaceRegion],
+    scale: f64,
+) -> Result<(), String> {
+    let h = window
+        .hwnd()
+        .map_err(|_| "Fenêtre indisponible.".to_string())?;
     let hwnd = HWND(h.0);
-    let surface = Surface { regions: regions.to_vec(), scale };
+    let surface = Surface {
+        regions: regions.to_vec(),
+        scale,
+    };
     unsafe { pass_through(hwnd, !cursor_inside(hwnd, &surface)) };
     remember_surface(h.0 as isize, surface);
     Ok(())
@@ -1097,7 +1572,6 @@ unsafe fn strip_chrome_hwnd(hwnd: HWND) -> bool {
     unsafe { SetWindowLongPtrW(hwnd, GWL_STYLE, frameless) };
     true
 }
-
 
 // ---------------------------------------------------------------------------------
 // Clipboard freshness and the synthetic copy (2026-09-14, direct capture)
@@ -1181,8 +1655,12 @@ pub fn wait_modifiers_released(timeout: Duration) -> bool {
 fn key_input(key: VIRTUAL_KEY, extended: bool, up: bool) -> INPUT {
     let scan = unsafe { MapVirtualKeyW(key.0 as u32, MAPVK_VK_TO_VSC) } as u16;
     let mut flags = KEYEVENTF_SCANCODE;
-    if extended { flags |= KEYEVENTF_EXTENDEDKEY; }
-    if up { flags |= KEYEVENTF_KEYUP; }
+    if extended {
+        flags |= KEYEVENTF_EXTENDEDKEY;
+    }
+    if up {
+        flags |= KEYEVENTF_KEYUP;
+    }
     INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 {
@@ -1226,8 +1704,13 @@ pub fn send_paste_chord() -> Result<(), u32> {
     let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent as usize != inputs.len() {
         if sent > 0 {
-            let release = [key_input(VK_V, false, true), key_input(VK_CONTROL, false, true)];
-            unsafe { SendInput(&release, std::mem::size_of::<INPUT>() as i32); }
+            let release = [
+                key_input(VK_V, false, true),
+                key_input(VK_CONTROL, false, true),
+            ];
+            unsafe {
+                SendInput(&release, std::mem::size_of::<INPUT>() as i32);
+            }
         }
         return Err(sent);
     }
@@ -1248,8 +1731,13 @@ pub fn send_undo_chord() -> Result<(), u32> {
     let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
     if sent as usize != inputs.len() {
         if sent > 0 {
-            let release = [key_input(VK_Z, false, true), key_input(VK_CONTROL, false, true)];
-            unsafe { SendInput(&release, std::mem::size_of::<INPUT>() as i32); }
+            let release = [
+                key_input(VK_Z, false, true),
+                key_input(VK_CONTROL, false, true),
+            ];
+            unsafe {
+                SendInput(&release, std::mem::size_of::<INPUT>() as i32);
+            }
         }
         return Err(sent);
     }
@@ -1270,15 +1758,27 @@ pub fn remember_surfaces(overlay: isize, halo: isize) {
     SURFACE_HANDLES[1].store(halo, Ordering::Release);
 }
 /// The overlay's handle (0 before the startup remembered it).
-pub fn overlay_handle() -> isize { SURFACE_HANDLES[0].load(Ordering::Acquire) }
+pub fn overlay_handle() -> isize {
+    SURFACE_HANDLES[0].load(Ordering::Acquire)
+}
 /// Whether `handle` is the overlay or the halo. Never waits for any thread.
 pub fn is_surface(handle: isize) -> bool {
-    handle != 0 && SURFACE_HANDLES.iter().any(|known| known.load(Ordering::Acquire) == handle)
+    handle != 0
+        && SURFACE_HANDLES
+            .iter()
+            .any(|known| known.load(Ordering::Acquire) == handle)
 }
 /// Hides a window by its handle, from any thread (`ShowWindowAsync` posts to the window's
 /// thread and never waits for it, nor for our state).
 pub fn hide_handle(handle: isize) {
-    if handle != 0 { unsafe { let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(HWND(handle as *mut _), SW_HIDE); } }
+    if handle != 0 {
+        unsafe {
+            let _ = windows::Win32::UI::WindowsAndMessaging::ShowWindowAsync(
+                HWND(handle as *mut _),
+                SW_HIDE,
+            );
+        }
+    }
 }
 /// Whether a window is shown, by its handle, from any thread.
 pub fn handle_visible(handle: isize) -> bool {
@@ -1288,9 +1788,26 @@ pub fn handle_visible(handle: isize) -> bool {
 /// Whether a top-level window is one the user can be looking at: shown, not minimized, not
 /// cloaked (a suspended store application), not a tool window, of another process, with a
 /// surface, and neither the desktop nor the taskbar.
-pub fn real_window(shown: bool, minimized: bool, cloaked: bool, tool: bool, own: bool, class: &str, size: (i32, i32)) -> bool {
-    shown && !minimized && !cloaked && !tool && !own && size.0 > 1 && size.1 > 1
-        && !matches!(class, "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
+pub fn real_window(
+    shown: bool,
+    minimized: bool,
+    cloaked: bool,
+    tool: bool,
+    own: bool,
+    class: &str,
+    size: (i32, i32),
+) -> bool {
+    shown
+        && !minimized
+        && !cloaked
+        && !tool
+        && !own
+        && size.0 > 1
+        && size.1 > 1
+        && !matches!(
+            class,
+            "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
+        )
 }
 /// The first real window under ours in the z-order (0: none, only the desktop is there).
 /// 0.6: right after the start, and whenever one of our hidden windows is left holding the
@@ -1299,11 +1816,15 @@ pub fn real_window(shown: bool, minimized: bool, cloaked: bool, tool: bool, own:
 /// is this one.
 pub fn window_behind_ours() -> isize {
     use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
-    use windows::Win32::UI::WindowsAndMessaging::{GetTopWindow, GetWindow, IsIconic, GW_HWNDNEXT, WS_EX_TOOLWINDOW};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetTopWindow, GetWindow, IsIconic, GW_HWNDNEXT, WS_EX_TOOLWINDOW,
+    };
     let own = std::process::id();
     let mut hwnd = unsafe { GetTopWindow(None) }.unwrap_or_default();
     for _ in 0..2_000 {
-        if hwnd.0.is_null() { break; }
+        if hwnd.0.is_null() {
+            break;
+        }
         let handle = hwnd.0 as isize;
         let mut pid = 0u32;
         let mut rect = RECT::default();
@@ -1311,10 +1832,21 @@ pub fn window_behind_ours() -> isize {
         let real = unsafe {
             GetWindowThreadProcessId(hwnd, Some(&mut pid));
             let _ = GetWindowRect(hwnd, &mut rect);
-            let _ = DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut cloaked as *mut u32).cast(), 4);
-            real_window(IsWindowVisible(hwnd).as_bool(), IsIconic(hwnd).as_bool(), cloaked != 0, GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0 != 0, pid == own, &window_class(handle), (rect.right - rect.left, rect.bottom - rect.top))
+            let _ =
+                DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, (&mut cloaked as *mut u32).cast(), 4);
+            real_window(
+                IsWindowVisible(hwnd).as_bool(),
+                IsIconic(hwnd).as_bool(),
+                cloaked != 0,
+                GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32 & WS_EX_TOOLWINDOW.0 != 0,
+                pid == own,
+                &window_class(handle),
+                (rect.right - rect.left, rect.bottom - rect.top),
+            )
         };
-        if real { return handle; }
+        if real {
+            return handle;
+        }
         hwnd = unsafe { GetWindow(hwnd, GW_HWNDNEXT) }.unwrap_or_default();
     }
     0
@@ -1323,21 +1855,33 @@ pub fn window_behind_ours() -> isize {
 /// The last time the pointer rested near the overlay's surfaces (`now_ms` time, 0: never):
 /// the watchdog never closes a bubble the user is on.
 static POINTER_NEAR_AT: AtomicU64 = AtomicU64::new(0);
-pub fn pointer_near_at() -> u64 { POINTER_NEAR_AT.load(Ordering::Acquire) }
+pub fn pointer_near_at() -> u64 {
+    POINTER_NEAR_AT.load(Ordering::Acquire)
+}
 
 /// The tick of the session's last input (keyboard or mouse, ours included): two equal values
 /// prove nobody typed or clicked in between.
 pub fn last_input_tick() -> u32 {
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
-    let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
-    if unsafe { GetLastInputInfo(&mut info) }.as_bool() { info.dwTime } else { 0 }
+    let mut info = LASTINPUTINFO {
+        cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+        dwTime: 0,
+    };
+    if unsafe { GetLastInputInfo(&mut info) }.as_bool() {
+        info.dwTime
+    } else {
+        0
+    }
 }
 
 /// The integrity level of a process (its token's mandatory label RID: 0x2000 medium, 0x3000
 /// high). `Err(())`: its token could not even be opened.
 fn integrity_of(process: windows::Win32::Foundation::HANDLE) -> Result<u32, ()> {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::Security::{GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenIntegrityLevel, TOKEN_MANDATORY_LABEL, TOKEN_QUERY};
+    use windows::Win32::Security::{
+        GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenIntegrityLevel,
+        TOKEN_MANDATORY_LABEL, TOKEN_QUERY,
+    };
     use windows::Win32::System::Threading::OpenProcessToken;
     unsafe {
         let mut token = windows::Win32::Foundation::HANDLE::default();
@@ -1345,12 +1889,20 @@ fn integrity_of(process: windows::Win32::Foundation::HANDLE) -> Result<u32, ()> 
         let mut size = 0u32;
         let _ = GetTokenInformation(token, TokenIntegrityLevel, None, 0, &mut size);
         let mut buffer = vec![0u8; size.max(1) as usize];
-        let read = GetTokenInformation(token, TokenIntegrityLevel, Some(buffer.as_mut_ptr().cast()), size, &mut size);
+        let read = GetTokenInformation(
+            token,
+            TokenIntegrityLevel,
+            Some(buffer.as_mut_ptr().cast()),
+            size,
+            &mut size,
+        );
         let _ = CloseHandle(token);
         read.map_err(|_| ())?;
         let label = &*(buffer.as_ptr() as *const TOKEN_MANDATORY_LABEL);
         let count = *GetSidSubAuthorityCount(label.Label.Sid);
-        if count == 0 { return Err(()); }
+        if count == 0 {
+            return Err(());
+        }
         Ok(*GetSidSubAuthority(label.Label.Sid, u32::from(count) - 1))
     }
 }
@@ -1368,17 +1920,29 @@ pub fn out_of_reach(ours: Option<u32>, theirs: Option<u32>) -> bool {
 /// administrator while we are not): it can neither be read nor written.
 pub fn window_protected(handle: isize) -> bool {
     use windows::Win32::Foundation::CloseHandle;
-    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
-    if handle == 0 { return false; }
+    use windows::Win32::System::Threading::{
+        GetCurrentProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    if handle == 0 {
+        return false;
+    }
     let mut pid = 0u32;
-    unsafe { GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid)); }
-    if pid == 0 { return false; }
+    unsafe {
+        GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid));
+    }
+    if pid == 0 {
+        return false;
+    }
     let ours = integrity_of(unsafe { GetCurrentProcess() }).ok();
-    let theirs = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok().and_then(|process| {
-        let level = integrity_of(process).ok();
-        unsafe { let _ = CloseHandle(process); }
-        level
-    });
+    let theirs = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }
+        .ok()
+        .and_then(|process| {
+            let level = integrity_of(process).ok();
+            unsafe {
+                let _ = CloseHandle(process);
+            }
+            level
+        });
     out_of_reach(ours, theirs)
 }
 
@@ -1388,8 +1952,12 @@ mod tests {
     fn a_fresh_install_speaks_french_on_a_french_windows_and_english_elsewhere() {
         use crate::types::Language;
         // fr-FR, fr-CA, fr-BE, fr-CH; then en-US, en-GB, de-DE, es-ES, ja-JP.
-        for langid in [0x040c, 0x0c0c, 0x080c, 0x100c] { assert_eq!(super::language_of(langid), Language::Fr, "{langid:#06x}"); }
-        for langid in [0x0409, 0x0809, 0x0407, 0x0c0a, 0x0411, 0] { assert_eq!(super::language_of(langid), Language::En, "{langid:#06x}"); }
+        for langid in [0x040c, 0x0c0c, 0x080c, 0x100c] {
+            assert_eq!(super::language_of(langid), Language::Fr, "{langid:#06x}");
+        }
+        for langid in [0x0409, 0x0809, 0x0407, 0x0c0a, 0x0411, 0] {
+            assert_eq!(super::language_of(langid), Language::En, "{langid:#06x}");
+        }
     }
     use super::*;
 
@@ -1401,7 +1969,9 @@ mod tests {
         // must read it too. A CI runner without an interactive desktop reads zero from
         // every thread; there is nothing to check there.
         if clipboard_sequence() == 0 {
-            eprintln!("no clipboard sequence in this session (no interactive window station): skipped");
+            eprintln!(
+                "no clipboard sequence in this session (no interactive window station): skipped"
+            );
             return;
         }
         let sequence = std::thread::spawn(clipboard_sequence).join().unwrap();
@@ -1421,87 +1991,218 @@ mod tests {
     #[test]
     fn only_a_key_that_writes_and_is_not_ours_ends_the_undo_offer() {
         // Letters, digits, Enter, Backspace, arrows, Ctrl+Z's Z: the user acts in the source.
-        for vk in [0x41, 0x5A, 0x31, 0x0D, 0x08, 0x2E, 0x25, 0x20] { assert!(ends_undo(vk, 0), "{vk:#x}"); }
+        for vk in [0x41, 0x5A, 0x31, 0x0D, 0x08, 0x2E, 0x25, 0x20] {
+            assert!(ends_undo(vk, 0), "{vk:#x}");
+        }
         // Another tool's injected keys count too (dictation types into the source).
         assert!(ends_undo(0x41, 0x1234));
         // Our own chords, lone modifiers, lock keys and Escape never do.
         assert!(!ends_undo(0x56, OUR_KEYS));
-        for vk in [0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C, 0x14, 0x90, 0x91, 0x1B] { assert!(!ends_undo(vk, 0), "{vk:#x}"); }
+        for vk in [
+            0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C, 0x14, 0x90, 0x91,
+            0x1B,
+        ] {
+            assert!(!ends_undo(vk, 0), "{vk:#x}");
+        }
     }
 
     #[test]
     fn the_marks_end_at_the_users_next_key_click_or_wheel() {
         // Any key that writes or moves, Escape included, another tool's too.
-        for vk in [0x41, 0x5A, 0x0D, 0x08, 0x25, 0x20, 0x1B, 0x21] { assert!(ends_marks(vk, 0), "{vk:#x}"); }
+        for vk in [0x41, 0x5A, 0x0D, 0x08, 0x25, 0x20, 0x1B, 0x21] {
+            assert!(ends_marks(vk, 0), "{vk:#x}");
+        }
         assert!(ends_marks(0x41, 0x1234));
         // Our own paste, lone modifiers and lock keys never do.
         assert!(!ends_marks(0x56, OUR_KEYS));
-        for vk in [0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C, 0x14, 0x90, 0x91] { assert!(!ends_marks(vk, 0), "{vk:#x}"); }
+        for vk in [
+            0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C, 0x14, 0x90, 0x91,
+        ] {
+            assert!(!ends_marks(vk, 0), "{vk:#x}");
+        }
         // A press of any button and the wheel end them; a move or a release does not.
-        for message in [0x0201, 0x0204, 0x0207, 0x020B, 0x020A, 0x020E] { assert!(ends_marks_mouse(message), "{message:#x}"); }
-        for message in [0x0200, 0x0202, 0x0205, 0x0208, 0x020C] { assert!(!ends_marks_mouse(message), "{message:#x}"); }
+        for message in [0x0201, 0x0204, 0x0207, 0x020B, 0x020A, 0x020E] {
+            assert!(ends_marks_mouse(message), "{message:#x}");
+        }
+        for message in [0x0200, 0x0202, 0x0205, 0x0208, 0x020C] {
+            assert!(!ends_marks_mouse(message), "{message:#x}");
+        }
     }
 
     #[test]
     fn the_keyboard_fallback_takes_only_the_menu_keys_and_never_a_chord() {
         let none = || -> Option<char> { panic!("only the letter keys read the layout") };
         assert_eq!(menu_key(0x0D, false, false, none).as_deref(), Some("Enter"));
-        assert_eq!(menu_key(0x1B, false, false, none).as_deref(), Some("Escape"));
-        assert_eq!(menu_key(0x09, true, false, none).as_deref(), Some("Tab"), "Shift+Tab is a Tab with shift");
-        assert_eq!(menu_key(0x28, false, false, none).as_deref(), Some("ArrowDown"));
-        assert_eq!(menu_key(0x25, false, false, none).as_deref(), Some("ArrowLeft"));
+        assert_eq!(
+            menu_key(0x1B, false, false, none).as_deref(),
+            Some("Escape")
+        );
+        assert_eq!(
+            menu_key(0x09, true, false, none).as_deref(),
+            Some("Tab"),
+            "Shift+Tab is a Tab with shift"
+        );
+        assert_eq!(
+            menu_key(0x28, false, false, none).as_deref(),
+            Some("ArrowDown")
+        );
+        assert_eq!(
+            menu_key(0x25, false, false, none).as_deref(),
+            Some("ArrowLeft")
+        );
         // Digits 1 to 6 by key, row or keypad, Shift or not (AZERTY types « & » without it).
         assert_eq!(menu_key(0x31, false, false, none).as_deref(), Some("1"));
         assert_eq!(menu_key(0x36, true, false, none).as_deref(), Some("6"));
         assert_eq!(menu_key(0x63, false, false, none).as_deref(), Some("3"));
-        assert_eq!(menu_key(0x37, false, false, none), None, "7 is not in the grid");
+        assert_eq!(
+            menu_key(0x37, false, false, none),
+            None,
+            "7 is not in the grid"
+        );
         assert_eq!(menu_key(0x30, false, false, none), None);
         // Letters come from the active layout, without any modifier, and must be letters.
-        assert_eq!(menu_key(0x46, false, false, || Some('f')).as_deref(), Some("f"));
-        assert_eq!(menu_key(0x51, false, false, || Some('a')).as_deref(), Some("a"), "AZERTY: the layout names the key");
-        assert_eq!(menu_key(0x46, false, false, || Some('ф')).as_deref(), Some("ф"));
-        assert_eq!(menu_key(0x46, true, false, || Some('F')), None, "Shift+letter stays the user's");
+        assert_eq!(
+            menu_key(0x46, false, false, || Some('f')).as_deref(),
+            Some("f")
+        );
+        assert_eq!(
+            menu_key(0x51, false, false, || Some('a')).as_deref(),
+            Some("a"),
+            "AZERTY: the layout names the key"
+        );
+        assert_eq!(
+            menu_key(0x46, false, false, || Some('ф')).as_deref(),
+            Some("ф")
+        );
+        assert_eq!(
+            menu_key(0x46, true, false, || Some('F')),
+            None,
+            "Shift+letter stays the user's"
+        );
         assert_eq!(menu_key(0x46, false, false, || Some('1')), None);
-        assert_eq!(menu_key(0x46, false, false, || None), None, "a dead key passes");
+        assert_eq!(
+            menu_key(0x46, false, false, || None),
+            None,
+            "a dead key passes"
+        );
         // Space (the free field needs the real WebView), and any chord, are never taken.
         assert_eq!(menu_key(0x20, false, false, none), None);
-        for vk in [0x0D, 0x1B, 0x09, 0x28, 0x31, 0x46] { assert_eq!(menu_key(vk, false, true, || Some('f')), None, "{vk:#x} with Ctrl/Alt/Win"); }
+        for vk in [0x0D, 0x1B, 0x09, 0x28, 0x31, 0x46] {
+            assert_eq!(
+                menu_key(vk, false, true, || Some('f')),
+                None,
+                "{vk:#x} with Ctrl/Alt/Win"
+            );
+        }
     }
 
     #[test]
     fn the_window_behind_ours_is_one_the_user_can_see() {
-        let ok = |shown, minimized, cloaked, tool, own, class: &str, size| real_window(shown, minimized, cloaked, tool, own, class, size);
-        assert!(ok(true, false, false, false, false, "Chrome_WidgetWin_1", (1300, 820)));
-        assert!(!ok(false, false, false, false, false, "Notepad", (800, 600)), "hidden");
-        assert!(!ok(true, true, false, false, false, "Notepad", (800, 600)), "minimized");
-        assert!(!ok(true, false, true, false, false, "ApplicationFrameWindow", (800, 600)), "cloaked");
-        assert!(!ok(true, false, false, true, false, "tooltips_class32", (136, 39)), "a tool window");
-        assert!(!ok(true, false, false, false, true, "Tauri Window", (876, 609)), "one of ours");
-        assert!(!ok(true, false, false, false, false, "Notepad", (0, 0)), "no surface");
-        for class in ["Progman", "WorkerW", "Shell_TrayWnd"] { assert!(!ok(true, false, false, false, false, class, (1622, 920)), "{class}"); }
+        let ok = |shown, minimized, cloaked, tool, own, class: &str, size| {
+            real_window(shown, minimized, cloaked, tool, own, class, size)
+        };
+        assert!(ok(
+            true,
+            false,
+            false,
+            false,
+            false,
+            "Chrome_WidgetWin_1",
+            (1300, 820)
+        ));
+        assert!(
+            !ok(false, false, false, false, false, "Notepad", (800, 600)),
+            "hidden"
+        );
+        assert!(
+            !ok(true, true, false, false, false, "Notepad", (800, 600)),
+            "minimized"
+        );
+        assert!(
+            !ok(
+                true,
+                false,
+                true,
+                false,
+                false,
+                "ApplicationFrameWindow",
+                (800, 600)
+            ),
+            "cloaked"
+        );
+        assert!(
+            !ok(
+                true,
+                false,
+                false,
+                true,
+                false,
+                "tooltips_class32",
+                (136, 39)
+            ),
+            "a tool window"
+        );
+        assert!(
+            !ok(true, false, false, false, true, "Tauri Window", (876, 609)),
+            "one of ours"
+        );
+        assert!(
+            !ok(true, false, false, false, false, "Notepad", (0, 0)),
+            "no surface"
+        );
+        for class in ["Progman", "WorkerW", "Shell_TrayWnd"] {
+            assert!(
+                !ok(true, false, false, false, false, class, (1622, 920)),
+                "{class}"
+            );
+        }
         // Whatever the desktop holds, the answer is never one of our own windows.
         let behind = window_behind_ours();
         let mut pid = 0u32;
-        if behind != 0 { unsafe { GetWindowThreadProcessId(HWND(behind as *mut _), Some(&mut pid)); } }
+        if behind != 0 {
+            unsafe {
+                GetWindowThreadProcessId(HWND(behind as *mut _), Some(&mut pid));
+            }
+        }
         assert_ne!(pid, std::process::id());
     }
 
     #[test]
     fn keys_mashed_after_a_choice_never_reach_the_source() {
         let (source, other_window) = (7, 9);
-        let takes = |now, vk, other, extra| grace_takes(now, 1_700, 4_000, source, source, vk, other, extra);
+        let takes = |now, vk, other, extra| {
+            grace_takes(now, 1_700, 4_000, source, source, vk, other, extra)
+        };
         // Enter, a letter, the space bar, Backspace: dropped while the grace lasts.
-        for vk in [0x0D, 0x51, 0x20, 0x08] { assert!(takes(1_100, vk, false, 0), "{vk:#x}"); }
+        for vk in [0x0D, 0x51, 0x20, 0x08] {
+            assert!(takes(1_100, vk, false, 0), "{vk:#x}");
+        }
         // Our own paste, a chord of the user's, a modifier alone, Escape (it cancels the work).
         assert!(!takes(1_100, 0x56, true, OUR_KEYS) && !takes(1_100, 0x0D, false, OUR_KEYS));
         assert!(!takes(1_100, 0x5A, true, 0), "Ctrl+Z stays the user's");
-        for vk in [0x10, 0x11, 0x12, 0x5B, 0xA0, 0x1B] { assert!(!takes(1_100, vk, false, 0), "{vk:#x}"); }
+        for vk in [0x10, 0x11, 0x12, 0x5B, 0xA0, 0x1B] {
+            assert!(!takes(1_100, vk, false, 0), "{vk:#x}");
+        }
         // Over: after its moment, after its cap however long the mash slid it, in another
         // window, and when there is none.
         assert!(!takes(1_700, 0x0D, false, 0));
-        assert!(!grace_takes(4_000, 4_300, 4_000, source, source, 0x0D, false, 0), "three seconds at most");
-        assert!(!grace_takes(1_100, 1_700, 4_000, other_window, source, 0x0D, false, 0));
-        assert!(!grace_takes(1_100, 0, 4_000, source, source, 0x0D, false, 0));
+        assert!(
+            !grace_takes(4_000, 4_300, 4_000, source, source, 0x0D, false, 0),
+            "three seconds at most"
+        );
+        assert!(!grace_takes(
+            1_100,
+            1_700,
+            4_000,
+            other_window,
+            source,
+            0x0D,
+            false,
+            0
+        ));
+        assert!(!grace_takes(
+            1_100, 0, 4_000, source, source, 0x0D, false, 0
+        ));
         assert!(!grace_takes(1_100, 1_700, 4_000, 0, 0, 0x0D, false, 0));
     }
     #[test]
@@ -1509,15 +2210,37 @@ mod tests {
         let (source, elsewhere) = (7isize, 9isize);
         let takes = |vk| work_takes(1_000, 5_000, source, source, vk, false, 0);
         // Enter, Backspace, Tab, Space, Delete, a letter, a digit, the keypad: dropped.
-        for vk in [0x0D, 0x08, 0x09, 0x20, 0x2E, 0x41, 0x5A, 0x31, 0x60, 0x6B] { assert!(takes(vk), "{vk:#x}"); }
+        for vk in [0x0D, 0x08, 0x09, 0x20, 0x2E, 0x41, 0x5A, 0x31, 0x60, 0x6B] {
+            assert!(takes(vk), "{vk:#x}");
+        }
         // Escape cancels; the arrows, Home, End and the page keys leave the selection (the user's
         // right); modifiers, function keys, media keys and our own mask key are never taken.
-        for vk in [0x1B, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22, 0x10, 0x11, 0x12, 0x5B, 0x70, 0x7B, 0xA2, 0xAF, 0xE8] { assert!(!takes(vk), "{vk:#x}"); }
-        assert!(!work_takes(1_000, 5_000, source, source, 0x0D, true, 0), "a chord with Ctrl, Alt or Windows is the user's");
-        assert!(!work_takes(1_000, 5_000, source, source, 0x56, false, OUR_KEYS), "our own paste goes through");
-        assert!(!work_takes(1_000, 5_000, elsewhere, source, 0x0D, false, 0), "another window in front");
-        assert!(!work_takes(1_000, 0, source, source, 0x0D, false, 0), "no request running");
-        assert!(!work_takes(5_000, 5_000, source, source, 0x0D, false, 0), "capped");
+        for vk in [
+            0x1B, 0x25, 0x26, 0x27, 0x28, 0x24, 0x23, 0x21, 0x22, 0x10, 0x11, 0x12, 0x5B, 0x70,
+            0x7B, 0xA2, 0xAF, 0xE8,
+        ] {
+            assert!(!takes(vk), "{vk:#x}");
+        }
+        assert!(
+            !work_takes(1_000, 5_000, source, source, 0x0D, true, 0),
+            "a chord with Ctrl, Alt or Windows is the user's"
+        );
+        assert!(
+            !work_takes(1_000, 5_000, source, source, 0x56, false, OUR_KEYS),
+            "our own paste goes through"
+        );
+        assert!(
+            !work_takes(1_000, 5_000, elsewhere, source, 0x0D, false, 0),
+            "another window in front"
+        );
+        assert!(
+            !work_takes(1_000, 0, source, source, 0x0D, false, 0),
+            "no request running"
+        );
+        assert!(
+            !work_takes(5_000, 5_000, source, source, 0x0D, false, 0),
+            "capped"
+        );
         assert!(!work_takes(1_000, 5_000, 0, 0, 0x0D, false, 0));
     }
     #[test]
@@ -1525,11 +2248,18 @@ mod tests {
         // Ctrl+Alt+Space, as the hook reads it while the chord is held.
         let menu = hotkey_code(0x20, true, true, false);
         assert_eq!(menu, 0x20 | (3 << 16));
-        assert_ne!(menu, hotkey_code(0x20, false, false, false), "a plain space is typed text");
+        assert_ne!(
+            menu,
+            hotkey_code(0x20, false, false, false),
+            "a plain space is typed text"
+        );
         assert_ne!(menu, hotkey_code(0x20, true, true, true));
         set_hotkeys(&[(0x20, 3), (0x54, 1 | 2 | 4)]);
         assert_eq!(HOTKEYS[0].load(Ordering::Acquire), menu);
-        assert_eq!(HOTKEYS[1].load(Ordering::Acquire), hotkey_code(0x54, true, true, true));
+        assert_eq!(
+            HOTKEYS[1].load(Ordering::Acquire),
+            hotkey_code(0x54, true, true, true)
+        );
         assert_eq!(HOTKEYS[2].load(Ordering::Acquire), 0);
         // A shorter list empties the slots it no longer uses.
         set_hotkeys(&[]);
@@ -1542,15 +2272,23 @@ mod tests {
         assert!(out_of_reach(Some(0x2000), Some(0x3000)));
         assert!(out_of_reach(Some(0x2000), Some(0x4000)), "a system process");
         assert!(!out_of_reach(Some(0x2000), Some(0x2000)));
-        assert!(!out_of_reach(Some(0x3000), Some(0x2000)), "we run as administrator: everything is in reach");
-        assert!(!out_of_reach(Some(0x2000), Some(0x1000)), "a sandboxed (low) window");
+        assert!(
+            !out_of_reach(Some(0x3000), Some(0x2000)),
+            "we run as administrator: everything is in reach"
+        );
+        assert!(
+            !out_of_reach(Some(0x2000), Some(0x1000)),
+            "a sandboxed (low) window"
+        );
         // Its token is closed to us: it runs above us. Ours unreadable: nothing is claimed.
         assert!(out_of_reach(Some(0x2000), None));
         assert!(!out_of_reach(None, Some(0x3000)));
         assert!(!out_of_reach(None, None));
         // No window at all is never protected, and our own process reads its own level.
         assert!(!window_protected(0));
-        assert!(integrity_of(unsafe { windows::Win32::System::Threading::GetCurrentProcess() }).is_ok());
+        assert!(
+            integrity_of(unsafe { windows::Win32::System::Threading::GetCurrentProcess() }).is_ok()
+        );
     }
 
     #[test]
@@ -1570,9 +2308,18 @@ mod tests {
 
     #[test]
     fn the_memory_key_is_the_lowercase_executable_name_only() {
-        assert_eq!(executable_name("C:\\Windows\\System32\\Notepad.exe").as_deref(), Some("notepad.exe"));
-        assert_eq!(executable_name("C:/Program Files/Google/Chrome/Application/chrome.exe").as_deref(), Some("chrome.exe"));
-        assert_eq!(executable_name("WINWORD.EXE").as_deref(), Some("winword.exe"));
+        assert_eq!(
+            executable_name("C:\\Windows\\System32\\Notepad.exe").as_deref(),
+            Some("notepad.exe")
+        );
+        assert_eq!(
+            executable_name("C:/Program Files/Google/Chrome/Application/chrome.exe").as_deref(),
+            Some("chrome.exe")
+        );
+        assert_eq!(
+            executable_name("WINWORD.EXE").as_deref(),
+            Some("winword.exe")
+        );
         assert_eq!(executable_name("C:\\dir\\"), None);
         assert_eq!(executable_name(""), None);
     }
@@ -1582,7 +2329,12 @@ mod tests {
     #[test]
     fn altgr_is_read_on_a_known_layout_when_the_session_has_one() {
         let layouts = keyboard_layouts();
-        let find = |id: usize| layouts.iter().copied().find(|layout| layout.0 as usize & 0xFFFF_FFFF == id);
+        let find = |id: usize| {
+            layouts
+                .iter()
+                .copied()
+                .find(|layout| layout.0 as usize & 0xFFFF_FFFF == id)
+        };
         let (french, us) = (find(0x040C_040C), find(0x0409_0409));
         if french.is_none() && us.is_none() {
             eprintln!("no French AZERTY nor US layout loaded in this session: skipped");
@@ -1591,7 +2343,11 @@ mod tests {
         if let Some(french) = french {
             assert_eq!(altgr_character_in(french, 0x45, false), Some('€'));
             assert_eq!(altgr_character_in(french, 0x30, false), Some('@'));
-            assert_eq!(altgr_character_in(french, 0x41, false), None, "AltGr+A types nothing");
+            assert_eq!(
+                altgr_character_in(french, 0x41, false),
+                None,
+                "AltGr+A types nothing"
+            );
         }
         if let Some(us) = us {
             assert_eq!(altgr_character_in(us, 0x45, false), None);
@@ -1602,8 +2358,20 @@ mod tests {
     #[test]
     fn the_pointer_counts_as_near_within_the_margin_around_any_surface() {
         let regions = [
-            SurfaceRegion { x: 32., y: 34., width: 300., height: 120., radius: 28. },
-            SurfaceRegion { x: 160., y: 200., width: 44., height: 20., radius: 10. },
+            SurfaceRegion {
+                x: 32.,
+                y: 34.,
+                width: 300.,
+                height: 120.,
+                radius: 28.,
+            },
+            SurfaceRegion {
+                x: 160.,
+                y: 200.,
+                width: 44.,
+                height: 20.,
+                radius: 10.,
+            },
         ];
         // Just outside the glass box, inside the margin; the corner is judged on the box.
         assert!(near(&regions, 1., 20., 40., 32.));
@@ -1621,8 +2389,20 @@ mod tests {
     #[test]
     fn rounded_surfaces_take_the_cursor_and_the_gaps_let_it_through() {
         let regions = [
-            SurfaceRegion { x: 0., y: 20., width: 280., height: 80., radius: 26. },
-            SurfaceRegion { x: 210., y: 0., width: 60., height: 18., radius: 9. },
+            SurfaceRegion {
+                x: 0.,
+                y: 20.,
+                width: 280.,
+                height: 80.,
+                radius: 26.,
+            },
+            SurfaceRegion {
+                x: 210.,
+                y: 0.,
+                width: 60.,
+                height: 18.,
+                radius: 9.,
+            },
         ];
         assert!(contains(&regions, 1., 140.5, 50.5), "glass");
         assert!(contains(&regions, 1., 240.5, 9.5), "pill");

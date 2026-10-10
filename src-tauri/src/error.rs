@@ -75,7 +75,11 @@ pub struct AppError {
 
 impl AppError {
     pub fn new(kind: ErrorKind, message: impl Into<String>) -> Self {
-        Self { kind, message: message.into(), reason: "" }
+        Self {
+            kind,
+            message: message.into(),
+            reason: "",
+        }
     }
     pub fn because(mut self, reason: &'static str) -> Self {
         self.reason = reason;
@@ -109,7 +113,10 @@ pub struct Refusal {
 
 impl From<AppError> for Refusal {
     fn from(error: AppError) -> Self {
-        Self { message: error.message, code: error.kind }
+        Self {
+            message: error.message,
+            code: error.kind,
+        }
     }
 }
 
@@ -141,26 +148,49 @@ mod tests {
     #[test]
     fn every_code_serializes_to_the_frontend_list_in_snake_case() {
         let codes = [
-            (ErrorKind::Unreachable, "unreachable"), (ErrorKind::Timeout, "timeout"), (ErrorKind::Unauthorized, "unauthorized"),
-            (ErrorKind::ModelNotFound, "model_not_found"), (ErrorKind::BadEndpoint, "bad_endpoint"), (ErrorKind::Busy, "busy"),
-            (ErrorKind::Length, "length"), (ErrorKind::StreamBroken, "stream_broken"), (ErrorKind::PasteBlocked, "paste_blocked"),
-            (ErrorKind::TargetChanged, "target_changed"), (ErrorKind::NotEditable, "not_editable"), (ErrorKind::TooLong, "too_long"),
-            (ErrorKind::Cancelled, "cancelled"), (ErrorKind::ServerError, "server_error"), (ErrorKind::NoSelection, "no_selection"),
-            (ErrorKind::ProtectedField, "protected_field"), (ErrorKind::KeysHeld, "keys_held"), (ErrorKind::Internal, "internal"),
-            (ErrorKind::SettingsOpen, "settings_open"), (ErrorKind::NothingRecent, "nothing_recent"),
-            (ErrorKind::ReadOnly, "read_only"), (ErrorKind::ProtectedWindow, "protected_window"),
+            (ErrorKind::Unreachable, "unreachable"),
+            (ErrorKind::Timeout, "timeout"),
+            (ErrorKind::Unauthorized, "unauthorized"),
+            (ErrorKind::ModelNotFound, "model_not_found"),
+            (ErrorKind::BadEndpoint, "bad_endpoint"),
+            (ErrorKind::Busy, "busy"),
+            (ErrorKind::Length, "length"),
+            (ErrorKind::StreamBroken, "stream_broken"),
+            (ErrorKind::PasteBlocked, "paste_blocked"),
+            (ErrorKind::TargetChanged, "target_changed"),
+            (ErrorKind::NotEditable, "not_editable"),
+            (ErrorKind::TooLong, "too_long"),
+            (ErrorKind::Cancelled, "cancelled"),
+            (ErrorKind::ServerError, "server_error"),
+            (ErrorKind::NoSelection, "no_selection"),
+            (ErrorKind::ProtectedField, "protected_field"),
+            (ErrorKind::KeysHeld, "keys_held"),
+            (ErrorKind::Internal, "internal"),
+            (ErrorKind::SettingsOpen, "settings_open"),
+            (ErrorKind::NothingRecent, "nothing_recent"),
+            (ErrorKind::ReadOnly, "read_only"),
+            (ErrorKind::ProtectedWindow, "protected_window"),
             (ErrorKind::SetupOpen, "setup_open"),
         ];
         for (kind, name) in codes {
             assert_eq!(serde_json::to_value(kind).unwrap(), serde_json::json!(name));
-            assert_eq!(serde_json::from_value::<ErrorKind>(serde_json::json!(name)).unwrap(), kind);
+            assert_eq!(
+                serde_json::from_value::<ErrorKind>(serde_json::json!(name)).unwrap(),
+                kind
+            );
         }
     }
 
     #[test]
     fn a_refused_command_carries_its_message_and_its_code() {
-        let refusal = Refusal::from(AppError::new(ErrorKind::KeysHeld, "Relâchez les touches du raccourci, puis réessayez depuis la bulle."));
-        assert_eq!(serde_json::to_value(&refusal).unwrap(), serde_json::json!({"message": "Relâchez les touches du raccourci, puis réessayez depuis la bulle.", "code": "keys_held"}));
+        let refusal = Refusal::from(AppError::new(
+            ErrorKind::KeysHeld,
+            "Relâchez les touches du raccourci, puis réessayez depuis la bulle.",
+        ));
+        assert_eq!(
+            serde_json::to_value(&refusal).unwrap(),
+            serde_json::json!({"message": "Relâchez les touches du raccourci, puis réessayez depuis la bulle.", "code": "keys_held"})
+        );
     }
 
     #[test]
@@ -168,15 +198,31 @@ mod tests {
         assert_eq!(http_status(401, ""), ErrorKind::Unauthorized);
         assert_eq!(http_status(403, "forbidden"), ErrorKind::Unauthorized);
         // vLLM: « The model `x` does not exist. »; OpenAI: code model_not_found; Ollama: model "x" not found.
-        assert_eq!(http_status(404, r#"{"message":"The model `x` does not exist.","type":"NotFoundError"}"#), ErrorKind::ModelNotFound);
-        assert_eq!(http_status(404, r#"{"error":{"code":"model_not_found"}}"#), ErrorKind::ModelNotFound);
-        assert_eq!(http_status(404, r#"{"detail":"Not Found"}"#), ErrorKind::BadEndpoint);
+        assert_eq!(
+            http_status(
+                404,
+                r#"{"message":"The model `x` does not exist.","type":"NotFoundError"}"#
+            ),
+            ErrorKind::ModelNotFound
+        );
+        assert_eq!(
+            http_status(404, r#"{"error":{"code":"model_not_found"}}"#),
+            ErrorKind::ModelNotFound
+        );
+        assert_eq!(
+            http_status(404, r#"{"detail":"Not Found"}"#),
+            ErrorKind::BadEndpoint
+        );
         assert_eq!(http_status(404, ""), ErrorKind::BadEndpoint);
         assert_eq!(http_status(301, ""), ErrorKind::BadEndpoint);
         assert_eq!(http_status(429, ""), ErrorKind::Busy);
         assert_eq!(http_status(503, ""), ErrorKind::Busy);
         for status in [400, 405, 422, 500, 502, 504] {
-            assert_eq!(http_status(status, "model"), ErrorKind::ServerError, "{status}");
+            assert_eq!(
+                http_status(status, "model"),
+                ErrorKind::ServerError,
+                "{status}"
+            );
         }
     }
 }

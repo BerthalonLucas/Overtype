@@ -42,7 +42,10 @@ pub struct Updates {
 fn change(app: &AppHandle, edit: impl FnOnce(&mut UpdateStatus)) -> UpdateStatus {
     let updates = app.state::<Updates>();
     let status = match updates.status.lock() {
-        Ok(mut status) => { edit(&mut status); status.clone() }
+        Ok(mut status) => {
+            edit(&mut status);
+            status.clone()
+        }
         Err(_) => return UpdateStatus::default(),
     };
     let _ = app.emit_to("settings", "update-status", &status);
@@ -50,7 +53,9 @@ fn change(app: &AppHandle, edit: impl FnOnce(&mut UpdateStatus)) -> UpdateStatus
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// Asks GitHub once; a check already running is answered with the status as it is.
@@ -58,9 +63,13 @@ pub async fn check(app: &AppHandle) -> UpdateStatus {
     let mut busy = false;
     let status = change(app, |s| {
         busy = s.checking || s.installing;
-        if !busy { s.checking = true; }
+        if !busy {
+            s.checking = true;
+        }
     });
-    if busy { return status; }
+    if busy {
+        return status;
+    }
     let found = match app.updater_builder().timeout(CHECK_TIMEOUT).build() {
         Ok(updater) => updater.check().await.map_err(|e| e.to_string()),
         Err(e) => Err(e.to_string()),
@@ -68,15 +77,32 @@ pub async fn check(app: &AppHandle) -> UpdateStatus {
     match found {
         Ok(update) => {
             let version = update.as_ref().map(|u| u.version.clone());
-            if let Ok(mut pending) = app.state::<Updates>().pending.lock() { *pending = update; }
-            if let Some(version) = &version {
-                crate::record(app, Diag::new(DiagStep::App, DiagLevel::Info, "update_available").detail(version.clone()));
+            if let Ok(mut pending) = app.state::<Updates>().pending.lock() {
+                *pending = update;
             }
-            change(app, |s| { s.checking = false; s.failed = false; s.available = version; s.checked_at = Some(now_ms()); })
+            if let Some(version) = &version {
+                crate::record(
+                    app,
+                    Diag::new(DiagStep::App, DiagLevel::Info, "update_available")
+                        .detail(version.clone()),
+                );
+            }
+            change(app, |s| {
+                s.checking = false;
+                s.failed = false;
+                s.available = version;
+                s.checked_at = Some(now_ms());
+            })
         }
         Err(cause) => {
-            crate::record(app, Diag::new(DiagStep::App, DiagLevel::Error, "update_check").cause(cause));
-            change(app, |s| { s.checking = false; s.failed = true; })
+            crate::record(
+                app,
+                Diag::new(DiagStep::App, DiagLevel::Error, "update_check").cause(cause),
+            );
+            change(app, |s| {
+                s.checking = false;
+                s.failed = true;
+            })
         }
     }
 }
@@ -85,7 +111,9 @@ pub async fn check(app: &AppHandle) -> UpdateStatus {
 /// there is not the installed one.
 pub fn watch(app: AppHandle) {
     let test_run = std::env::var_os("FLOWTRANSLATE_DATA_DIR").is_some_and(|dir| !dir.is_empty());
-    if cfg!(debug_assertions) || test_run { return; }
+    if cfg!(debug_assertions) || test_run {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
         loop {
             check(&app).await;
@@ -108,33 +136,67 @@ pub async fn check_update(app: AppHandle) -> UpdateStatus {
 /// success the app quits here and never answers.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<UpdateStatus, String> {
-    let update = app.state::<Updates>().pending.lock().ok().and_then(|pending| pending.clone());
-    let Some(update) = update else { return Err("Aucune mise à jour en attente.".into()) };
+    let update = app
+        .state::<Updates>()
+        .pending
+        .lock()
+        .ok()
+        .and_then(|pending| pending.clone());
+    let Some(update) = update else {
+        return Err("Aucune mise à jour en attente.".into());
+    };
     let mut busy = false;
     change(&app, |s| {
         busy = s.installing;
-        if !busy { s.installing = true; s.failed = false; s.downloaded = 0; s.total = None; }
+        if !busy {
+            s.installing = true;
+            s.failed = false;
+            s.downloaded = 0;
+            s.total = None;
+        }
     });
-    if busy { return Err("La mise à jour est déjà en cours.".into()); }
-    crate::record(&app, Diag::new(DiagStep::App, DiagLevel::Info, "update_install").detail(update.version.clone()));
+    if busy {
+        return Err("La mise à jour est déjà en cours.".into());
+    }
+    crate::record(
+        &app,
+        Diag::new(DiagStep::App, DiagLevel::Info, "update_install").detail(update.version.clone()),
+    );
     let progress = app.clone();
     let mut downloaded = 0u64;
     let mut shown = 0u64;
-    let result = update.download_and_install(move |chunk, total| {
-        downloaded += chunk as u64;
-        // One event per 256 KB at most: the row needs a bar, not every packet.
-        if downloaded - shown >= 256 * 1024 || total == Some(downloaded) {
-            shown = downloaded;
-            change(&progress, |s| { s.downloaded = downloaded; s.total = total; });
-        }
-    }, || {}).await;
+    let result = update
+        .download_and_install(
+            move |chunk, total| {
+                downloaded += chunk as u64;
+                // One event per 256 KB at most: the row needs a bar, not every packet.
+                if downloaded - shown >= 256 * 1024 || total == Some(downloaded) {
+                    shown = downloaded;
+                    change(&progress, |s| {
+                        s.downloaded = downloaded;
+                        s.total = total;
+                    });
+                }
+            },
+            || {},
+        )
+        .await;
     match result {
         // Windows: the installer runs and the app has already quit. Elsewhere, start again.
         Ok(()) => app.restart(),
         Err(e) => {
-            crate::record(&app, Diag::new(DiagStep::App, DiagLevel::Error, "update_install").cause(e.to_string()));
-            let status = change(&app, |s| { s.installing = false; s.failed = true; });
-            Err(format!("La mise à jour a échoué ({}).", status.available.unwrap_or_default()))
+            crate::record(
+                &app,
+                Diag::new(DiagStep::App, DiagLevel::Error, "update_install").cause(e.to_string()),
+            );
+            let status = change(&app, |s| {
+                s.installing = false;
+                s.failed = true;
+            });
+            Err(format!(
+                "La mise à jour a échoué ({}).",
+                status.available.unwrap_or_default()
+            ))
         }
     }
 }

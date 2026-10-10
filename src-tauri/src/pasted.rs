@@ -69,18 +69,27 @@ pub fn align(value: &str, provider: &str) -> Option<Vec<usize>> {
         let &p_at = p.get(j)?;
         map[i] = j;
         if brk(v[i]) && brk(p_at) {
-            let (vi, pj) = (if pair(&v, i) { 2 } else { 1 }, if pair(&p, j) { 2 } else { 1 });
-            if vi == 2 { map[i + 1] = j; }
+            let (vi, pj) = (
+                if pair(&v, i) { 2 } else { 1 },
+                if pair(&p, j) { 2 } else { 1 },
+            );
+            if vi == 2 {
+                map[i + 1] = j;
+            }
             i += vi;
             j += pj;
-        } else if v[i] == p_at || (v[i] == space && p_at == nbsp) || (v[i] == nbsp && p_at == space) {
+        } else if v[i] == p_at || (v[i] == space && p_at == nbsp) || (v[i] == nbsp && p_at == space)
+        {
             i += 1;
             j += 1;
         } else {
             return None;
         }
     }
-    (j == p.len()).then(|| { map[v.len()] = j; map })
+    (j == p.len()).then(|| {
+        map[v.len()] = j;
+        map
+    })
 }
 
 /// The provider's character index of each UTF-16 offset of its own text, when its count
@@ -90,17 +99,23 @@ pub fn unit_index(provider: &str, units: i32) -> Option<Vec<i32>> {
     if units as usize == length {
         return Some((0..=length as i32).collect());
     }
-    if units as usize != provider.chars().count() { return None; }
+    if units as usize != provider.chars().count() {
+        return None;
+    }
     let mut index = Vec::with_capacity(length + 1);
     for (k, c) in provider.chars().enumerate() {
-        for _ in 0..c.len_utf16() { index.push(k as i32); }
+        for _ in 0..c.len_utf16() {
+            index.push(k as i32);
+        }
     }
     index.push(units);
     Some(index)
 }
 
 fn clone_range(range: &UITextRange) -> Option<UITextRange> {
-    unsafe { range.as_ref().Clone() }.ok().map(UITextRange::from)
+    unsafe { range.as_ref().Clone() }
+        .ok()
+        .map(UITextRange::from)
 }
 
 /// The focused element and its text pattern.
@@ -114,19 +129,29 @@ fn focused_text() -> Option<(UIElement, UITextPattern)> {
 fn caret(pattern: &UITextPattern) -> Option<UITextRange> {
     let selection = pattern.get_selection().ok()?.into_iter().next()?;
     let caret = clone_range(&selection)?;
-    caret.move_endpoint_by_range(TextPatternRangeEndpoint::Start, &selection, TextPatternRangeEndpoint::End).ok()?;
+    caret
+        .move_endpoint_by_range(
+            TextPatternRangeEndpoint::Start,
+            &selection,
+            TextPatternRangeEndpoint::End,
+        )
+        .ok()?;
     Some(caret)
 }
 
 /// The `units` characters that end at `caret` (None when the document starts before).
 fn back_from(caret: &UITextRange, units: i32) -> Option<UITextRange> {
     let range = clone_range(caret)?;
-    let moved = range.move_endpoint_by_unit(TextPatternRangeEndpoint::Start, TextUnit::Character, -units).ok()?;
+    let moved = range
+        .move_endpoint_by_unit(TextPatternRangeEndpoint::Start, TextUnit::Character, -units)
+        .ok()?;
     (moved == -units).then_some(range)
 }
 
 fn read(range: &UITextRange, units: i32) -> Option<String> {
-    range.get_text(units.saturating_mul(2).saturating_add(16)).ok()
+    range
+        .get_text(units.saturating_mul(2).saturating_add(16))
+        .ok()
 }
 
 /// Right after a paste of `value` into `window`: the pasted text, or None (no text pattern,
@@ -142,7 +167,12 @@ pub fn locate(value: &str, window: isize) -> Option<Located> {
         (canonical(&text) == wanted).then(|| {
             let rects = capture::range_rects(&range);
             let lines = selection_lines::lines(&rects, clip);
-            Located { units, text, rects, lines }
+            Located {
+                units,
+                text,
+                rects,
+                lines,
+            }
         })
     })
 }
@@ -169,22 +199,55 @@ fn utf16_slice(value: &[u16], start: usize, end: usize) -> String {
 /// result as pasted), end excluded. Each becomes a sub-range of the pasted text, checked by
 /// its text, then lines (runs of one range merge on a line; two ranges never do). A range
 /// that cannot be resolved or read back is left out. At most 256 lines.
-pub fn changed_lines(located: &Located, value: &str, ranges: &[(usize, usize)], window: isize) -> (usize, Vec<Rect>) {
-    let Some((_, range)) = relocate_range(located) else { return (0, Vec::new()) };
-    let (Some(map), Some(units)) = (align(value, &located.text), unit_index(&located.text, located.units)) else { return (0, Vec::new()) };
+pub fn changed_lines(
+    located: &Located,
+    value: &str,
+    ranges: &[(usize, usize)],
+    window: isize,
+) -> (usize, Vec<Rect>) {
+    let Some((_, range)) = relocate_range(located) else {
+        return (0, Vec::new());
+    };
+    let (Some(map), Some(units)) = (
+        align(value, &located.text),
+        unit_index(&located.text, located.units),
+    ) else {
+        return (0, Vec::new());
+    };
     let v: Vec<u16> = value.encode_utf16().collect();
     let clip = crate::host::window_rect(window);
     let mut resolved = 0;
     let mut lines = Vec::new();
     for &(start, end) in ranges {
-        if start >= end || end > v.len() { continue; }
+        if start >= end || end > v.len() {
+            continue;
+        }
         let (us, ue) = (units[map[start]], units[map[end]]);
-        let Some(sub) = clone_range(&range) else { continue };
-        let collapsed = sub.move_endpoint_by_range(TextPatternRangeEndpoint::End, &range, TextPatternRangeEndpoint::Start).is_ok();
+        let Some(sub) = clone_range(&range) else {
+            continue;
+        };
+        let collapsed = sub
+            .move_endpoint_by_range(
+                TextPatternRangeEndpoint::End,
+                &range,
+                TextPatternRangeEndpoint::Start,
+            )
+            .is_ok();
         let spans = collapsed
-            && sub.move_endpoint_by_unit(TextPatternRangeEndpoint::End, TextUnit::Character, ue).ok() == Some(ue)
-            && sub.move_endpoint_by_unit(TextPatternRangeEndpoint::Start, TextUnit::Character, us).ok() == Some(us);
-        if !spans || read(&sub, ue - us).map(|text| canonical(&text)) != Some(canonical(&utf16_slice(&v, start, end))) { continue; }
+            && sub
+                .move_endpoint_by_unit(TextPatternRangeEndpoint::End, TextUnit::Character, ue)
+                .ok()
+                == Some(ue)
+            && sub
+                .move_endpoint_by_unit(TextPatternRangeEndpoint::Start, TextUnit::Character, us)
+                .ok()
+                == Some(us);
+        if !spans
+            || read(&sub, ue - us).map(|text| canonical(&text))
+                != Some(canonical(&utf16_slice(&v, start, end)))
+        {
+            continue;
+        }
         resolved += 1;
         lines.extend(selection_lines::lines(&capture::range_rects(&sub), clip));
     }
@@ -211,17 +274,29 @@ pub enum UndoFailure {
 }
 
 fn changed() -> UndoFailure {
-    UndoFailure::Refused(AppError::new(ErrorKind::TargetChanged, "Le texte a changé depuis le remplacement; annulation refusée."))
+    UndoFailure::Refused(AppError::new(
+        ErrorKind::TargetChanged,
+        "Le texte a changé depuis le remplacement; annulation refusée.",
+    ))
 }
 
 /// Rule 1 for Undo: the source in front, the same field, the same element, and the pasted
 /// text still exactly where it was left.
 fn check(target: &UndoTarget) -> Result<(UIElement, UITextRange), UndoFailure> {
-    if crate::host::foreground() != target.window { return Err(changed()); }
-    if target.control != 0 && crate::host::focused_control(target.window).is_some_and(|(handle, _)| handle != target.control) { return Err(changed()); }
+    if crate::host::foreground() != target.window {
+        return Err(changed());
+    }
+    if target.control != 0
+        && crate::host::focused_control(target.window)
+            .is_some_and(|(handle, _)| handle != target.control)
+    {
+        return Err(changed());
+    }
     let (element, range) = relocate_range(target.located).ok_or_else(changed)?;
     if let Some(id) = target.runtime_id {
-        if element.get_runtime_id().is_ok_and(|now| now != id) { return Err(changed()); }
+        if element.get_runtime_id().is_ok_and(|now| now != id) {
+            return Err(changed());
+        }
     }
     Ok((element, range))
 }
@@ -232,9 +307,18 @@ fn restored(original: &str) -> Option<bool> {
     let (_, pattern) = focused_text()?;
     let wanted = canonical(original);
     let selection = pattern.get_selection().ok()?.into_iter().next();
-    if selection.and_then(|range| range.get_text(-1).ok()).is_some_and(|text| canonical(&text) == wanted) { return Some(true); }
+    if selection
+        .and_then(|range| range.get_text(-1).ok())
+        .is_some_and(|text| canonical(&text) == wanted)
+    {
+        return Some(true);
+    }
     let caret = caret(&pattern)?;
-    Some(candidate_units(original).into_iter().any(|units| back_from(&caret, units).and_then(|range| read(&range, units)).is_some_and(|text| canonical(&text) == wanted)))
+    Some(candidate_units(original).into_iter().any(|units| {
+        back_from(&caret, units)
+            .and_then(|range| read(&range, units))
+            .is_some_and(|text| canonical(&text) == wanted)
+    }))
 }
 
 /// Whether `now` is `before` with one occurrence of `pasted` put back to `original` (line
@@ -243,11 +327,22 @@ fn restored(original: &str) -> Option<bool> {
 /// puts the caret elsewhere; the two checks of `restored` then saw nothing and the pill said
 /// « Undo not confirmed » over a text that was back.
 pub fn undone_in(before: &str, now: &str, pasted: &str, original: &str) -> bool {
-    let (before, now, pasted, original) = (canonical(before), canonical(now), canonical(pasted), canonical(original));
-    if pasted.is_empty() || now.len() + pasted.len() != before.len() + original.len() { return false; }
+    let (before, now, pasted, original) = (
+        canonical(before),
+        canonical(now),
+        canonical(pasted),
+        canonical(original),
+    );
+    if pasted.is_empty() || now.len() + pasted.len() != before.len() + original.len() {
+        return false;
+    }
     before.match_indices(&pasted).take(64).any(|(at, _)| {
-        now.len() >= at && now.is_char_boundary(at) && now[..at] == before[..at]
-            && now[at..].strip_prefix(original.as_str()).is_some_and(|rest| rest == &before[at + pasted.len()..])
+        now.len() >= at
+            && now.is_char_boundary(at)
+            && now[..at] == before[..at]
+            && now[at..]
+                .strip_prefix(original.as_str())
+                .is_some_and(|rest| rest == &before[at + pasted.len()..])
     })
 }
 
@@ -255,38 +350,74 @@ pub fn undone_in(before: &str, now: &str, pasted: &str, original: &str) -> bool 
 /// front, checks the target after that, waits for the keys to be up, checks again, then
 /// sends Ctrl+Z (`keystroke`) or selects the pasted text and pastes the original over it
 /// (`repaste`, the clipboard kept as for any paste). Ok(true) when the original reads back.
-pub fn undo(target: &UndoTarget, strategy: UndoStrategy, reactivate: bool) -> Result<bool, UndoFailure> {
+pub fn undo(
+    target: &UndoTarget,
+    strategy: UndoStrategy,
+    reactivate: bool,
+) -> Result<bool, UndoFailure> {
     #[cfg(windows)]
     if reactivate && crate::host::foreground() != target.window {
         use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::SetForegroundWindow};
-        capture::released(crate::host::wait_modifiers_released(capture::CHORD_RELEASE)).map_err(UndoFailure::Refused)?;
+        capture::released(crate::host::wait_modifiers_released(capture::CHORD_RELEASE))
+            .map_err(UndoFailure::Refused)?;
         if !unsafe { SetForegroundWindow(HWND(target.window as *mut _)) }.as_bool() {
-            return Err(UndoFailure::Refused(AppError::new(ErrorKind::PasteBlocked, "Impossible de réactiver la fenêtre source.")));
+            return Err(UndoFailure::Refused(AppError::new(
+                ErrorKind::PasteBlocked,
+                "Impossible de réactiver la fenêtre source.",
+            )));
         }
         std::thread::sleep(Duration::from_millis(60));
     }
     #[cfg(not(windows))]
     let _ = reactivate;
     check(target)?;
-    capture::released(crate::host::wait_modifiers_released(capture::CHORD_RELEASE)).map_err(UndoFailure::Refused)?;
+    capture::released(crate::host::wait_modifiers_released(capture::CHORD_RELEASE))
+        .map_err(UndoFailure::Refused)?;
     let (element, range) = check(target)?;
     match strategy {
         UndoStrategy::Keystroke => {
             // The whole field as it reads with the pasted text: the proof of last resort.
             let before = capture::field_text(target.window);
             crate::host::send_undo_chord().map_err(|sent| {
-                let error = AppError::new(ErrorKind::PasteBlocked, "L’annulation a été bloquée par Windows ou par l’application.");
-                if sent == 0 { UndoFailure::Refused(error) } else { UndoFailure::Failed(error) }
+                let error = AppError::new(
+                    ErrorKind::PasteBlocked,
+                    "L’annulation a été bloquée par Windows ou par l’application.",
+                );
+                if sent == 0 {
+                    UndoFailure::Refused(error)
+                } else {
+                    UndoFailure::Failed(error)
+                }
             })?;
             let started = Instant::now();
             loop {
                 let near_caret = restored(target.original);
-                if near_caret == Some(true) { return Ok(true); }
-                let whole = before.as_deref().and_then(|before| capture::field_text(target.window).map(|now| undone_in(before, &now, &target.located.text, target.original)));
-                if whole == Some(true) { return Ok(true); }
+                if near_caret == Some(true) {
+                    return Ok(true);
+                }
+                let whole = before.as_deref().and_then(|before| {
+                    capture::field_text(target.window)
+                        .map(|now| undone_in(before, &now, &target.located.text, target.original))
+                });
+                if whole == Some(true) {
+                    return Ok(true);
+                }
                 // Nothing can read the field: the chord went out, the undo is assumed.
-                if near_caret.is_none() && whole.is_none() && started.elapsed() >= Duration::from_millis(300) { return Ok(false); }
-                if started.elapsed() >= UNDO_CONFIRM { return Err(UndoFailure::Failed(AppError::new(ErrorKind::PasteBlocked, "L’application n’a pas rendu le texte d’origine.").because("original not read back"))); }
+                if near_caret.is_none()
+                    && whole.is_none()
+                    && started.elapsed() >= Duration::from_millis(300)
+                {
+                    return Ok(false);
+                }
+                if started.elapsed() >= UNDO_CONFIRM {
+                    return Err(UndoFailure::Failed(
+                        AppError::new(
+                            ErrorKind::PasteBlocked,
+                            "L’application n’a pas rendu le texte d’origine.",
+                        )
+                        .because("original not read back"),
+                    ));
+                }
                 std::thread::sleep(Duration::from_millis(40));
             }
         }
@@ -313,7 +444,8 @@ pub fn undo(target: &UndoTarget, strategy: UndoStrategy, reactivate: bool) -> Re
                 check: TargetCheck::Uia,
             };
             // Every refusal of the paste comes before its chord: nothing was written.
-            let delivery = capture::paste(&identity, target.original, false).map_err(UndoFailure::Refused)?;
+            let delivery =
+                capture::paste(&identity, target.original, false).map_err(UndoFailure::Refused)?;
             Ok(delivery.confirmed)
         }
     }
@@ -364,18 +496,36 @@ mod tests {
     fn an_undo_is_confirmed_by_the_whole_field_wherever_the_caret_went() {
         let before = "Bonjour,\nPourriez-vous envoyer la proposition ?\nMerci.";
         let now = "Bonjour,\nje voudrai la proposition\nMerci.";
-        assert!(undone_in(before, now, "Pourriez-vous envoyer la proposition ?", "je voudrai la proposition"));
+        assert!(undone_in(
+            before,
+            now,
+            "Pourriez-vous envoyer la proposition ?",
+            "je voudrai la proposition"
+        ));
         // Line endings and Chromium's non-breaking spaces do not matter.
-        assert!(undone_in("a\r\nNOUVEAU\u{a0}b", "a\nancien b", "NOUVEAU", "ancien"));
+        assert!(undone_in(
+            "a\r\nNOUVEAU\u{a0}b",
+            "a\nancien b",
+            "NOUVEAU",
+            "ancien"
+        ));
         // The pasted text twice in the field: either occurrence may be the one undone.
         assert!(undone_in("x NEW y NEW z", "x NEW y old z", "NEW", "old"));
         assert!(undone_in("x NEW y NEW z", "x old y NEW z", "NEW", "old"));
         // Still the pasted text, something else changed, or more than the paste was undone.
-        assert!(!undone_in(before, before, "Pourriez-vous envoyer la proposition ?", "je voudrai la proposition"));
+        assert!(!undone_in(
+            before,
+            before,
+            "Pourriez-vous envoyer la proposition ?",
+            "je voudrai la proposition"
+        ));
         assert!(!undone_in("x NEW y", "x old y!", "NEW", "old"));
         assert!(!undone_in("x NEW y", "x  y", "NEW", "old"));
         assert!(!undone_in("x NEW y", "old", "NEW", "old"));
-        assert!(!undone_in("x y", "x y", "", "old"), "nothing pasted, nothing to prove");
+        assert!(
+            !undone_in("x y", "x y", "", "old"),
+            "nothing pasted, nothing to prove"
+        );
         // Accents and emoji: byte offsets stay on character boundaries.
         assert!(undone_in("é👍 NEW fin", "é👍 été fin", "NEW", "été"));
         assert!(!undone_in("é👍 NEW fin", "👍é été fin", "NEW", "été"));
@@ -383,11 +533,25 @@ mod tests {
 
     #[test]
     fn undo_is_refused_when_the_source_is_not_in_front() {
-        let located = Located { units: 5, text: "Salut".into(), rects: Vec::new(), lines: Vec::new() };
-        let target = UndoTarget { window: 1, control: 0, runtime_id: None, located: &located, original: "Bonjour", pasted: "Salut" };
+        let located = Located {
+            units: 5,
+            text: "Salut".into(),
+            rects: Vec::new(),
+            lines: Vec::new(),
+        };
+        let target = UndoTarget {
+            window: 1,
+            control: 0,
+            runtime_id: None,
+            located: &located,
+            original: "Bonjour",
+            pasted: "Salut",
+        };
         for strategy in [UndoStrategy::Keystroke, UndoStrategy::Repaste] {
             match undo(&target, strategy, false) {
-                Err(UndoFailure::Refused(error)) => assert_eq!(error.kind, ErrorKind::TargetChanged),
+                Err(UndoFailure::Refused(error)) => {
+                    assert_eq!(error.kind, ErrorKind::TargetChanged)
+                }
                 other => panic!("refused before any key: {other:?}"),
             }
         }

@@ -21,26 +21,52 @@ pub const HALO_MARGIN: f64 = 12.;
 
 /// Finite and not empty.
 pub fn drawable(rect: &Rect) -> bool {
-    rect.x.is_finite() && rect.y.is_finite() && rect.width.is_finite() && rect.height.is_finite()
-        && rect.width > 0. && rect.height > 0.
+    rect.x.is_finite()
+        && rect.y.is_finite()
+        && rect.width.is_finite()
+        && rect.height.is_finite()
+        && rect.width > 0.
+        && rect.height > 0.
 }
 
 /// The flat `[x, y, width, height, …]` array of `GetBoundingRectangles`, as rectangles.
 pub fn from_flat(values: &[f64]) -> Vec<Rect> {
-    values.chunks_exact(4).map(|v| Rect { x: v[0], y: v[1], width: v[2], height: v[3] }).collect()
+    values
+        .chunks_exact(4)
+        .map(|v| Rect {
+            x: v[0],
+            y: v[1],
+            width: v[2],
+            height: v[3],
+        })
+        .collect()
 }
 
-fn right(r: &Rect) -> f64 { r.x + r.width }
-fn bottom(r: &Rect) -> f64 { r.y + r.height }
+fn right(r: &Rect) -> f64 {
+    r.x + r.width
+}
+fn bottom(r: &Rect) -> f64 {
+    r.y + r.height
+}
 
 fn union(a: &Rect, b: &Rect) -> Rect {
     let (x, y) = (a.x.min(b.x), a.y.min(b.y));
-    Rect { x, y, width: right(a).max(right(b)) - x, height: bottom(a).max(bottom(b)) - y }
+    Rect {
+        x,
+        y,
+        width: right(a).max(right(b)) - x,
+        height: bottom(a).max(bottom(b)) - y,
+    }
 }
 
 fn intersection(a: &Rect, b: &Rect) -> Option<Rect> {
     let (x, y) = (a.x.max(b.x), a.y.max(b.y));
-    let r = Rect { x, y, width: right(a).min(right(b)) - x, height: bottom(a).min(bottom(b)) - y };
+    let r = Rect {
+        x,
+        y,
+        width: right(a).min(right(b)) - x,
+        height: bottom(a).min(bottom(b)) - y,
+    };
     drawable(&r).then_some(r)
 }
 
@@ -74,7 +100,11 @@ pub fn lines(raw: &[Rect], window: Option<Rect>) -> Vec<Rect> {
             None => Some(*r),
         })
         .collect();
-    runs.sort_by(|a, b| (a.y + a.height / 2.).total_cmp(&(b.y + b.height / 2.)).then(a.x.total_cmp(&b.x)));
+    runs.sort_by(|a, b| {
+        (a.y + a.height / 2.)
+            .total_cmp(&(b.y + b.height / 2.))
+            .then(a.x.total_cmp(&b.x))
+    });
     // Vertical grouping first, over the whole line box: a taller run (a bigger font, an
     // emoji) joins the line it overlaps instead of opening a new one.
     let mut groups: Vec<(Rect, Vec<Rect>)> = Vec::new();
@@ -115,16 +145,31 @@ fn cap(rows: Vec<Vec<Rect>>) -> Vec<Rect> {
     if rows.iter().map(Vec::len).sum::<usize>() <= MAX_LINES {
         return rows.into_iter().flatten().collect();
     }
-    let keep = |row: &[Rect]| if row.len() * 2 < MAX_LINES { row.to_vec() } else { bounds(row).into_iter().collect() };
+    let keep = |row: &[Rect]| {
+        if row.len() * 2 < MAX_LINES {
+            row.to_vec()
+        } else {
+            bounds(row).into_iter().collect()
+        }
+    };
     let [first, middle @ .., last] = rows.as_slice() else {
         return rows.iter().flat_map(|row| keep(row)).collect();
     };
     let mut kept = keep(first);
-    let (top, floor) = (bounds(first).map_or(f64::NEG_INFINITY, |r| bottom(&r)), bounds(last).map_or(f64::INFINITY, |r| r.y));
+    let (top, floor) = (
+        bounds(first).map_or(f64::NEG_INFINITY, |r| bottom(&r)),
+        bounds(last).map_or(f64::INFINITY, |r| r.y),
+    );
     if let Some(inner) = bounds(&middle.concat()) {
         let (y, end) = (inner.y.max(top), bottom(&inner).min(floor));
-        let held = Rect { y, height: end - y, ..inner };
-        if drawable(&held) { kept.push(held); }
+        let held = Rect {
+            y,
+            height: end - y,
+            ..inner
+        };
+        if drawable(&held) {
+            kept.push(held);
+        }
     }
     kept.extend(keep(last));
     kept
@@ -155,39 +200,87 @@ pub fn halo_frame(lines: &[Rect], scale: f64, margin: f64) -> Option<HaloFrame> 
     let union = bounds(lines)?;
     let grow = margin * scale;
     let (left, top) = ((union.x - grow).floor(), (union.y - grow).floor());
-    let (width, height) = ((right(&union) + grow).ceil() - left, (bottom(&union) + grow).ceil() - top);
-    let window = Rect { x: left, y: top, width, height };
+    let (width, height) = (
+        (right(&union) + grow).ceil() - left,
+        (bottom(&union) + grow).ceil() - top,
+    );
+    let window = Rect {
+        x: left,
+        y: top,
+        width,
+        height,
+    };
     let local = lines
         .iter()
-        .map(|r| Rect { x: (r.x - left) / scale, y: (r.y - top) / scale, width: r.width / scale, height: r.height / scale })
+        .map(|r| Rect {
+            x: (r.x - left) / scale,
+            y: (r.y - top) / scale,
+            width: r.width / scale,
+            height: r.height / scale,
+        })
         .collect();
-    Some(HaloFrame { window, lines: local, width: width / scale, height: height / scale })
+    Some(HaloFrame {
+        window,
+        lines: local,
+        width: width / scale,
+        height: height / scale,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn r(x: f64, y: f64, width: f64, height: f64) -> Rect { Rect { x, y, width, height } }
+    fn r(x: f64, y: f64, width: f64, height: f64) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
 
     #[test]
     fn runs_of_one_line_merge_and_lines_stay_apart() {
         // Word or Chromium: three runs on the first line (a bold word in the middle),
         // one on the second; the lines touch without overlapping.
-        let raw = [r(100., 200., 40., 20.), r(140., 200., 30., 20.), r(170., 201., 80., 19.), r(100., 220., 120., 20.)];
-        assert_eq!(lines(&raw, None), vec![r(100., 200., 150., 20.), r(100., 220., 120., 20.)]);
+        let raw = [
+            r(100., 200., 40., 20.),
+            r(140., 200., 30., 20.),
+            r(170., 201., 80., 19.),
+            r(100., 220., 120., 20.),
+        ];
+        assert_eq!(
+            lines(&raw, None),
+            vec![r(100., 200., 150., 20.), r(100., 220., 120., 20.)]
+        );
     }
 
     #[test]
     fn a_taller_run_joins_its_line() {
-        let raw = [r(100., 200., 40., 20.), r(140., 194., 24., 30.), r(164., 200., 50., 20.), r(100., 224., 60., 20.)];
-        assert_eq!(lines(&raw, None), vec![r(100., 194., 114., 30.), r(100., 224., 60., 20.)]);
+        let raw = [
+            r(100., 200., 40., 20.),
+            r(140., 194., 24., 30.),
+            r(164., 200., 50., 20.),
+            r(100., 224., 60., 20.),
+        ];
+        assert_eq!(
+            lines(&raw, None),
+            vec![r(100., 194., 114., 30.), r(100., 224., 60., 20.)]
+        );
     }
 
     #[test]
     fn document_order_does_not_matter() {
-        let raw = [r(100., 220., 120., 20.), r(170., 200., 80., 20.), r(100., 200., 70., 20.)];
-        assert_eq!(lines(&raw, None), vec![r(100., 200., 150., 20.), r(100., 220., 120., 20.)]);
+        let raw = [
+            r(100., 220., 120., 20.),
+            r(170., 200., 80., 20.),
+            r(100., 200., 70., 20.),
+        ];
+        assert_eq!(
+            lines(&raw, None),
+            vec![r(100., 200., 150., 20.), r(100., 220., 120., 20.)]
+        );
     }
 
     #[test]
@@ -195,7 +288,10 @@ mod tests {
         let raw = [r(100., 200., 60., 20.), r(400., 200., 60., 20.)];
         assert_eq!(lines(&raw, None).len(), 2);
         // A gap no wider than the line height is a space between two runs.
-        assert_eq!(lines(&[r(100., 200., 60., 20.), r(180., 200., 60., 20.)], None), vec![r(100., 200., 140., 20.)]);
+        assert_eq!(
+            lines(&[r(100., 200., 60., 20.), r(180., 200., 60., 20.)], None),
+            vec![r(100., 200., 140., 20.)]
+        );
     }
 
     #[test]
@@ -212,7 +308,10 @@ mod tests {
             r(760., 300., 100., 20.),
             r(10., 590., 60., 20.),
         ];
-        assert_eq!(lines(&raw, window), vec![r(760., 300., 40., 20.), r(10., 590., 60., 10.)]);
+        assert_eq!(
+            lines(&raw, window),
+            vec![r(760., 300., 40., 20.), r(10., 590., 60., 10.)]
+        );
         assert!(lines(&[], window).is_empty());
         assert!(lines(&[r(900., 100., 50., 20.)], window).is_empty());
     }
@@ -220,14 +319,28 @@ mod tests {
     #[test]
     fn a_window_on_a_screen_left_of_the_primary_keeps_its_runs() {
         let window = Some(r(-1920., 100., 1200., 800.));
-        assert_eq!(lines(&[r(-1800., 300., 200., 20.)], window), vec![r(-1800., 300., 200., 20.)]);
+        assert_eq!(
+            lines(&[r(-1800., 300., 200., 20.)], window),
+            vec![r(-1800., 300., 200., 20.)]
+        );
     }
 
     #[test]
     fn beyond_64_lines_keeps_first_middle_box_and_last() {
-        let raw: Vec<Rect> = (0..MAX_LINES).map(|i| r(100., 100. + 20. * i as f64, 300. + i as f64, 20.)).collect();
+        let raw: Vec<Rect> = (0..MAX_LINES)
+            .map(|i| r(100., 100. + 20. * i as f64, 300. + i as f64, 20.))
+            .collect();
         assert_eq!(lines(&raw, None).len(), MAX_LINES);
-        let raw: Vec<Rect> = (0..200).map(|i| r(100. - (i % 3) as f64, 100. + 20. * i as f64, 300. + i as f64, 20.)).collect();
+        let raw: Vec<Rect> = (0..200)
+            .map(|i| {
+                r(
+                    100. - (i % 3) as f64,
+                    100. + 20. * i as f64,
+                    300. + i as f64,
+                    20.,
+                )
+            })
+            .collect();
         let kept = lines(&raw, None);
         assert_eq!(kept.len(), 3);
         assert_eq!(kept[0], raw[0]);
@@ -241,35 +354,74 @@ mod tests {
     fn beyond_64_segments_two_columns_keep_their_first_and_last_line_uncovered() {
         // Review n°8: 33 lines in two columns (A at x 100..160, B at x 400..460) are 66
         // segments; the middle box used to cover A0 and B32.
-        let raw: Vec<Rect> = (0..33).flat_map(|i| [r(100., 100. + 20. * i as f64, 60., 20.), r(400., 100. + 20. * i as f64, 60., 20.)]).collect();
+        let raw: Vec<Rect> = (0..33)
+            .flat_map(|i| {
+                [
+                    r(100., 100. + 20. * i as f64, 60., 20.),
+                    r(400., 100. + 20. * i as f64, 60., 20.),
+                ]
+            })
+            .collect();
         let kept = lines(&raw, None);
-        assert_eq!(kept, vec![
-            r(100., 100., 60., 20.), r(400., 100., 60., 20.),
-            r(100., 120., 360., 620.),
-            r(100., 740., 60., 20.), r(400., 740., 60., 20.),
-        ]);
+        assert_eq!(
+            kept,
+            vec![
+                r(100., 100., 60., 20.),
+                r(400., 100., 60., 20.),
+                r(100., 120., 360., 620.),
+                r(100., 740., 60., 20.),
+                r(400., 740., 60., 20.),
+            ]
+        );
         for (i, a) in kept.iter().enumerate() {
             for b in &kept[i + 1..] {
                 assert!(intersection(a, b).is_none(), "{a:?} and {b:?} overlap");
             }
         }
         // A first line of many segments is one box; so is a single line.
-        let many: Vec<Rect> = (0..40).map(|i| r(100. + 50. * i as f64, 100., 20., 20.)).chain((0..40).map(|i| r(100. + 50. * i as f64, 120., 20., 20.))).collect();
-        assert_eq!(lines(&many, None), vec![r(100., 100., 1970., 20.), r(100., 120., 1970., 20.)]);
-        let one: Vec<Rect> = (0..70).map(|i| r(100. + 50. * i as f64, 100., 20., 20.)).collect();
+        let many: Vec<Rect> = (0..40)
+            .map(|i| r(100. + 50. * i as f64, 100., 20., 20.))
+            .chain((0..40).map(|i| r(100. + 50. * i as f64, 120., 20., 20.)))
+            .collect();
+        assert_eq!(
+            lines(&many, None),
+            vec![r(100., 100., 1970., 20.), r(100., 120., 1970., 20.)]
+        );
+        let one: Vec<Rect> = (0..70)
+            .map(|i| r(100. + 50. * i as f64, 100., 20., 20.))
+            .collect();
         assert_eq!(lines(&one, None), vec![r(100., 100., 3470., 20.)]);
     }
 
     #[test]
     fn many_runs_on_few_lines_are_counted_as_lines() {
         // 300 runs on 3 lines: grouping comes before the cap.
-        let raw: Vec<Rect> = (0..300).map(|i| r(100. + 10. * (i % 100) as f64, 100. + 20. * (i / 100) as f64, 10., 20.)).collect();
-        assert_eq!(lines(&raw, None), vec![r(100., 100., 1000., 20.), r(100., 120., 1000., 20.), r(100., 140., 1000., 20.)]);
+        let raw: Vec<Rect> = (0..300)
+            .map(|i| {
+                r(
+                    100. + 10. * (i % 100) as f64,
+                    100. + 20. * (i / 100) as f64,
+                    10.,
+                    20.,
+                )
+            })
+            .collect();
+        assert_eq!(
+            lines(&raw, None),
+            vec![
+                r(100., 100., 1000., 20.),
+                r(100., 120., 1000., 20.),
+                r(100., 140., 1000., 20.)
+            ]
+        );
     }
 
     #[test]
     fn from_flat_reads_quadruples_and_ignores_a_torn_tail() {
-        assert_eq!(from_flat(&[1., 2., 3., 4., 5., 6., 7., 8., 9.]), vec![r(1., 2., 3., 4.), r(5., 6., 7., 8.)]);
+        assert_eq!(
+            from_flat(&[1., 2., 3., 4., 5., 6., 7., 8., 9.]),
+            vec![r(1., 2., 3., 4.), r(5., 6., 7., 8.)]
+        );
     }
 
     /// Physical → logical at 100 %, 150 % and 200 %, on a screen at the origin, right of it
@@ -281,19 +433,41 @@ mod tests {
             for origin in [(0., 0.), (2560., 0.), (-2880., -300.)] {
                 let physical = [
                     r(origin.0 + 301., origin.1 + 407.5, 450.25, 19. * scale),
-                    r(origin.0 + 301., origin.1 + 407.5 + 19. * scale, 212., 19. * scale),
+                    r(
+                        origin.0 + 301.,
+                        origin.1 + 407.5 + 19. * scale,
+                        212.,
+                        19. * scale,
+                    ),
                 ];
                 let frame = halo_frame(&physical, scale, HALO_MARGIN).expect("frame");
                 let w = frame.window;
-                assert!([w.x, w.y, w.width, w.height].iter().all(|v| v.fract() == 0.), "whole pixels at {scale}");
+                assert!(
+                    [w.x, w.y, w.width, w.height]
+                        .iter()
+                        .all(|v| v.fract() == 0.),
+                    "whole pixels at {scale}"
+                );
                 let union = bounds(&physical).unwrap();
                 assert!(w.x <= union.x - 12. * scale && w.y <= union.y - 12. * scale);
-                assert!(w.x + w.width >= right(&union) + 12. * scale && w.y + w.height >= bottom(&union) + 12. * scale);
+                assert!(
+                    w.x + w.width >= right(&union) + 12. * scale
+                        && w.y + w.height >= bottom(&union) + 12. * scale
+                );
                 assert!(w.x > union.x - 12. * scale - 1. && w.y > union.y - 12. * scale - 1.);
-                assert!((frame.width - w.width / scale).abs() < 1e-9 && (frame.height - w.height / scale).abs() < 1e-9);
+                assert!(
+                    (frame.width - w.width / scale).abs() < 1e-9
+                        && (frame.height - w.height / scale).abs() < 1e-9
+                );
                 for (logical, source) in frame.lines.iter().zip(physical.iter()) {
-                    assert!((logical.x * scale + w.x - source.x).abs() < 1e-9, "x at {scale}");
-                    assert!((logical.y * scale + w.y - source.y).abs() < 1e-9, "y at {scale}");
+                    assert!(
+                        (logical.x * scale + w.x - source.x).abs() < 1e-9,
+                        "x at {scale}"
+                    );
+                    assert!(
+                        (logical.y * scale + w.y - source.y).abs() < 1e-9,
+                        "y at {scale}"
+                    );
                     assert!((logical.width * scale - source.width).abs() < 1e-9);
                     assert!((logical.height * scale - source.height).abs() < 1e-9);
                     // Inside the window with the margin around it, in CSS pixels.

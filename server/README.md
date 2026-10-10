@@ -5,7 +5,7 @@ This server does not depend on the Windows UI. `model-lock.json` records public 
 ## Local trial (Windows Docker Desktop / Linux engine, or a Linux GPU server)
 
 1. Optional: copy `server/.env.example` to `server/.env`, select GPU indices/UUIDs and ports. Default Quality uses GPU 0, Fast uses GPU 1.
-2. Inspect resources: `python server/preflight.py`. It reads `server/.env` and process-environment overrides using the same precedence as Compose. A nonzero exit means the trial cannot safely start yet. This command does not start Docker or stop existing processes.
+2. Inspect resources: `python server/preflight.py`. It reads the effective configuration from `docker compose config --format json`, with the same `-f`, `--env-file` and `--profile` arguments as `start.ps1`, and keeps only each profile's GPU and published port (the resolved model is never printed). Without the Docker CLI it falls back to its own `.env` reader (comments, quotes, `${VAR:-default}`, empty values meaning the default, process environment first) and adds the warning « valeurs lues par un sous-ensemble des règles de Compose » to its report. A nonzero exit means the trial cannot safely start yet. This command does not start Docker or stop existing processes.
 3. Validate configuration: `docker compose -f server/compose.yaml --profile fast --profile quality config --quiet`.
 4. Start one profile first: `docker compose -f server/compose.yaml --profile fast up -d fast`. The first start downloads the pinned image plus about 4.08 GB of weights (engine image/cache overhead is additional). Quality downloads about 8.03 GB of weights. Do not launch while the selected GPU is occupied.
 5. Inspect health, then trial Quality separately. Run both only after verifying each budget. No CPU offload or tensor-parallel multi-GPU assumptions are made.
@@ -50,6 +50,10 @@ Move this configuration to a Linux GPU host; the client still uses the same Open
 
 `docker compose -f server/compose.yaml --profile fast --profile quality down` stops only this Compose project. Do not use `-v`: retaining volumes preserves downloaded weights and compile caches. To roll back, check out the previous release tag and start its pinned configuration; no automatic latest/nightly upgrades occur. Update profiles only after a new validation report.
 
+## Metadata archive (manual tool)
+
+`python server/fetch_metadata.py` is run by hand, never by the app, `start.ps1` or CI. For every profile in `model-lock.json` it downloads `config.json`, `generation_config.json` and `LICENSE.txt` from Hugging Face at the pinned revision (1 MB limit per file, never weights), refuses a `LICENSE.txt` that does not contain the Apache License text, and writes them with a `checksums.json` (SHA-256) under `metadata/<profile>/`. It needs network access and overwrites the archived files; review the diff before committing.
+
 ## Evaluation
 
 Use the synthetic 100-case corpus and `evaluate.py` after a server is healthy. Outputs stay in ignored `results/`; never substitute real confidential messages into the committed corpus. Human fidelity/fluency review remains necessary; preservation checks and latency are not a claim of translation superiority.
@@ -62,7 +66,7 @@ python server/evaluate.py --profile fast --concurrency 4 --measure-local-gpu
 python server/evaluate.py --profile fast --concurrency 10 --measure-local-gpu
 ```
 
-Repeat with `--profile quality`. Use `--measure-local-gpu` only on the inference
+Repeat with `--profile quality`, and `--profile general` (offered because it exists in `model-lock.json`; it uses that profile's own `generation` block). Streams are decoded per SSE event (multi-line `data:` fields are joined); a malformed event counts as a stream error. Use `--measure-local-gpu` only on the inference
 host: it samples total device VRAM once per second, including other processes,
 and reports baseline/peak MiB and availability. It is not a per-model allocation
 measurement and may miss peaks shorter than the sample interval. Without the

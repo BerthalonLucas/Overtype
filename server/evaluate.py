@@ -39,6 +39,53 @@ def percentile(values: list[float], p: float) -> float | None:
     return values[max(0, math.ceil(len(values) * p) - 1)]
 
 
+def profile_choices(lock: dict) -> list[str]:
+    return [name for name in ("fast", "quality", "general") if name in lock["profiles"]]
+
+
+def sse_events(lines):
+    """Yield each SSE event's data: lines joined by newlines, dispatched on the blank line."""
+    data: list[str] = []
+    for raw_line in lines:
+        line = raw_line.decode("utf-8").rstrip("\r\n")
+        if not line:
+            if data:
+                yield "\n".join(data)
+                data = []
+            continue
+        if line.startswith("data:"):
+            value = line[5:]
+            data.append(value[1:] if value.startswith(" ") else value)
+    if data:
+        yield "\n".join(data)
+
+
+def parse_event(event):
+    """Return [(content, finish_reason)], "error", or None for an invalid shape."""
+    if not isinstance(event, dict):
+        return None
+    if event.get("error"):
+        return "error"
+    choices = event.get("choices", [])
+    if not isinstance(choices, list):
+        return None
+    parsed = []
+    for choice in choices:
+        if not isinstance(choice, dict):
+            return None
+        delta = choice.get("delta", {})
+        if not isinstance(delta, dict):
+            return None
+        content = delta.get("content")
+        reason = choice.get("finish_reason")
+        if content is not None and not isinstance(content, str):
+            return None
+        if reason is not None and not isinstance(reason, str):
+            return None
+        parsed.append((content, reason))
+    return parsed
+
+
 def translate(case: dict, endpoint: str, alias: str, generation: dict, api_key: str = "") -> dict:
     body = {"model": alias, "messages": [{"role": "user", "content": prompt(case["text"], case["targetLanguage"])}],
             "stream": True, **generation}
@@ -58,26 +105,24 @@ def translate(case: dict, endpoint: str, alias: str, generation: dict, api_key: 
             def redirect_request(self, req, fp, code, msg, hdrs, newurl):
                 return None
         with urllib.request.build_opener(NoRedirect).open(request, timeout=120) as response:
-            for raw_line in response:
-                line = raw_line.decode("utf-8").strip()
-                if not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
+            for data in sse_events(response):
                 if data == "[DONE]":
                     done = True
                     break
-                event = json.loads(data)
-                if event.get("error"):
+                parsed = parse_event(json.loads(data))
+                if parsed is None:
+                    error = "invalid-stream-event"
+                    break
+                if parsed == "error":
                     error = "stream-error"
                     break
-                for choice in event.get("choices", []):
-                    delta = choice.get("delta", {}).get("content")
+                for delta, reason in parsed:
                     if delta:
                         if first is None:
                             first = time.perf_counter() - started
                         chunks.append(delta)
-                    if choice.get("finish_reason"):
-                        finish = choice["finish_reason"]
+                    if reason:
+                        finish = reason
     except urllib.error.HTTPError as exc:
         error = f"http-{exc.code}"  # never persist response bodies containing input/keys
     except (OSError, ValueError):
@@ -92,8 +137,9 @@ def translate(case: dict, endpoint: str, alias: str, generation: dict, api_key: 
 
 
 def main():
+    lock = json.loads((ROOT / "model-lock.json").read_text(encoding="utf-8"))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--profile", choices=["fast", "quality"], required=True)
+    parser.add_argument("--profile", choices=profile_choices(lock), required=True)
     parser.add_argument("--endpoint", help="OpenAI base URL ending in /v1")
     parser.add_argument("--concurrency", type=int, choices=[1, 4, 10], default=1)
     parser.add_argument("--limit", type=int, default=100)
@@ -103,13 +149,13 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.limit <= 100:
         parser.error("--limit must be between 1 and 100")
-    lock = json.loads((ROOT / "model-lock.json").read_text(encoding="utf-8"))
     profile = lock["profiles"][args.profile]
     endpoint = validate_endpoint(args.endpoint or f'http://127.0.0.1:{profile["port"]}/v1')
+    generation = profile.get("generation", lock["generation"])
     corpus = cases()[:args.limit]
     api_key = os.environ.get("FLOWTRANSLATE_API_KEY", "")
     if not args.skip_warmup:
-        warmup = translate(corpus[0], endpoint, profile["alias"], lock["generation"], api_key)
+        warmup = translate(corpus[0], endpoint, profile["alias"], generation, api_key)
         if not warmup["success"]:
             print(json.dumps({"status": "blocked", "reason": warmup["error"], "benchmarkExecuted": False}))
             return 2
@@ -118,7 +164,7 @@ def main():
     wall_started = time.perf_counter()
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-            results = list(pool.map(lambda case: translate(case, endpoint, profile["alias"], lock["generation"], api_key), corpus))
+            results = list(pool.map(lambda case: translate(case, endpoint, profile["alias"], generation, api_key), corpus))
     finally:
         wall_seconds = time.perf_counter() - wall_started
         memory.stop()
@@ -126,7 +172,7 @@ def main():
     totals = [r["totalSeconds"] for r in successful]
     ttfts = [r["ttftSeconds"] for r in successful if r["ttftSeconds"] is not None]
     report = {"profile": args.profile, "model": profile["repository"], "revision": profile["revision"],
-              "image": lock["image"], "generation": lock["generation"], "concurrency": args.concurrency,
+              "image": lock["image"], "generation": generation, "concurrency": args.concurrency,
               "cases": len(results), "successful": len(successful), "failed": len(results) - len(successful),
               "wallSeconds": wall_seconds, "requestsPerSecond": len(successful) / wall_seconds,
               "latencyP50Seconds": percentile(totals, .5), "latencyP95Seconds": percentile(totals, .95),

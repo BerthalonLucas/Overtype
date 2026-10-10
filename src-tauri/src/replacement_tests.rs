@@ -130,6 +130,11 @@ impl Bench {
         let window = host::foreground();
         let class = host::window_class(window);
         let sequence = host::clipboard_sequence();
+        // NATIVE-003: another application (a window of the driver's own, never the source's)
+        // writes the clipboard `delayMs` after the capture starts, whatever the source copies.
+        if let Some(text) = command["writer"]["text"].as_str() {
+            clip::write_after(text.to_owned(), millis(&command["writer"], "delayMs", 120));
+        }
         let captured = if command["copy"].as_bool().unwrap_or(false) {
             capture::clipboard_capture(window, &class)
         } else {
@@ -756,6 +761,14 @@ mod clip {
             }
         }
         true
+    }
+    /// An autonomous writer: another application copies `text` (and the bench's private format)
+    /// `delay` from now, on its own thread.
+    pub fn write_after(text: String, delay: Duration) {
+        std::thread::spawn(move || {
+            std::thread::sleep(delay);
+            write(&text, false);
+        });
     }
     /// `rich`: the text and a private format; `unkeepable`: the text and a metafile.
     pub fn seed(kind: &str, text: &str) -> Value {

@@ -541,6 +541,9 @@ pub(crate) fn clipboard_capture(
     let copied = synthetic_copy(source_window);
     let (text, origin) = match &copied {
         Ok(text) => (Some(text.clone()), CaptureOrigin::Copy),
+        // Another application wrote the clipboard meanwhile: what it holds now is not the
+        // user's own copy either (NATIVE-003).
+        Err(FOREIGN_WRITE) => (None, CaptureOrigin::Fresh),
         Err(_) => (
             usable_copy.then(read_clipboard).flatten(),
             CaptureOrigin::Fresh,
@@ -659,9 +662,35 @@ fn synthetic_copy(source_window: isize) -> Result<String, &'static str> {
         .ok_or("copied nothing readable")
 }
 
+/// The clipboard changed, but another application than the source wrote it (NATIVE-003).
+const FOREIGN_WRITE: &str = "foreign clipboard write";
+
+/// The processes that may write the copy of the window in front (NATIVE-003): its own, its
+/// focused control's and the focused UI Automation element's (a frame and its content may live
+/// in two processes); never ours.
+fn source_processes() -> Vec<u32> {
+    let window = crate::host::foreground();
+    let control = crate::host::focused_control(window).map(|(handle, _)| handle);
+    let element = focused_element().and_then(|element| element.get_process_id().ok());
+    let own = std::process::id();
+    let mut pids: Vec<u32> = [
+        Some(crate::host::window_process(window)),
+        control.map(crate::host::window_process),
+        element,
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|&pid| pid != 0 && pid != own)
+    .collect();
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
 /// One copy chord to the window in front: what it copied (None: a copy without text), the
-/// clipboard put back; `Err`: nothing was copied in time (watched a little longer), or the
-/// clipboard could not be kept whole and no key was sent.
+/// clipboard put back; `Err`: nothing was copied in time (watched a little longer), another
+/// application wrote the clipboard (neither read nor undone), or the clipboard could not be
+/// kept whole and no key was sent.
 fn copy_and_restore() -> Result<Option<String>, &'static str> {
     use crate::clipboard_guard::{self, Copied, Keeper, Unkept};
     clipboard_guard::settle_late(crate::host::last_input_tick);
@@ -669,31 +698,34 @@ fn copy_and_restore() -> Result<Option<String>, &'static str> {
         Unkept::Unkeepable => CLIPBOARD_UNKEEPABLE,
         Unkept::Busy => CLIPBOARD_BUSY,
     })?;
+    let sources = source_processes();
     crate::host::suppress_clipboard_tracking(OWN_TRAFFIC);
     let before = crate::host::clipboard_sequence();
+    let watch_late = |keeper, sources| {
+        clipboard_guard::watch_late(
+            keeper,
+            before,
+            crate::host::last_input_tick(),
+            crate::host::last_input_tick,
+            sources,
+        )
+    };
     if let Err(sent) = crate::host::send_copy_chord() {
         // QA-03-C: Ctrl+Insert copies on its key down, so a chord cut part-way may still have
         // copied the selection. The user's clipboard comes back as after any copy of ours (it
         // used to stay overwritten); what was copied is not taken: the chord did not go through.
-        if sent > 0 && clipboard_guard::take_copy(&keeper, before, COPY_SETTLE) == Copied::Nothing {
-            clipboard_guard::watch_late(
-                keeper,
-                before,
-                crate::host::last_input_tick(),
-                crate::host::last_input_tick,
-            );
+        if sent > 0
+            && clipboard_guard::take_copy(&keeper, before, COPY_SETTLE, &sources) == Copied::Nothing
+        {
+            watch_late(keeper, sources);
         }
         return Err("SendInput refused");
     }
-    match clipboard_guard::take_copy(&keeper, before, COPY_SETTLE) {
+    match clipboard_guard::take_copy(&keeper, before, COPY_SETTLE, &sources) {
         Copied::Taken { text, .. } => Ok(text),
+        Copied::Foreign => Err(FOREIGN_WRITE),
         Copied::Nothing => {
-            clipboard_guard::watch_late(
-                keeper,
-                before,
-                crate::host::last_input_tick(),
-                crate::host::last_input_tick,
-            );
+            watch_late(keeper, sources);
             Err("no clipboard change")
         }
     }
@@ -765,21 +797,28 @@ fn text_changed(
 /// selected any more makes VS Code copy its whole line: never « contains », always « equals ».
 /// The clipboard is put back as after the capture's own copy.
 fn control_copy(target: &TargetIdentity) -> Result<(), AppError> {
-    let copied = match copy_and_restore() {
-        Ok(copied) => copied,
-        Err("SendInput refused") => {
-            return Err(AppError::new(
+    let copied =
+        match copy_and_restore() {
+            Ok(copied) => copied,
+            Err("SendInput refused") => {
+                return Err(AppError::new(
+                    ErrorKind::PasteBlocked,
+                    "La vérification de la sélection a été bloquée; remplacement refusé.",
+                )
+                .because("control copy refused"))
+            }
+            Err(CLIPBOARD_UNKEEPABLE) => {
+                return Err(unkept_paste(crate::clipboard_guard::Unkept::Unkeepable))
+            }
+            Err(CLIPBOARD_BUSY) => return Err(unkept_paste(crate::clipboard_guard::Unkept::Busy)),
+            Err(FOREIGN_WRITE) => return Err(AppError::new(
                 ErrorKind::PasteBlocked,
-                "La vérification de la sélection a été bloquée; remplacement refusé.",
+                "Une autre application a écrit le presse-papiers pendant la vérification de la \
+                 sélection; remplacement refusé.",
             )
-            .because("control copy refused"))
-        }
-        Err(CLIPBOARD_UNKEEPABLE) => {
-            return Err(unkept_paste(crate::clipboard_guard::Unkept::Unkeepable))
-        }
-        Err(CLIPBOARD_BUSY) => return Err(unkept_paste(crate::clipboard_guard::Unkept::Busy)),
-        Err(_) => None,
-    };
+            .because(FOREIGN_WRITE)),
+            Err(_) => None,
+        };
     same_copy(copied.as_deref(), &target.selected_text)
 }
 

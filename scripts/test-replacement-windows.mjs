@@ -55,6 +55,7 @@ const SELECTED = 'café 😀';
 const VALUE = 'équipe 🚀';
 const SEED = 'presse-papiers riche du banc ✓';
 const UNKEEPABLE = 'texte copié avec une image Office 🖼️';
+const WRITER = 'copie d’un écrivain autonome ✍️';
 const PAGE = `<title>Banc de remplacement</title>
 <style>body{font:16px "Segoe UI",sans-serif;margin:16px}input,textarea,[contenteditable]{display:block;width:560px;margin:8px 0;font:16px "Segoe UI",sans-serif}</style>
 <input id="input" aria-label="champ"><textarea id="textarea" rows="3" aria-label="zone"></textarea>
@@ -173,7 +174,7 @@ const content = locator => locator.evaluate(el => ('value' in el ? el.value : el
 const select = (locator, start, end) => locator.evaluate((el, [s, e]) => el.setSelectionRange(s, e), [start, end]);
 const seed = async (kind = 'rich', text = SEED) => need((await driver({ op: 'clipboard-seed', kind, text })).ok, 'presse-papiers semé');
 const capture = async (details, options = {}) => {
-  const result = await driver({ op: 'capture', expect: options.expect ?? SELECTED, copy: options.copy ?? false });
+  const result = await driver({ op: 'capture', expect: options.expect ?? SELECTED, copy: options.copy ?? false, writer: options.writer });
   details.capture = result;
   return result;
 };
@@ -439,6 +440,29 @@ scenario('presse-papiers-non-conservable-copie', 'NATIVE-004 : presse-papiers no
   assert.notEqual(result.ok && result.replaceable, true, 'pas de copie synthétique remplaçable sur un presse-papiers non conservable');
   return `capture ${result.ok ? 'acceptée' : `refusée (${result.kind})`}, presse-papiers intact`;
 });
+
+// L'écrivain autonome (NATIVE-003) : une autre application (une fenêtre du pilote, jamais celle de la
+// source) écrit le presse-papiers pendant la copie synthétique, ou juste après son attente, alors que
+// la source n'a rien copié (curseur sans sélection). Son texte n'est jamais pris pour la sélection,
+// et sa copie, plus récente, n'est jamais écrasée par la restauration.
+for (const [id, delayMs, when] of [
+  ['ecrivain-autonome-pendant-copie', 120, 'pendant l’attente de la copie synthétique'],
+  ['ecrivain-autonome-tardif', 700, 'juste après l’attente de la copie (copie tardive surveillée)'],
+]) {
+  scenario(id, `NATIVE-003 : une autre application écrit le presse-papiers ${when}, rien de sélectionné`, async details => {
+    const locator = field('input');
+    await seed();
+    await prepare(locator, { selected: '' });
+    const result = await capture(details, { copy: true, expect: WRITER, writer: { text: WRITER, delayMs } });
+    await sleep(2600);
+    const clip = await driver({ op: 'clipboard-state', text: WRITER });
+    details.clipboard = clip;
+    need(clip.ok, 'presse-papiers lisible');
+    assert.ok(!(result.ok && result.matches), `le texte d’une autre application n’est jamais pris pour la sélection (capture ${result.ok ? `${result.origin}, ${result.replaceable ? 'remplaçable' : 'non remplaçable'}` : `refusée ${result.kind} ${result.reason ?? ''}`})`);
+    assert.ok(clip.textMatches && clip.benchFormat, `la copie de l’autre application reste au presse-papiers (il contient ${clip.textLength} caractères${clip.textLength === [...SEED].length ? ' : l’ancien presse-papiers, remis par-dessus' : ''})`);
+    return `capture ${result.ok ? 'acceptée sans le texte étranger' : `refusée (${result.kind}, ${result.reason})`}, copie étrangère conservée`;
+  });
+}
 
 scenario('sendinput-partiel-copie', 'NATIVE-007 : SendInput coupé pendant la copie synthétique (panne injectée)', async details => {
   const locator = field('input');

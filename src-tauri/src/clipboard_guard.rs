@@ -16,6 +16,12 @@
 //!     which only another writer takes away, never a counter;
 //!   - a copy that lands after we stopped waiting is still undone (`watch_late`), as long as
 //!     the session saw no input since (the user did nothing: that copy is ours).
+//!
+//! Lot C (Lucas, 10/10). A change of the clipboard is the source's copy only when the window that
+//! owns the clipboard belongs to one of the source's processes, checked under our session right
+//! before the read (`from_source`, NATIVE-003): another application's write is neither read as
+//! the selection nor undone. A clipboard that cannot be kept whole is never touched
+//! (`Keeper::take` refuses, NATIVE-004).
 use std::{
     ffi::c_void,
     ptr::null_mut,
@@ -228,13 +234,40 @@ pub enum Copied {
         text: Option<String>,
         restored: bool,
     },
+    /// The clipboard was written by another application than the source (NATIVE-003): nothing
+    /// was read, and nothing is put back over that newer copy.
+    Foreign,
+}
+
+/// Whether the clipboard's writer is the source (NATIVE-003): the window that owns the
+/// clipboard belongs to one of the source's processes (`sources`). A copy written without an
+/// owner window, or by any other process, is never taken for the source's: in doubt, the copy
+/// is refused, never attributed.
+pub fn from_source(owner: Option<u32>, sources: &[u32]) -> bool {
+    owner.is_some_and(|pid| pid != 0 && sources.contains(&pid))
+}
+/// The process of the window that owns the clipboard (None: no owner window).
+fn owner_process() -> Option<u32> {
+    let owner = unsafe { GetClipboardOwner() };
+    if owner.is_null() {
+        return None;
+    }
+    let mut pid = 0u32;
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+            windows::Win32::Foundation::HWND(owner),
+            Some(&mut pid),
+        );
+    }
+    (pid != 0).then_some(pid)
 }
 
 /// After a copy chord sent while the counter was `before`: waits at most `timeout` for the
-/// clipboard to change, lets the copy finish (the counter rests), then reads its text and puts
-/// the kept clipboard back within the same clipboard session. Whatever the source wrote, in
-/// however many steps, the user's clipboard comes back.
-pub fn take_copy(keeper: &Keeper, before: u32, timeout: Duration) -> Copied {
+/// clipboard to change, lets the copy finish (the counter rests), then, when the source's own
+/// processes (`sources`) wrote it, reads its text and puts the kept clipboard back within the
+/// same clipboard session. Whatever the source wrote, in however many steps, the user's
+/// clipboard comes back; what another application wrote is neither read nor overwritten.
+pub fn take_copy(keeper: &Keeper, before: u32, timeout: Duration, sources: &[u32]) -> Copied {
     let deadline = Instant::now() + timeout;
     while unsafe { GetClipboardSequenceNumber() } == before {
         if Instant::now() >= deadline {
@@ -242,10 +275,10 @@ pub fn take_copy(keeper: &Keeper, before: u32, timeout: Duration) -> Copied {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    settle_and_swap(keeper)
+    settle_and_swap(keeper, sources)
 }
 
-fn settle_and_swap(keeper: &Keeper) -> Copied {
+fn settle_and_swap(keeper: &Keeper, sources: &[u32]) -> Copied {
     let started = Instant::now();
     // Allocated before anything is emptied: a failure leaves the copy where it is.
     let prepared = prepare(keeper.formats());
@@ -272,6 +305,11 @@ fn settle_and_swap(keeper: &Keeper) -> Copied {
         // Written again while we were opening it: the copy is not finished.
         if unsafe { GetClipboardSequenceNumber() } != rested && !last_chance {
             continue;
+        }
+        // NATIVE-003: checked under our session, right before the read: the last writer of the
+        // clipboard is the source, or its copy is not ours to read nor to undo.
+        if !from_source(owner_process(), sources) {
+            return Copied::Foreign;
         }
         // The text is not there yet (emptied, to be set in a second session): wait for it.
         let has_text = unsafe { IsClipboardFormatAvailable(CF_UNICODETEXT) } != 0;
@@ -321,6 +359,8 @@ struct Late {
     before: u32,
     tick: u32,
     until: Instant,
+    /// The source's processes: only their copy is undone (NATIVE-003).
+    sources: Vec<u32>,
 }
 static LATE: std::sync::Mutex<Option<Late>> = std::sync::Mutex::new(None);
 const LATE_WINDOW: Duration = Duration::from_millis(2_500);
@@ -339,19 +379,27 @@ fn settle(late: &Late, input_tick: impl Fn() -> u32) -> bool {
         return false;
     }
     if late_copy_is_ours(late.before, sequence, late.tick, input_tick()) {
-        let _ = settle_and_swap(&late.keeper);
+        let _ = settle_and_swap(&late.keeper, &late.sources);
     }
     true
 }
-/// Keeps watching for the copy `take_copy` did not see: when it lands within 2.5 s and the
-/// user did nothing meanwhile, the kept clipboard is put back. `tick`: the session's last
-/// input when the wait ended; `input_tick` reads it again.
-pub fn watch_late(keeper: Keeper, before: u32, tick: u32, input_tick: fn() -> u32) {
+/// Keeps watching for the copy `take_copy` did not see: when it lands within 2.5 s, the user
+/// did nothing meanwhile and the source's processes (`sources`) wrote it, the kept clipboard is
+/// put back. `tick`: the session's last input when the wait ended; `input_tick` reads it again.
+/// Another application's copy in that time is left alone (NATIVE-003).
+pub fn watch_late(
+    keeper: Keeper,
+    before: u32,
+    tick: u32,
+    input_tick: fn() -> u32,
+    sources: Vec<u32>,
+) {
     *lock_late() = Some(Late {
         keeper,
         before,
         tick,
         until: Instant::now() + LATE_WINDOW,
+        sources,
     });
     let _ = std::thread::Builder::new()
         .name("clipboard-late".into())
@@ -670,8 +718,9 @@ mod tests {
         }
         read_text_locked()
     }
-    /// Writes `text` as another application would: its own window owns the clipboard.
-    fn foreign_write(steps: &[Option<&str>], pause: Duration) {
+    /// Writes `text` as another application would: its own window owns the clipboard, kept
+    /// `linger` after the last step (an application keeps the window that owns its copy).
+    fn foreign_write(steps: &[Option<&str>], pause: Duration, linger: Duration) {
         use windows::{
             core::w,
             Win32::UI::WindowsAndMessaging::{
@@ -721,12 +770,20 @@ mod tests {
             }
             std::thread::sleep(pause);
         }
+        std::thread::sleep(linger);
         unsafe {
             let _ = DestroyWindow(hwnd);
         }
     }
     fn user_copies(text: &str) {
-        foreign_write(&[Some(text)], Duration::ZERO);
+        foreign_write(&[Some(text)], Duration::ZERO, Duration::ZERO);
+    }
+    /// The source's copy, from a window that outlives the read (NATIVE-003: a copy whose owner
+    /// window is already gone has no provenance), on its own thread.
+    fn source_copies(text: &'static str) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            foreign_write(&[Some(text)], Duration::ZERO, Duration::from_millis(700))
+        })
     }
 
     #[test]
@@ -742,9 +799,10 @@ mod tests {
             foreign_write(
                 &[None, Some("premier jet"), Some("texte sélectionné")],
                 Duration::from_millis(20),
+                Duration::from_millis(600),
             )
         });
-        let copied = take_copy(&keeper, before, Duration::from_millis(800));
+        let copied = take_copy(&keeper, before, Duration::from_millis(800), &ours());
         source.join().unwrap();
         assert_eq!(
             copied,
@@ -757,10 +815,61 @@ mod tests {
         // Nothing copied in time: nothing is read, nothing is touched.
         let keeper = Keeper::take().expect("keepable clipboard");
         assert_eq!(
-            take_copy(&keeper, keeper.sequence(), Duration::from_millis(60)),
+            take_copy(
+                &keeper,
+                keeper.sequence(),
+                Duration::from_millis(60),
+                &ours()
+            ),
             Copied::Nothing
         );
         assert_eq!(text_now().as_deref(), Some("sentinelle de l'utilisateur"));
+    }
+
+    /// The test's own windows play the source: its process is the source's.
+    fn ours() -> Vec<u32> {
+        vec![std::process::id()]
+    }
+
+    #[test]
+    fn another_applications_copy_is_neither_read_nor_undone() {
+        // NATIVE-003: the owner of the clipboard must be one of the source's processes; no owner
+        // window, or an unknown source, is a doubt, and a doubt is never attributed.
+        assert!(from_source(Some(10), &[10, 12]) && from_source(Some(12), &[10, 12]));
+        assert!(!from_source(Some(11), &[10, 12]));
+        assert!(!from_source(None, &[10]) && !from_source(Some(0), &[0]));
+        assert!(!from_source(Some(10), &[]));
+        let Some(_desktop) = desktop() else { return };
+        // The source is another process (pid 4, the system's); the writer is this test's window.
+        user_copies("sentinelle de l'utilisateur");
+        let keeper = Keeper::take().expect("keepable clipboard");
+        let before = keeper.sequence();
+        let writer = std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(30));
+            user_copies("copie d’une autre application");
+        });
+        assert_eq!(
+            take_copy(&keeper, before, Duration::from_millis(800), &[4]),
+            Copied::Foreign
+        );
+        writer.join().unwrap();
+        assert_eq!(
+            text_now().as_deref(),
+            Some("copie d’une autre application"),
+            "neither read as the selection nor overwritten by the restoration"
+        );
+        // The same writer after the wait, the user idle: its copy is left alone too.
+        user_copies("sentinelle tardive");
+        let keeper = Keeper::take().expect("keepable clipboard");
+        let before = keeper.sequence();
+        watch_late(keeper, before, 77, || 77, vec![4]);
+        std::thread::sleep(Duration::from_millis(100));
+        user_copies("copie tardive d’une autre application");
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(
+            text_now().as_deref(),
+            Some("copie tardive d’une autre application")
+        );
     }
 
     #[test]
@@ -875,28 +984,33 @@ mod tests {
         let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
         assert_eq!(
-            take_copy(&keeper, before, Duration::from_millis(30)),
+            take_copy(&keeper, before, Duration::from_millis(30), &ours()),
             Copied::Nothing
         );
-        watch_late(keeper, before, 77, || 77);
+        watch_late(keeper, before, 77, || 77, ours());
         std::thread::sleep(Duration::from_millis(150));
-        user_copies("copie lente de la source");
+        let source = source_copies("copie lente de la source");
         std::thread::sleep(Duration::from_millis(400));
         assert_eq!(text_now().as_deref(), Some("sentinelle tardive"));
+        source.join().unwrap();
         // The same, but the user typed meanwhile: his clipboard is left alone.
         let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
-        watch_late(keeper, before, 77, || 78);
+        watch_late(keeper, before, 77, || 78, ours());
         user_copies("copie de l'utilisateur");
         std::thread::sleep(Duration::from_millis(300));
         assert_eq!(text_now().as_deref(), Some("copie de l'utilisateur"));
         // A new transaction settles the watch at once instead of racing with it.
         let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
-        watch_late(keeper, before, 77, || 77);
-        user_copies("copie lente, encore");
+        watch_late(keeper, before, 77, || 77, ours());
+        let source = source_copies("copie lente, encore");
+        while unsafe { GetClipboardSequenceNumber() } == before {
+            std::thread::sleep(Duration::from_millis(1));
+        }
         settle_late(|| 77);
         assert_eq!(text_now().as_deref(), Some("copie de l'utilisateur"));
         assert!(lock_late().is_none());
+        source.join().unwrap();
     }
 }

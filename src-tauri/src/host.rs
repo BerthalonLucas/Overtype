@@ -204,6 +204,17 @@ pub fn is_console_class(class: &str) -> bool {
         "ConsoleWindowClass" | "CASCADIA_HOSTING_WINDOW_CLASS"
     )
 }
+/// The process that owns a window (0: none, the window is gone).
+pub fn window_process(handle: isize) -> u32 {
+    if handle == 0 {
+        return 0;
+    }
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid));
+    }
+    pid
+}
 /// The control that has the keyboard focus in the thread of `source`, with its class.
 pub fn focused_control(source: isize) -> Option<(isize, String)> {
     let thread = unsafe { GetWindowThreadProcessId(HWND(source as *mut _), None) };

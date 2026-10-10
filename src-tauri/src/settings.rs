@@ -1890,6 +1890,27 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]
+    fn an_access_error_is_not_a_corruption() {
+        // A folder named settings.json: it exists but cannot be read as a file.
+        let root = temp_root("acces");
+        let path = root.join("settings.json");
+        fs::create_dir_all(&path).unwrap();
+        let store = SettingsStore::new(&root);
+        assert!(store.load().is_err());
+        assert!(store.load_or_recover().is_err());
+        let names: Vec<String> = fs::read_dir(&root)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            vec!["settings.json".to_string()],
+            "rien n’est renommé ni créé"
+        );
+        assert!(path.is_dir());
+        let _ = fs::remove_dir_all(root);
+    }
+    #[test]
     fn invalid_json_is_set_aside_and_the_defaults_load() {
         recover_after("recup-json", |_| b"{ pas du json".to_vec());
     }

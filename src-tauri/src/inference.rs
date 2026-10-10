@@ -731,6 +731,51 @@ mod tests {
         );
     }
     #[test]
+    fn every_split_of_a_stream_decodes_like_the_whole_stream() {
+        let stream: &[u8] = "data: {\"a\":\"é\"}
+
+: commentaire
+
+data: un
+data: deux
+
+data:sans-espace
+
+data: [DONE]
+
+"
+        .as_bytes();
+        let decode = |chunks: &[&[u8]]| {
+            let mut d = SseDecoder::default();
+            let mut items = Vec::new();
+            for chunk in chunks {
+                items.extend(d.push(chunk).unwrap());
+            }
+            assert!(d.finish().is_ok());
+            items
+        };
+        let whole = decode(&[stream]);
+        assert_eq!(
+            whole,
+            vec![
+                Item::Data("{\"a\":\"é\"}".into()),
+                Item::Data(
+                    "un
+deux"
+                        .into()
+                ),
+                Item::Data("sans-espace".into()),
+                Item::Done,
+            ]
+        );
+        for cut in 0..=stream.len() {
+            let (a, b) = stream.split_at(cut);
+            assert_eq!(decode(&[a, b]), whole, "coupure à {cut}");
+        }
+        let bytes: Vec<&[u8]> = stream.chunks(1).collect();
+        assert_eq!(decode(&bytes), whole, "octet par octet");
+    }
+    #[test]
     fn crlf_frame_is_supported() {
         let mut d = SseDecoder::default();
         assert_eq!(d.push(b"data: [DONE]\r\n\r\n").unwrap(), vec![Item::Done]);

@@ -16,11 +16,13 @@ use std::{
 
 /// The history is optional: a database that cannot open never stops the app. It opens on first
 /// use and, after a failure, is tried again at the next one (`history_unavailable` in the
-/// journal each time, never any content).
+/// journal once per run of failures, never any content: the journal is bounded).
 #[derive(Clone)]
 pub struct HistoryStore {
     path: PathBuf,
     ready: Arc<AtomicBool>,
+    /// The current run of failures is already in the journal; a successful open re-arms it.
+    reported: Arc<AtomicBool>,
     journal: Option<Arc<Diagnostics>>,
 }
 
@@ -39,6 +41,7 @@ impl HistoryStore {
         Self {
             path: root.join("history.sqlite3"),
             ready: Arc::new(AtomicBool::new(false)),
+            reported: Arc::new(AtomicBool::new(false)),
             journal,
         }
     }
@@ -51,10 +54,13 @@ impl HistoryStore {
         match self.initialize() {
             Ok(()) => {
                 self.ready.store(true, Ordering::Release);
+                self.reported.store(false, Ordering::Release);
                 Ok(())
             }
             Err(_) => {
-                self.note(DiagLevel::Error, diagnostics::HISTORY_UNAVAILABLE);
+                if !self.reported.swap(true, Ordering::AcqRel) {
+                    self.note(DiagLevel::Error, diagnostics::HISTORY_UNAVAILABLE);
+                }
                 Err(UNAVAILABLE.to_string())
             }
         }
@@ -301,6 +307,82 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]
+    fn a_deleted_row_leaves_no_trace_in_the_log_while_another_connection_stays_open() {
+        // Closing the last connection empties the log on its own: keep another one open from
+        // before the row is written, so that only the checkpoint after the deletion clears it.
+        let root = std::env::temp_dir().join(format!(
+            "flowtranslate-history-wal-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let store = HistoryStore::new(&root, None);
+        store.ensure().unwrap();
+        let other = Connection::open(root.join("history.sqlite3")).unwrap();
+        let rows = |conn: &Connection| -> i64 {
+            conn.query_row("SELECT COUNT(*) FROM history", [], |row| row.get(0))
+                .unwrap()
+        };
+        // A first read maps the shared index: from then on it holds the log open.
+        assert_eq!(rows(&other), 0);
+        let marker = "MARQUEUR-WAL-41d0e8";
+        store
+            .add(&HistoryEntry {
+                id: "trace".into(),
+                source_text: "a".into(),
+                translated_text: "b".into(),
+                action_name: marker.into(),
+                server: String::new(),
+                created_at: Utc::now().to_rfc3339(),
+            })
+            .unwrap();
+        assert_eq!(rows(&other), 1);
+        store.delete(Some("trace")).unwrap();
+        let wal = std::fs::read(root.join("history.sqlite3-wal")).unwrap_or_default();
+        assert!(
+            !wal.windows(marker.len()).any(|w| w == marker.as_bytes()),
+            "le journal WAL garde le marqueur"
+        );
+        drop(other);
+        drop(store);
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[test]
+    fn a_run_of_failures_is_journaled_once_and_a_successful_open_rearms_it() {
+        let root = std::env::temp_dir().join(format!(
+            "flowtranslate-history-once-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("history.sqlite3");
+        std::fs::write(&path, vec![0x42u8; 8192]).unwrap();
+        let journal = Arc::new(Diagnostics::new(None));
+        let store = HistoryStore::new(&root, Some(journal.clone()));
+        let unavailable = || {
+            journal
+                .list()
+                .iter()
+                .filter(|e| e.code == diagnostics::HISTORY_UNAVAILABLE)
+                .count()
+        };
+        for _ in 0..600 {
+            assert_eq!(store.ensure(), Err(UNAVAILABLE.to_string()));
+        }
+        assert_eq!(unavailable(), 1);
+        // Repaired: the open succeeds and re-arms the note.
+        std::fs::remove_file(&path).unwrap();
+        store.ensure().unwrap();
+        assert_eq!(unavailable(), 1);
+        // A later run of failures (the store made to open again) is journaled once more.
+        store.ready.store(false, Ordering::Release);
+        std::fs::remove_file(&path).unwrap();
+        std::fs::write(&path, vec![0x42u8; 8192]).unwrap();
+        for _ in 0..3 {
+            assert_eq!(store.ensure(), Err(UNAVAILABLE.to_string()));
+        }
+        assert_eq!(unavailable(), 2);
+        drop(store);
+        let _ = std::fs::remove_dir_all(root);
+    }
+    #[test]
     fn a_database_that_cannot_open_leaves_the_history_unavailable_and_retries() {
         let root = std::env::temp_dir().join(format!(
             "flowtranslate-history-broken-{}",
@@ -323,8 +405,9 @@ mod tests {
         assert_eq!(store.add(&entry), Err(UNAVAILABLE.to_string()));
         assert_eq!(store.list(), Err(UNAVAILABLE.to_string()));
         assert_eq!(store.delete(None), Err(UNAVAILABLE.to_string()));
+        // One run of failures is journaled once: the journal is bounded.
         let entries = journal.list();
-        assert_eq!(entries.len(), 4);
+        assert_eq!(entries.len(), 1);
         assert!(entries
             .iter()
             .all(|e| e.code == diagnostics::HISTORY_UNAVAILABLE && e.detail.is_none()));

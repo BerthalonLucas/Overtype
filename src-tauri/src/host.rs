@@ -1708,8 +1708,10 @@ pub(crate) mod faults {
     }
 }
 
-/// Sends Ctrl+Insert to the foreground window: the copy chord, never SIGINT.
-pub fn send_copy_chord() -> Result<(), String> {
+/// Sends Ctrl+Insert to the foreground window: the copy chord, never SIGINT. On a partial
+/// injection the keys already pressed are released, as after the paste chord (NATIVE-007: Ctrl
+/// and Insert used to stay down), and the count sent is returned.
+pub fn send_copy_chord() -> Result<(), u32> {
     let inputs = [
         key_input(VK_CONTROL, false, false),
         key_input(VK_INSERT, true, false),
@@ -1718,7 +1720,16 @@ pub fn send_copy_chord() -> Result<(), String> {
     ];
     let sent = send_chord(&inputs);
     if sent as usize != inputs.len() {
-        return Err("La copie synthétique a été bloquée.".into());
+        if sent > 0 {
+            let release = [
+                key_input(VK_INSERT, true, true),
+                key_input(VK_CONTROL, false, true),
+            ];
+            unsafe {
+                SendInput(&release, std::mem::size_of::<INPUT>() as i32);
+            }
+        }
+        return Err(sent);
     }
     Ok(())
 }

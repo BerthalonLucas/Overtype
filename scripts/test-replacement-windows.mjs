@@ -34,7 +34,6 @@ const EXPECTED_FAIL = {
   'presse-papiers-non-conservable-collage': 'NATIVE-004',
   'presse-papiers-non-conservable-copie': 'NATIVE-004',
   'fermeture-urgence-collage-engage': 'NATIVE-006',
-  'sendinput-partiel-copie': 'NATIVE-007',
   'collage-bloque-resultat-deja-present': 'NATIVE-010',
   'writer-selection-multiple': 'NATIVE-012',
   'selection-multiple-uia-simulee': 'NATIVE-012',

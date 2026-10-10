@@ -136,8 +136,9 @@
 }
 
 /* Real glass, for anything that floats. Put it on the floating element itself (it blurs what is
-   behind that element on the page: the wallpaper, a window, the text of a document). */
-.ft-glass {
+   behind that element on the page: the wallpaper, a window, the text of a document). The setup
+   window (.su-window, src/setup/setup.css) is this glass too. */
+.ft-glass, .su-window {
   background: var(--ft-float-grain), var(--ft-float-tint);
   -webkit-backdrop-filter: var(--ft-float-blur); backdrop-filter: var(--ft-float-blur);
   box-shadow: var(--ft-float-edge), var(--ft-float-rim), var(--ft-float-shadow);

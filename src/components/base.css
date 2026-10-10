@@ -19,14 +19,10 @@
 
   /* interaction colours, from the text ink */
   --ft-hover: rgb(var(--ft-ink-rgb) / .055);
-  --ft-pressed: rgb(var(--ft-ink-rgb) / .1);
   --ft-line: rgb(var(--ft-ink-rgb) / .09);
   --ft-line-strong: rgb(var(--ft-ink-rgb) / .16);
-  --ft-quiet: rgb(var(--ft-ink-rgb) / .07);
   --ft-focus: var(--ft-accent);
-  --ft-focus-ring: 0 0 0 2px var(--ft-win-bg-solid, var(--ft-bg)), 0 0 0 4px var(--ft-focus);
   --ft-field-border: rgb(var(--ft-ink-rgb) / .14);
-  --ft-field-underline: rgb(var(--ft-ink-rgb) / .38);
   --ft-disabled: .45;
 
   /* page colour fallback (outside any [data-ft-page]): the base accent */
@@ -49,14 +45,9 @@
   /* ——— material 1: WINDOW — matte, opaque, crisp ——— */
   --ft-win-bg-solid: var(--ft-bg);
   --ft-win-bg: var(--ft-bg);
-  --ft-win-blur: none;
   --ft-win-border: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .2);
-  --ft-win-rim: 0 0 0 transparent;
   --ft-win-shadow: 0 24px 64px rgb(0 0 0 / .16), 0 6px 18px rgb(0 0 0 / .08);
-  --ft-win-sheen: none;
-  --ft-titlebar-bg: transparent;
   --ft-sidebar-bg: var(--ft-sidebar);
-  --ft-sidebar-border: inset -.5px 0 0 rgb(var(--ft-ink-rgb) / .12);
   --ft-content-bg: var(--ft-bg);
   --ft-group-bg: var(--ft-surface);
   --ft-group-border: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .12);
@@ -64,10 +55,6 @@
   --ft-group-rim: 0 0 0 transparent;
   --ft-row-divider: rgb(var(--ft-ink-rgb) / .08);
   --ft-row-divider-inset: 16px;
-  --ft-nav-active-bg: var(--ft-page-soft);
-  --ft-nav-active-text: var(--ft-text);
-  --ft-nav-active-shadow: none;
-  --ft-nav-marker: transparent;
   --ft-button-shadow: 0 1px 2px rgb(0 0 0 / .1);
   --ft-secondary-bg: var(--ft-surface);
   --ft-secondary-border: 0 0 0 .5px rgb(var(--ft-ink-rgb) / .2), 0 1px 2px rgb(0 0 0 / .05);
@@ -89,7 +76,6 @@
 
   /* popovers (select, model picker, menus): matte, like a window */
   --ft-popover-bg: var(--ft-surface);
-  --ft-popover-blur: none;
   --ft-popover-shadow: 0 16px 40px rgb(0 0 0 / .16), 0 3px 8px rgb(0 0 0 / .08), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .16);
   --ft-popover-radius: 14px;
 
@@ -106,14 +92,12 @@
   /* motion bases */
   --ft-t-fast: 120ms; --ft-t: 180ms; --ft-t-slow: 320ms;
   --ft-ease-out: cubic-bezier(.23, 1, .32, 1);
-  --ft-ease-in-out: cubic-bezier(.65, 0, .35, 1);
 
 }
 .ft-scope { font-family: var(--ft-font); font-size: var(--ft-body-size); color: var(--ft-text); -webkit-font-smoothing: antialiased; }
 :root[data-theme="dark"] {
   --ft-win-border: 0 0 0 .5px rgb(255 255 255 / .14);
   --ft-win-shadow: 0 24px 64px rgb(0 0 0 / .5), 0 6px 18px rgb(0 0 0 / .3);
-  --ft-sidebar-border: inset -.5px 0 0 rgb(255 255 255 / .08);
   --ft-group-border: 0 0 0 .5px rgb(255 255 255 / .08);
   --ft-group-shadow: none;
   --ft-row-divider: rgb(255 255 255 / .07);

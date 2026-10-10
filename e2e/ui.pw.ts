@@ -607,3 +607,16 @@ test('browser settings save automatically, identify simulated checks and close b
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Simulate Ctrl + Alt + T', exact: true })).toBeVisible();
 });
+
+// FE-04 (audit Elio): the glass's live region stayed on « Translation complete » during a copy.
+test('the live status says the copy over the completion, then the completion again', async ({ page }) => {
+  await page.goto('/?window=overlay&demo=1&background=light&ui=v4');
+  const copy = page.getByRole('button', { name: 'Copy translation', exact: true });
+  await expect(copy).toBeEnabled();
+  const status = page.locator('.glass-overlay .sr-only[role="status"]');
+  await expect(status).toHaveText('Translation complete');
+  await copy.click();
+  await expect(status).toHaveText('Translation copied');
+  await expect(page.locator('.glass-overlay [role="status"]', { hasText: /Translation/ })).toHaveCount(1);
+  await expect(status).toHaveText('Translation complete', { timeout: 3000 });
+});

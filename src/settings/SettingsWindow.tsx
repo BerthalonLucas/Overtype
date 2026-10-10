@@ -19,7 +19,7 @@ import { bridge } from '../bridge';
 import { useT } from '../i18n';
 import { AppMark } from '../components/AppMark';
 import { TitleBar } from '../components/TitleBar';
-import { Button, ICON, Keycap, Notice, PageHeader, StatusDot } from '../components/controls';
+import { Button, ICON, Keycap, Notice, PageHeader, StatusDot, TooltipProvider } from '../components/controls';
 import { useReduced, useTx } from '../components/motion';
 import { Tab, TabList, TabPanel, Tabs } from '../components/nav';
 import { ScrollArea } from '../components/scroll';
@@ -204,8 +204,16 @@ const toastMs = 2600;
 const flashMs = 1600;
 const emptyConnection = { endpoint: '', apiKey: '', noKey: false };
 
-// initialPage: the page to open on when the URL names none (the lab's fixtures).
-export function SettingsWindow({ initialPage = 'general' }: { initialPage?: PageId } = {}) {
+// initialPage: the page to open on when the URL names none (the lab's fixtures). The window's one
+// tooltip provider sits at its root.
+export function SettingsWindow(props: { initialPage?: PageId } = {}) {
+  return (
+    <TooltipProvider>
+      <SettingsWindowBody {...props} />
+    </TooltipProvider>
+  );
+}
+function SettingsWindowBody({ initialPage = 'general' }: { initialPage?: PageId }) {
   const t = useT();
   const tx = useTx();
   const reduced = useReduced();

@@ -703,22 +703,46 @@ enum Body {
 /// A body counted as it arrives and never read past `MAX_BODY` (a server that streams without
 /// end costs 2 MB, not the memory of the machine).
 async fn bounded_body(response: reqwest::Response, cancel: &CancellationToken) -> Body {
+    match read_bounded(response, cancel, MAX_BODY).await {
+        Bounded::Read(body) => Body::Read(body),
+        Bounded::Truncated(_) => Body::TooLarge,
+        Bounded::Failed(error) => Body::Failed(error),
+        Bounded::Cancelled => Body::Cancelled,
+    }
+}
+
+/// How a bounded reading of a body ended.
+pub(crate) enum Bounded {
+    Read(Vec<u8>),
+    /// Past the bound: its first `max` bytes, the rest was never received.
+    Truncated(Vec<u8>),
+    Failed(reqwest::Error),
+    Cancelled,
+}
+/// A body read as it arrives, never past `max` bytes, and given up at once on `cancel`.
+pub(crate) async fn read_bounded(
+    response: reqwest::Response,
+    cancel: &CancellationToken,
+    max: usize,
+) -> Bounded {
     let mut body: Vec<u8> = Vec::new();
     let mut stream = response.bytes_stream();
     loop {
         let next = tokio::select! {
-            _ = cancel.cancelled() => return Body::Cancelled,
+            _ = cancel.cancelled() => return Bounded::Cancelled,
             next = futures_util::StreamExt::next(&mut stream) => next,
         };
         match next {
             Some(Ok(chunk)) => {
-                if body.len() + chunk.len() > MAX_BODY {
-                    return Body::TooLarge;
+                if body.len() + chunk.len() > max {
+                    let room = max - body.len();
+                    body.extend_from_slice(&chunk[..room]);
+                    return Bounded::Truncated(body);
                 }
                 body.extend_from_slice(&chunk);
             }
-            Some(Err(error)) => return Body::Failed(error),
-            None => return Body::Read(body),
+            Some(Err(error)) => return Bounded::Failed(error),
+            None => return Bounded::Read(body),
         }
     }
 }

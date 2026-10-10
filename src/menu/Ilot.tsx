@@ -23,7 +23,13 @@ import {
   type KeyInput,
 } from './keys';
 import { ilotMetrics } from './metrics';
-import { MorphSurface, type ShapeChange, type SurfaceOrigin, type SurfaceSize } from './MorphSurface';
+import {
+  MorphSurface,
+  type MorphSurfaceHandle,
+  type ShapeChange,
+  type SurfaceOrigin,
+  type SurfaceSize,
+} from './MorphSurface';
 import './ilot.css';
 
 /*
@@ -62,6 +68,8 @@ import './ilot.css';
  *                  forwards (`menu-key`), or one the window received before the Îlot listened
  *                  (src/menu/IlotStage.tsx replays them in order). A character pressed while the
  *                  field is open (a key after the one that opened it) is typed into the field.
+ *                  finishShape(): the shape's spring in flight ends at once (MorphSurface finish),
+ *                  for a pill out of sight that takes its place at once.
  *   initialMode    'compact' by default (the lab scenarios open on 'grid' or 'prompt').
  *   shape          'menu' (default) or 'pill': the same surface, never unmounted, springs to the
  *                  shape of the `pill` content. Coming back to 'menu' starts again from the
@@ -78,7 +86,10 @@ export type IlotKeyboard = 'focused' | 'injected';
 export type IlotShape = 'menu' | 'pill';
 // The content of the pill shape (the same as src/result/ResultPill.tsx ResultContent).
 export type PillContent = { key: string; size?: SurfaceSize; node: ReactNode };
-export type IlotHandle = { press: (key: string, modifiers?: Omit<KeyInput, 'key'>) => boolean };
+export type IlotHandle = {
+  press: (key: string, modifiers?: Omit<KeyInput, 'key'>) => boolean;
+  finishShape: () => void;
+};
 export type IlotProps = {
   actions: readonly IlotAction[];
   knownActions?: readonly IlotAction[];
@@ -221,6 +232,7 @@ export function Ilot({
   // the window's own keys, so only keys that came before it existed (replayed together, the first
   // one opening it) reach this, and join the text it opens with (or its value, once shown).
   const field = useRef<FieldHandle>(null);
+  const surface = useRef<MorphSurfaceHandle>(null);
   const typeInto = (input: KeyInput): boolean => {
     if (shape !== 'menu' || live.current.mode !== 'prompt' || !promptAvailable || input.isComposing) return false;
     if ([...input.key].length !== 1 || ((input.ctrlKey || input.metaKey || input.altKey) && !input.altGraph))
@@ -235,6 +247,7 @@ export function Ilot({
     ref,
     () => ({
       press: (key, modifiers) => latest.current({ key, ...modifiers }) || typeLatest.current({ key, ...modifiers }),
+      finishShape: () => surface.current?.finish(),
     }),
     [],
   );
@@ -420,6 +433,7 @@ export function Ilot({
   const contentKey = shape === 'pill' ? `pill-${pill?.key ?? ''}` : mode === 'prompt' ? `prompt-${seed.entry}` : mode;
   return (
     <MorphSurface
+      ref={surface}
       contentKey={contentKey}
       size={shape === 'pill' ? pill?.size : undefined}
       origin={origin}

@@ -358,6 +358,15 @@ button.ft-row-main:hover { background: var(--ft-hover); }
 .ft-dialog-desc { margin: 0 0 14px; font-size: 13.5px; line-height: 1.5; color: var(--ft-text-2); }
 .ft-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .ft-dialog-close { position: absolute; top: 12px; right: 12px; }
+/* The sheet: laid over its window's content (the setup's journal), its title and cross on one line. */
+.ft-sheet-layer { position: absolute; inset: 0; z-index: 20; }
+.ft-sheet-scrim { position: absolute; inset: 0; border: 0; padding: 0; background: rgb(0 0 0 / .22); border-radius: inherit; }
+.ft-sheet {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 76%; display: grid; grid-template-rows: auto minmax(0, 1fr);
+  padding: 14px 14px 8px; border-radius: var(--ft-r-group); color: var(--ft-text); background: var(--ft-win-bg-solid, var(--ft-bg)); box-shadow: var(--ft-popover-shadow);
+}
+.ft-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.ft-sheet-title { font-size: 14px; font-weight: 600; }
 
 /* Controls are not text: a double click on a button (or one that moved away) never leaves a
    selection band, like in a native Windows app. */

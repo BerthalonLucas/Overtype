@@ -34,7 +34,7 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
 .su-desk[data-native] .ft-caption-btn:last-child { border-top-right-radius: 0; }
 
 .su-setup { position: absolute; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding-top: var(--ft-titlebar-h); }
-.su-setup > :not(.su-veil, .su-log-layer) { position: relative; z-index: 1; }
+.su-setup > :not(.su-veil, .ft-sheet-layer) { position: relative; z-index: 1; }
 /* The veil of the question's colour: on glass the page veil (9 %) disappears into the blurred
    ground, a little more here. */
 .su-veil { z-index: 0; height: 300px; border-radius: var(--ft-r-float) var(--ft-r-float) 0 0;
@@ -79,6 +79,7 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
 
 /* ——— Welcome: the mark beats (lub-dub every 2.4 s), a ring leaves on each beat ——— */
 .su-welcome { display: grid; justify-items: center; gap: 16px; text-align: center; padding-bottom: 12px; }
+.su-recovered { text-align: left; }
 .su-welcome-mark { display: grid; place-items: center; margin-bottom: 14px; }
 .su-heart { --hs: 88px; position: relative; display: inline-grid; grid-template: var(--hs) / var(--hs); place-items: center; width: var(--hs); height: var(--hs); isolation: isolate; }
 .su-heart > * { grid-area: 1 / 1; }
@@ -190,15 +191,8 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
 .su-trial-bubble { padding: 7px 12px; border-radius: 14px 14px 14px 4px; font-size: 13px; color: var(--ft-text); background: var(--ft-page-soft); }
 .su-trial-ms { font-size: 12px; color: var(--ft-text-3); font-variant-numeric: tabular-nums; }
 .su-trial-failed { font-size: 12.5px; line-height: 1.4; color: var(--ft-danger); }
-/* The journal, as a sheet inside the setup window (the same panel as Settings › Diagnostic). */
-.su-log-layer { position: absolute; inset: 0; z-index: 20; }
-.su-log-scrim { position: absolute; inset: 0; border: 0; padding: 0; background: rgb(0 0 0 / .22); border-radius: inherit; }
-.su-log-sheet {
-  position: absolute; left: 12px; right: 12px; bottom: 12px; max-height: 76%; display: grid; grid-template-rows: auto minmax(0, 1fr);
-  padding: 14px 14px 8px; border-radius: var(--ft-r-group); color: var(--ft-text); background: var(--ft-win-bg-solid, var(--ft-bg)); box-shadow: var(--ft-popover-shadow);
-}
-.su-log-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-.su-log-head strong { font-size: 14px; font-weight: 600; }
+/* The journal, as a sheet inside the setup window (the shared Dialog, variant « sheet », controls.css),
+   showing the same panel as Settings › Diagnostic. */
 .su-log-scroll { min-height: 0; }
 
 /* ——— (4) Before the demo ——— */

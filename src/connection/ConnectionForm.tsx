@@ -116,23 +116,26 @@ export function ConnectionForm({
       <div className="ft-connection-url" data-field={field('endpoint')}>
         <Field label={t('conn.address')} htmlFor={urlId} hint={urlHint} problem={urlProblem}>
           {/* Enter, or leaving the field: the address is the one meant, the key may go there. */}
-          <Input
-            id={urlId}
-            value={endpoint}
-            placeholder="https://llm.exemple.com"
-            inputMode="url"
-            maxLength={endpointMaxLength}
-            onChange={(event) => set({ endpoint: cleanEndpoint(event.target.value) }, false)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && probe.held) {
-                event.preventDefault();
-                probe.start();
-              }
-            }}
-            onBlur={() => {
-              if (probe.held) probe.start();
-            }}
-          />
+          {(described) => (
+            <Input
+              id={urlId}
+              {...described}
+              value={endpoint}
+              placeholder="https://llm.exemple.com"
+              inputMode="url"
+              maxLength={endpointMaxLength}
+              onChange={(event) => set({ endpoint: cleanEndpoint(event.target.value) }, false)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && probe.held) {
+                  event.preventDefault();
+                  probe.start();
+                }
+              }}
+              onBlur={() => {
+                if (probe.held) probe.start();
+              }}
+            />
+          )}
         </Field>
         <InsecureNotice endpoint={read} />
       </div>
@@ -152,15 +155,18 @@ export function ConnectionForm({
           }
           hint={noKey ? t('conn.noKeyHint') : apiKey ? null : t('conn.keyHint')}
         >
-          <SecretInput
-            id={keyId}
-            value={apiKey}
-            onChange={(next) => set({ apiKey: cleanKey(next) }, false)}
-            placeholder={noKey ? t('conn.keyNone') : 'sk-…'}
-            disabled={noKey}
-            maxLength={apiKeyMaxLength}
-            note={apiKey ? t('conn.keyNote') : undefined}
-          />
+          {(described) => (
+            <SecretInput
+              id={keyId}
+              {...described}
+              value={apiKey}
+              onChange={(next) => set({ apiKey: cleanKey(next) }, false)}
+              placeholder={noKey ? t('conn.keyNone') : 'sk-…'}
+              disabled={noKey}
+              maxLength={apiKeyMaxLength}
+              note={apiKey ? t('conn.keyNote') : undefined}
+            />
+          )}
         </Field>
       </div>
 
@@ -168,18 +174,21 @@ export function ConnectionForm({
 
       <div data-field={field('model')}>
         <Field label={t('conn.model')} htmlFor={modelId} hint={modelHint} problem={modelProblem}>
-          <Combobox
-            id={modelId}
-            label={t('conn.model')}
-            value={model}
-            options={modelOptions(probe.models)}
-            onChange={(next) => set({ model: next }, true)}
-            disabled={probe.status !== 'ok'}
-            loading={probe.status === 'running'}
-            placeholder={t(keyMissing ? 'conn.modelNeedsKey' : 'conn.modelChoose')}
-            searchPlaceholder={t('conn.modelSearch')}
-            empty={t('conn.modelNone')}
-          />
+          {(described) => (
+            <Combobox
+              id={modelId}
+              {...described}
+              label={t('conn.model')}
+              value={model}
+              options={modelOptions(probe.models)}
+              onChange={(next) => set({ model: next }, true)}
+              disabled={probe.status !== 'ok'}
+              loading={probe.status === 'running'}
+              placeholder={t(keyMissing ? 'conn.modelNeedsKey' : 'conn.modelChoose')}
+              searchPlaceholder={t('conn.modelSearch')}
+              empty={t('conn.modelNone')}
+            />
+          )}
         </Field>
       </div>
     </div>

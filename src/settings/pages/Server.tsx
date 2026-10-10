@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, LockOpen, MessageSquareText, Plus, RotateCw, Server as ServerIcon, Trash2 } from 'lucide-react';
 import { bridge } from '../../bridge';
@@ -16,60 +16,22 @@ import {
 import { useTx } from '../../components/motion';
 import { CheckLine, CheckTrace, useCheck, type Probe } from '../../connection/Check';
 import { ConnectionForm } from '../../connection/ConnectionForm';
+import { useTryModel } from '../../connection/useTryModel';
 import { describeProblem } from '../../connection/causes';
 import { hostOf, maskedKey, normalizeEndpoint } from '../../connection/endpoint';
-import type { ProbeProblem, Server, TryResult } from '../../types';
+import type { ProbeProblem, Server } from '../../types';
 import { addServer, canAddServer, removeServer, setDefaultServer, updateServer, usable } from '../servers';
 import { InlineConfirm } from './InlineConfirm';
 import { useSettingsContext } from '../useSettingsStore';
 
-// « Essayer avec une phrase »: one fixed, synthetic sentence (never the person's text), on what
-// is typed. One try at a time; it ends by its answer or, at the latest, by the watchdog (Rust's
-// own limit is 30 s): the button never stays spinning.
-const tryWatchdogMs = 35_000;
-let trySerial = 0;
+// « Essayer avec une phrase » (src/connection/useTryModel.ts), drawn as a line of the server card.
 function TryLine({ server, ready }: { server: Server; ready: boolean }) {
   const t = useT();
   const tx = useTx();
   const language = useLanguage();
-  const [state, setState] = useState<{ busy: boolean; result: TryResult | null }>({ busy: false, result: null });
-  const current = useRef<string | null>(null);
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-      if (current.current) void bridge.cancelProbe(current.current).catch(() => undefined);
-    };
-  }, []);
-  // The answer belongs to what was tried: a changed address, key or model forgets it.
-  useEffect(() => {
-    setState((previous) => (previous.busy ? previous : { busy: false, result: null }));
-  }, [server.endpoint, server.apiKey, server.noKey, server.model]);
-  const run = async () => {
-    if (current.current) return;
-    const id = `try-${Date.now().toString(36)}-${(trySerial++).toString(36)}`;
-    current.current = id;
-    setState({ busy: true, result: null });
-    let watchdog = 0;
-    const late = new Promise<TryResult>((resolve) => {
-      watchdog = window.setTimeout(
-        () => resolve({ run: id, ok: false, problem: { step: 'try', cause: 'try.timeout' } }),
-        tryWatchdogMs,
-      );
-    });
-    const answer = bridge
-      .tryModel(id, server.endpoint, server.apiKey, server.noKey, server.model)
-      .catch((): TryResult => ({ run: id, ok: false, problem: { step: 'try', cause: 'try.server' } }));
-    const result = await Promise.race([answer, late]);
-    window.clearTimeout(watchdog);
-    if (current.current !== id) return;
-    current.current = null;
-    if (!result.ok && result.problem.cause === 'try.timeout') void bridge.cancelProbe(id).catch(() => undefined);
-    if (live.current)
-      setState({ busy: false, result: !result.ok && result.problem.cause === 'cancelled' ? null : result });
-  };
-  const result = state.result;
+  const { trial, start } = useTryModel(server);
+  const busy = trial.state === 'running';
+  const result = trial.state === 'ok' || trial.state === 'failed' ? trial : null;
   const seconds = (ms: number) =>
     t('conn.seconds', {
       seconds: new Intl.NumberFormat(locales[language], { maximumFractionDigits: 1 }).format(ms / 1000),
@@ -78,9 +40,9 @@ function TryLine({ server, ready }: { server: Server; ready: boolean }) {
     <div className="st-try">
       <Button
         size="sm"
-        icon={state.busy ? <Spinner size={14} /> : <MessageSquareText {...ICON} size={14} />}
-        onClick={() => void run()}
-        disabled={state.busy || !ready || !server.model.trim()}
+        icon={busy ? <Spinner size={14} /> : <MessageSquareText {...ICON} size={14} />}
+        onClick={() => void start()}
+        disabled={busy || !ready || !server.model.trim()}
       >
         {t('conn.try')}
       </Button>
@@ -89,14 +51,14 @@ function TryLine({ server, ready }: { server: Server; ready: boolean }) {
           <motion.span
             key={result.run}
             className="st-try-reply"
-            data-ok={result.ok ? '' : undefined}
+            data-ok={result.state === 'ok' ? '' : undefined}
             role="status"
             initial={{ opacity: 0, x: -4 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0 }}
             transition={tx('smooth')}
           >
-            {result.ok ? (
+            {result.state === 'ok' ? (
               <>
                 {t('conn.tryReply', { reply: result.reply })} <span>{seconds(result.ms)}</span>
               </>

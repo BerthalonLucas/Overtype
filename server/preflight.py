@@ -5,6 +5,7 @@ import csv
 import io
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -18,7 +19,27 @@ DEFAULTS = {
 }
 
 
+FALLBACK_WARNING = "valeurs lues par un sous-ensemble des règles de Compose"
+_AUTO = object()
+_INTERPOLATION = re.compile(r"\$(?:\{(?P<braced>[A-Za-z_][A-Za-z0-9_]*)(?:(?P<op>:?-)(?P<default>[^}]*))?\}"
+                            r"|(?P<plain>[A-Za-z_][A-Za-z0-9_]*))")
+
+
+def _interpolate(value: str, known: dict[str, str]) -> str:
+    def replace(match: re.Match) -> str:
+        name = match.group("braced") or match.group("plain")
+        current = os.environ.get(name, known.get(name))
+        op = match.group("op")
+        if op == ":-" and not current:
+            return match.group("default")
+        if op == "-" and current is None:
+            return match.group("default")
+        return current or ""
+    return _INTERPOLATION.sub(replace, value)
+
+
 def load_env_file(path: Path | None) -> dict[str, str]:
+    """Fallback reader for a subset of Compose .env rules (comments, quotes, ${VAR:-default})."""
     if path is None or not path.exists():
         return {}
     values: dict[str, str] = {}
@@ -26,26 +47,89 @@ def load_env_file(path: Path | None) -> dict[str, str]:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
+        if line.startswith("export "):
+            line = line[len("export "):].lstrip()
         if "=" not in line:
             raise ValueError(f"Invalid env line {number} in {path}")
         key, value = line.split("=", 1)
-        values[key.strip()] = value.strip().strip('"').strip("'")
+        value = value.strip()
+        if value[:1] in {"'", '"'} and value.find(value[0], 1) > 0:
+            quote = value[0]
+            value = value[1:value.index(quote, 1)]
+            if quote == '"':
+                value = _interpolate(value, values)
+        else:
+            comment = re.search(r"\s#", value)
+            if comment:
+                value = value[:comment.start()]
+            value = _interpolate(value.strip(), values)
+        values[key.strip()] = value
     return values
 
 
-def effective_settings(profile: str, gpu: str | None, env_file: Path | None) -> dict[str, dict]:
+def compose_args(profiles: list[str], env_file: Path | None) -> list[str]:
+    """Same -f, --env-file and --profile arguments as start.ps1."""
+    args = ["compose"]
+    if env_file is not None and env_file.exists():
+        args += ["--env-file", str(env_file.resolve())]
+    args += ["-f", str(ROOT / "compose.yaml")]
+    for name in profiles:
+        args += ["--profile", name]
+    return args
+
+
+def _compose_values(docker: str, profiles: list[str], env_file: Path | None) -> dict[str, dict[str, str]]:
+    result = run([docker, *compose_args(profiles, env_file), "config", "--format", "json"])
+    if result.returncode != 0:
+        # Never echo the output: it may contain the whole resolved model.
+        raise ValueError("docker compose config failed; check compose.yaml and the env file")
+    try:
+        services = json.loads(result.stdout)["services"]
+        values = {}
+        for name in profiles:
+            service = services[name]
+            gpu = service["environment"]["CUDA_VISIBLE_DEVICES"]
+            port = service["ports"][0]["published"]
+            if not isinstance(gpu, str) or not isinstance(port, (str, int)):
+                raise TypeError
+            values[name] = {"gpu": gpu, "port": str(port)}
+        return values
+    except (ValueError, KeyError, IndexError, TypeError) as exc:
+        raise ValueError("docker compose config returned an unexpected shape (GPU or port missing)") from exc
+
+
+def _fallback_values(profiles: list[str], env_file: Path | None) -> dict[str, dict[str, str]]:
     file_values = load_env_file(env_file)
-    resolved = {}
-    for name in (["fast", "quality"] if profile == "both" else [profile]):
+    values = {}
+    for name in profiles:
         prefix = name.upper()
-        selected_gpu = gpu if gpu is not None else os.environ.get(
-            f"{prefix}_GPU", file_values.get(f"{prefix}_GPU", DEFAULTS[name]["gpu"])
-        )
-        port_text = os.environ.get(
-            f"{prefix}_PORT", file_values.get(f"{prefix}_PORT", str(DEFAULTS[name]["port"]))
-        )
+        resolved = {}
+        for field, key in (("gpu", f"{prefix}_GPU"), ("port", f"{prefix}_PORT")):
+            # Compose precedence: process environment, then env file; ${VAR:-default} uses
+            # the default when the variable is unset or empty.
+            value = os.environ[key] if key in os.environ else file_values.get(key)
+            resolved[field] = value if value else str(DEFAULTS[name][field])
+        values[name] = resolved
+    return values
+
+
+def effective_settings(profile: str, gpu: str | None, env_file: Path | None, docker=_AUTO,
+                       warnings: list[str] | None = None) -> dict[str, dict]:
+    profiles = ["fast", "quality"] if profile == "both" else [profile]
+    if docker is _AUTO:
+        docker = shutil.which("docker")
+    if docker:
+        values = _compose_values(docker, profiles, env_file)
+    else:
+        values = _fallback_values(profiles, env_file)
+        if warnings is not None:
+            warnings.append(FALLBACK_WARNING)
+    resolved = {}
+    for name in profiles:
+        prefix = name.upper()
+        selected_gpu = gpu if gpu is not None else values[name]["gpu"]
         try:
-            port = int(port_text)
+            port = int(values[name]["port"])
         except ValueError as exc:
             raise ValueError(f"{prefix}_PORT must be an integer") from exc
         if not 1 <= port <= 65535:
@@ -64,8 +148,11 @@ def run(args: list[str]) -> subprocess.CompletedProcess:
 
 def inspect(profile: str, gpu: str | None = None, env_file: Path | None = ROOT / ".env") -> tuple[dict, bool]:
     lock = json.loads((ROOT / "model-lock.json").read_text(encoding="utf-8"))
-    settings = effective_settings(profile, gpu, env_file)
+    warnings: list[str] = []
+    settings = effective_settings(profile, gpu, env_file, warnings=warnings)
     report: dict = {"profile": profile, "image": lock["image"], "settings": settings, "checks": []}
+    if warnings:
+        report["warnings"] = warnings
     checks = report["checks"]
     if not shutil.which("docker"):
         checks.append({"check": "docker", "ok": False, "detail": "Docker CLI absent"})

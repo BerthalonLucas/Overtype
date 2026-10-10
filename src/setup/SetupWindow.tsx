@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowRight, ChevronLeft, Keyboard, Palette, Play, Server, Settings2, X, type LucideIcon } from 'lucide-react';
+import { ArrowRight, ChevronLeft, Keyboard, Palette, Play, Server, Settings2, type LucideIcon } from 'lucide-react';
 import { appName } from '../brand';
 import { bridge } from '../bridge';
-import { Button, ICON, IconButton, Notice, Spinner } from '../components/controls';
+import { Button, Dialog, ICON, Notice, Spinner, TooltipProvider } from '../components/controls';
 import { useReduced, useTx } from '../components/motion';
 import { ScrollArea } from '../components/scroll';
 import { TitleBar } from '../components/TitleBar';
@@ -15,7 +15,7 @@ import { withLanguage } from '../actionDefaults';
 import { t as tNow, useT, type MessageKey } from '../i18n';
 import { shortcutKeys } from '../settings/ShortcutRecorder';
 import { useRegistrations } from '../settings/registrations';
-import type { DemoEnded, Language, ProbeProblem, Theme } from '../types';
+import type { DemoEnded, Language, ProbeProblem, SettingsRecovery, Theme } from '../types';
 import { useSettings } from '../useSettings';
 import {
   canContinue,
@@ -111,7 +111,11 @@ if (!bridge.native) {
 
 export function SetupWindow() {
   const params = useMemo(() => new URLSearchParams(location.search), []);
-  return params.get('stage') === 'demo' ? <DemoStage /> : <Setup initial={params.get('step')} />;
+  return (
+    <TooltipProvider>
+      {params.get('stage') === 'demo' ? <DemoStage /> : <Setup initial={params.get('step')} />}
+    </TooltipProvider>
+  );
 }
 
 // The demo's own window: it plays, then tells Rust how it ended (the setup comes back).
@@ -149,6 +153,12 @@ function Setup({ initial }: { initial: string | null }) {
   const [phase, setPhase] = useState<Phase>('setup');
   const [modelReady, setModelReady] = useState(false);
   const [log, setLog] = useState<DiagnosticsLanding | null>(null);
+  // The journal sheet keeps showing its landing while it leaves.
+  const shownLog = useRef(log);
+  if (log) shownLog.current = log;
+  const [sheetHost, setSheetHost] = useState<HTMLDivElement | null>(null);
+  // Settings Rust could not read were set aside (settings_recovery): the welcome says where.
+  const [recovery, setRecovery] = useState<SettingsRecovery | null>(null);
   const [demoFailed, setDemoFailed] = useState(false);
   const [closing, setClosing] = useState(false);
   const [finishFailed, setFinishFailed] = useState(false);
@@ -163,6 +173,18 @@ function Setup({ initial }: { initial: string | null }) {
   useEffect(() => {
     document.title = t('setup.windowTitle', { app: appName });
   }, [t]);
+  useEffect(() => {
+    let live = true;
+    void bridge
+      .settingsRecovery()
+      .then((found) => {
+        if (live) setRecovery(found);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const go = useCallback(
     (to: SetupStep, force = false) => {
@@ -403,6 +425,13 @@ function Setup({ initial }: { initial: string | null }) {
           >
             {t('setup.welcome.text')}
           </motion.p>
+          {recovery && (
+            <Notice
+              kind="warn"
+              className="su-recovered"
+              text={t('setup.recovered', { file: recovery.backup, app: appName })}
+            />
+          )}
         </div>
       ) : step === 'appearance' ? (
         <LookScreen theme={settings.theme} language={settings.language} onTheme={setTheme} onLanguage={setLanguage} />
@@ -496,7 +525,7 @@ function Setup({ initial }: { initial: string | null }) {
             exit="out"
             transition={tx('window')}
           >
-            <div className="su-setup" data-step={step} data-ft-page={page}>
+            <div ref={setSheetHost} className="su-setup" data-step={step} data-ft-page={page}>
               {/* The faint veil of the question's colour, one per screen so colours cross-fade. */}
               <AnimatePresence initial={false}>
                 <motion.span
@@ -654,52 +683,22 @@ function Setup({ initial }: { initial: string | null }) {
                 </span>
               </footer>
 
-              <AnimatePresence>
-                {log && (
-                  <motion.div
-                    key="log"
-                    className="su-log-layer"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={tx(0.18)}
-                  >
-                    <button
-                      type="button"
-                      className="su-log-scrim"
-                      aria-label={t('setup.model.logClose')}
-                      tabIndex={-1}
-                      onClick={() => setLog(null)}
-                    />
-                    <motion.div
-                      className="su-log-sheet"
-                      role="dialog"
-                      aria-label={t('setup.model.log')}
-                      data-ft-page="diagnostic"
-                      initial={{ y: 40, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: 30, opacity: 0 }}
-                      transition={tx('smooth')}
-                    >
-                      <div className="su-log-head">
-                        <strong>{t('setup.model.log')}</strong>
-                        <IconButton
-                          label={t('setup.model.logClose')}
-                          size="sm"
-                          round
-                          autoFocus
-                          onClick={() => setLog(null)}
-                        >
-                          <X {...ICON} />
-                        </IconButton>
-                      </div>
-                      <ScrollArea className="su-log-scroll">
-                        <DiagnosticsPanel landing={log} limit={40} />
-                      </ScrollArea>
-                    </motion.div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <Dialog
+                variant="sheet"
+                open={log !== null}
+                onOpenChange={(open) => {
+                  if (!open) setLog(null);
+                }}
+                container={sheetHost}
+                className="su-log-sheet"
+                page="diagnostic"
+                title={t('setup.model.log')}
+                closeLabel={t('setup.model.logClose')}
+              >
+                <ScrollArea className="su-log-scroll">
+                  {shownLog.current && <DiagnosticsPanel landing={shownLog.current} limit={40} />}
+                </ScrollArea>
+              </Dialog>
             </div>
             <TitleBar
               onDrag={() => {

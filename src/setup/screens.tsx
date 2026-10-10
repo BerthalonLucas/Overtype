@@ -10,6 +10,7 @@ import { useTx } from '../components/motion';
 import { describeProblem } from '../connection/causes';
 import { useDuration } from '../connection/Check';
 import { ConnectionForm, type ConnectionValue } from '../connection/ConnectionForm';
+import { useTryModel } from '../connection/useTryModel';
 import { hostOf, shortModel } from '../connection/endpoint';
 import { useT, type MessageKey } from '../i18n';
 import { ShortcutRecorder, shortcutKeys } from '../settings/ShortcutRecorder';
@@ -279,13 +280,6 @@ export function ShortcutScreen({
 // The shared connection form (src/connection, imported, not forked). What is typed stays here;
 // what is saved is always an address Rust accepts (empty, or one that reads): a half-typed address
 // never makes a save fail. Under the form, one sentence to try the model.
-const TRY_WATCHDOG_MS = 35_000;
-type Trial =
-  | { state: 'idle' }
-  | { state: 'running' }
-  | { state: 'ok'; reply: string; ms: number }
-  | { state: 'failed'; text: string };
-let trySerial = 0;
 export function ModelScreen({
   store,
   settings,
@@ -302,9 +296,6 @@ export function ModelScreen({
   const duration = useDuration();
   const [value, setValue] = useState<ConnectionValue>(() => connectionOf(settings));
   const [ready, setReady] = useState(false);
-  const [trial, setTrial] = useState<Trial>({ state: 'idle' });
-  const run = useRef<string | null>(null);
-  const watchdog = useRef(0);
   const latest = useRef(settings);
   latest.current = settings;
   const change = (next: ConnectionValue, immediate: boolean) => {
@@ -314,54 +305,11 @@ export function ModelScreen({
     const endpoint = next.endpoint.trim() === '' ? '' : read.ok ? read.base : saved.endpoint;
     store.persist(withConnection(latest.current, { ...next, endpoint }), immediate);
   };
-  const stopTrial = () => {
-    window.clearTimeout(watchdog.current);
-    if (run.current) {
-      void bridge.cancelProbe(run.current).catch(() => undefined);
-      run.current = null;
-    }
-  };
-  // Whatever changes ends a try on its way: its answer would be about something else.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: any change to these fields ends the running try
-  useEffect(() => {
-    stopTrial();
-    setTrial({ state: 'idle' });
-  }, [value.endpoint, value.apiKey, value.noKey, value.model, ready]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup on unmount only
-  useEffect(
-    () => () => {
-      stopTrial();
-      onReady(false);
-    },
-    [],
-  );
-  const tryIt = async () => {
-    stopTrial();
-    const id = `try-${Date.now().toString(36)}-${(trySerial++).toString(36)}`;
-    run.current = id;
-    setTrial({ state: 'running' });
-    // Rust gives up after 30 s; if even that never comes, the button is freed here.
-    watchdog.current = window.setTimeout(() => {
-      if (run.current === id) {
-        stopTrial();
-        setTrial({ state: 'failed', text: t('setup.model.tryStalled') });
-      }
-    }, TRY_WATCHDOG_MS);
-    try {
-      const answer = await bridge.tryModel(id, value.endpoint, value.apiKey, value.noKey, value.model);
-      if (run.current !== id) return;
-      window.clearTimeout(watchdog.current);
-      run.current = null;
-      if (answer.ok) setTrial({ state: 'ok', reply: answer.reply, ms: answer.ms });
-      else if (answer.problem.cause === 'cancelled') setTrial({ state: 'idle' });
-      else setTrial({ state: 'failed', text: t('setup.model.tryFailed', describeProblem(answer.problem, t)) });
-    } catch {
-      if (run.current !== id) return;
-      window.clearTimeout(watchdog.current);
-      run.current = null;
-      setTrial({ state: 'failed', text: t('setup.model.tryStalled') });
-    }
-  };
+  // The try (src/connection/useTryModel.ts) is of what is typed; the server losing its « ready »
+  // forgets it too.
+  const { trial, start } = useTryModel(value, ready);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: on unmount only
+  useEffect(() => () => onReady(false), []);
   return (
     <div className="su-body-form">
       <ConnectionForm
@@ -387,7 +335,7 @@ export function ModelScreen({
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => void tryIt()}
+              onClick={() => void start()}
               busy={trial.state === 'running'}
               icon={<MessageSquareText {...ICON} size={14} />}
             >
@@ -400,7 +348,13 @@ export function ModelScreen({
                   <span className="su-trial-ms">{duration(trial.ms)}</span>
                 </>
               )}
-              {trial.state === 'failed' && <span className="su-trial-failed">{trial.text}</span>}
+              {trial.state === 'failed' && (
+                <span className="su-trial-failed">
+                  {trial.stalled
+                    ? t('setup.model.tryStalled')
+                    : t('setup.model.tryFailed', describeProblem(trial.problem, t))}
+                </span>
+              )}
             </span>
           </motion.div>
         )}

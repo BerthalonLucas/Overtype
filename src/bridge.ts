@@ -36,6 +36,7 @@ import type {
   Server,
   Settings,
   SettingsField,
+  SettingsRecovery,
   SettingsPage,
   ShortcutConflict,
   ShortcutStatus,
@@ -236,6 +237,13 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     }
     return undefined as T;
   }
+  // Settings Rust could not read: none in the preview, unless `?recovered=1` asks for the notice.
+  if (name === 'settings_recovery')
+    return (
+      new URLSearchParams(location.search).get('recovered') === '1'
+        ? { backup: 'settings.illisible-20261010-120000.json' }
+        : null
+    ) as T;
   if (name === 'open_demo') return undefined as T;
   if (name === 'close_demo') {
     emit<DemoEnded>('demo-ended', { done: args?.done === true });
@@ -478,6 +486,9 @@ export const bridge = {
   clearDiagnostics: () => command<void>('clear_diagnostics'),
   // The same rule as Rust's, for a hint while typing (Rust has the last word when saving).
   normalizeEndpoint,
+  // Settings Rust could not read at launch and set aside, then started from the defaults: the
+  // backup's file name (no path), or null. The setup's welcome says it.
+  settingsRecovery: () => command<SettingsRecovery | null>('settings_recovery'),
   // ——— 0.6: the setup and its demo (docs/PLAN-0.6.md §3) ———
   // Creates or shows the setup window. replay: « Revoir l'accueil » (setupDone stays as it is).
   openSetup: async (replay = false) => {

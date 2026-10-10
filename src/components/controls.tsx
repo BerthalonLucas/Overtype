@@ -115,6 +115,15 @@ export function Spinner({ size = 16 }: { size?: number }) {
 }
 
 // ——— Tooltip (Radix) ———
+// One provider per window, at its root (SettingsWindow, SetupWindow): tooltips share its skip delay
+// (moving from one to the next shows it at once). Each tooltip keeps its own delay through Root.
+export function TooltipProvider({ children }: { children: ReactNode }) {
+  return (
+    <TooltipPrimitive.Provider delayDuration={250} skipDelayDuration={200}>
+      {children}
+    </TooltipPrimitive.Provider>
+  );
+}
 export function Tooltip({
   content,
   children,
@@ -127,16 +136,14 @@ export function Tooltip({
   delay?: number;
 }) {
   return (
-    <TooltipPrimitive.Provider delayDuration={delay} skipDelayDuration={200}>
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content className="ft-tooltip" side={side} sideOffset={6} collisionPadding={8}>
-            {content}
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
+    <TooltipPrimitive.Root delayDuration={delay}>
+      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Content className="ft-tooltip" side={side} sideOffset={6} collisionPadding={8}>
+          {content}
+        </TooltipPrimitive.Content>
+      </TooltipPrimitive.Portal>
+    </TooltipPrimitive.Root>
   );
 }
 
@@ -246,6 +253,7 @@ export function Combobox({
   id,
   width,
   onOpen,
+  ...described
 }: {
   label: string;
   value: string;
@@ -260,7 +268,7 @@ export function Combobox({
   width?: number | string;
   // The list opens: the moment to refresh what it shows.
   onOpen?: () => void;
-}) {
+} & FieldControlProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const current = options.find((option) => option.value === value);
@@ -285,6 +293,7 @@ export function Combobox({
           style={width ? { width } : undefined}
           disabled={disabled}
           title={current || value ? text : undefined}
+          {...described}
         >
           <MiddleEllipsis className="ft-combobox-value" text={text} />
           {loading ? <Spinner /> : <ChevronDown className="ft-select-icon" {...ICON} aria-hidden="true" />}
@@ -533,7 +542,10 @@ export function Segmented<T extends string>({
 }
 
 // ——— Fields ———
-// Label, field, then one line under it: the hint, or the problem when there is one.
+// Label, field, then one line under it: the hint, or the problem when there is one. The control is
+// described by that line and marked invalid with a problem: a render function receives the
+// attributes to put on it (as MenuGrid does for its letters).
+export type FieldControlProps = { 'aria-describedby'?: string; 'aria-invalid'?: true };
 export function Field({
   label,
   hint,
@@ -547,21 +559,31 @@ export function Field({
   problem?: ReactNode;
   htmlFor: string;
   aside?: ReactNode;
-  children: ReactNode;
+  children: ReactNode | ((control: FieldControlProps) => ReactNode);
 }) {
+  const own = useId();
+  const hintId = `${own}-hint`;
+  const problemId = `${own}-problem`;
+  const control: FieldControlProps = problem
+    ? { 'aria-describedby': problemId, 'aria-invalid': true }
+    : hint
+      ? { 'aria-describedby': hintId }
+      : {};
   return (
     <div className="ft-field" data-invalid={problem ? '' : undefined}>
       <div className="ft-field-label">
         <label htmlFor={htmlFor}>{label}</label>
         {aside}
       </div>
-      {children}
+      {typeof children === 'function' ? children(control) : children}
       {problem ? (
-        <p className="ft-field-problem" role="alert">
+        <p id={problemId} className="ft-field-problem" role="alert">
           {problem}
         </p>
       ) : hint ? (
-        <p className="ft-field-hint">{hint}</p>
+        <p id={hintId} className="ft-field-hint">
+          {hint}
+        </p>
       ) : null}
     </div>
   );
@@ -814,7 +836,12 @@ export function KeyCombo({
   );
 }
 
-// ——— Dialog (Radix): a matte window ———
+// ——— Dialog (Radix): a matte window, or a sheet inside the window ———
+// Closed (Escape, the cross, a button of its own), the focus goes back to what had it when the
+// dialog opened: Radix gives it to its Trigger, and these dialogs have none. That element is read
+// as the dialog opens, before a field inside takes the focus (autoFocus runs before Radix's scope).
+// sheet: the setup's journal, laid over the window's content (portalled into `container`), its
+// title and cross in one line above the children; same keyboard and focus rules as the window.
 export function Dialog({
   open,
   onOpenChange,
@@ -823,6 +850,11 @@ export function Dialog({
   children,
   actions,
   width = 420,
+  variant = 'window',
+  container,
+  className,
+  page,
+  closeLabel,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -831,14 +863,98 @@ export function Dialog({
   children?: ReactNode;
   actions?: ReactNode;
   width?: number;
+  variant?: 'window' | 'sheet';
+  container?: HTMLElement | null;
+  className?: string;
+  // The page tone of the content (data-ft-page).
+  page?: string;
+  closeLabel?: string;
 }) {
   const t = useT();
   const tx = useTx();
+  const opener = useRef<HTMLElement | null>(null);
+  // A layout effect on `open` runs in the commit that opens the dialog, before Radix's portal
+  // mounts the content (and before any autoFocus inside it): the focus is still on the opener.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
+  }, [open]);
+  const focusBack = (event: Event) => {
+    event.preventDefault();
+    const target = opener.current;
+    opener.current = null;
+    if (target?.isConnected) target.focus({ preventScroll: true });
+  };
+  // Radix makes it modal (the rest is inert) without saying so: aria-modal says it.
+  const contentProps = {
+    'aria-modal': true,
+    onCloseAutoFocus: focusBack,
+    ...(description ? {} : { 'aria-describedby': undefined }),
+  };
+  const close = (
+    <DialogPrimitive.Close asChild>
+      <IconButton
+        label={closeLabel ?? t('ui.close')}
+        size="sm"
+        round
+        className={variant === 'window' ? 'ft-dialog-close' : undefined}
+      >
+        <X {...ICON} />
+      </IconButton>
+    </DialogPrimitive.Close>
+  );
+  if (variant === 'sheet')
+    return (
+      <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
+        <AnimatePresence>
+          {open && (
+            <DialogPrimitive.Portal forceMount container={container}>
+              <motion.div
+                className="ft-sheet-layer"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={tx(0.18)}
+              >
+                <DialogPrimitive.Overlay asChild forceMount>
+                  <div className="ft-sheet-scrim" />
+                </DialogPrimitive.Overlay>
+                <DialogPrimitive.Content asChild forceMount {...contentProps}>
+                  <motion.div
+                    className={cx('ft-sheet', className)}
+                    data-ft-page={page}
+                    initial={{ y: 40, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 30, opacity: 0 }}
+                    transition={tx('smooth')}
+                  >
+                    <div className="ft-sheet-head">
+                      <DialogPrimitive.Title asChild>
+                        <strong className="ft-sheet-title">{title}</strong>
+                      </DialogPrimitive.Title>
+                      {close}
+                    </div>
+                    {description && (
+                      <DialogPrimitive.Description className="ft-dialog-desc">
+                        {description}
+                      </DialogPrimitive.Description>
+                    )}
+                    {children}
+                    {actions && <div className="ft-dialog-actions">{actions}</div>}
+                  </motion.div>
+                </DialogPrimitive.Content>
+              </motion.div>
+            </DialogPrimitive.Portal>
+          )}
+        </AnimatePresence>
+      </DialogPrimitive.Root>
+    );
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
         {open && (
-          <DialogPrimitive.Portal forceMount>
+          <DialogPrimitive.Portal forceMount container={container}>
             <DialogPrimitive.Overlay asChild forceMount>
               <motion.div
                 className="ft-dialog-overlay"
@@ -849,9 +965,10 @@ export function Dialog({
               />
             </DialogPrimitive.Overlay>
             <div className="ft-dialog-center">
-              <DialogPrimitive.Content asChild forceMount {...(description ? {} : { 'aria-describedby': undefined })}>
+              <DialogPrimitive.Content asChild forceMount {...contentProps}>
                 <motion.div
-                  className="ft-scope ft-dialog"
+                  className={cx('ft-scope ft-dialog', className)}
+                  data-ft-page={page}
                   style={{ width } as CSSProperties}
                   initial={{ opacity: 0, scale: 0.96, y: 6 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -864,11 +981,7 @@ export function Dialog({
                   )}
                   {children}
                   {actions && <div className="ft-dialog-actions">{actions}</div>}
-                  <DialogPrimitive.Close asChild>
-                    <IconButton label={t('ui.close')} size="sm" round className="ft-dialog-close">
-                      <X {...ICON} />
-                    </IconButton>
-                  </DialogPrimitive.Close>
+                  {close}
                 </motion.div>
               </DialogPrimitive.Content>
             </div>

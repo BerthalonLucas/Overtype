@@ -20,6 +20,10 @@ export const setupMessages = {
     fr: 'Corrigez, traduisez et reformulez le texte sélectionné, dans n’importe quelle application.',
   },
   'setup.welcome.start': { en: 'Start the setup', fr: 'Commencer le setup' },
+  'setup.recovered': {
+    en: 'Your settings could not be read: they are kept in {file}, and {app} starts again from the default settings.',
+    fr: 'Vos réglages étaient illisibles : ils sont gardés dans {file}, et {app} repart des réglages par défaut.',
+  },
   'setup.welcome.note': {
     en: '3 questions and a short demo, about a minute.',
     fr: '3 questions et une courte démo, environ une minute.',

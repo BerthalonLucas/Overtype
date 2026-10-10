@@ -314,6 +314,22 @@ function previewScreen(): Screen {
   return { width: window.innerWidth, height: window.innerHeight, scale: 1 };
 }
 
+// What the glass's one live region says. A copy is said over the completion it follows (the region
+// then comes back to « Translation complete »), never in a second region.
+export function overlayStatus(state: {
+  streaming: boolean;
+  ilot: boolean;
+  applied: boolean;
+  complete: boolean;
+  copied: boolean;
+}): 'pill.working' | 'glass.working' | 'glass.replaced' | 'glass.copied' | 'glass.complete' | null {
+  if (state.streaming) return state.ilot ? 'pill.working' : 'glass.working';
+  if (state.applied) return 'glass.replaced';
+  if (state.copied) return 'glass.copied';
+  if (state.complete) return 'glass.complete';
+  return null;
+}
+
 function GlassSession({ controller }: { controller: TranslationController }) {
   const {
     state,
@@ -941,15 +957,16 @@ function GlassSession({ controller }: { controller: TranslationController }) {
         )}
       </AnimatePresence>
       <span className="sr-only" role="status">
-        {streaming
-          ? t(ilot ? 'pill.working' : 'glass.working')
-          : state.delivery === 'applied'
-            ? t('glass.replaced')
-            : state.phase === 'complete' && !replacing
-              ? t('glass.complete')
-              : copied
-                ? t('glass.copied')
-                : ''}
+        {(() => {
+          const key = overlayStatus({
+            streaming,
+            ilot,
+            applied: state.delivery === 'applied',
+            complete: state.phase === 'complete' && !replacing,
+            copied,
+          });
+          return key ? t(key) : '';
+        })()}
       </span>
     </motion.div>
   );

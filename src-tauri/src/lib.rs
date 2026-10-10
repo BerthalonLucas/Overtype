@@ -20,6 +20,10 @@ mod menu_memory;
 mod pasted;
 mod placement;
 mod probe;
+// The real replacement bench's native driver (scripts/test-replacement-windows.mjs): test
+// builds only, its one test ignored by default.
+#[cfg(test)]
+mod replacement_tests;
 mod selection_lines;
 mod settings;
 mod system_motion;

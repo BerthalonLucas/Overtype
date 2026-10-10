@@ -1677,6 +1677,37 @@ fn key_input(key: VIRTUAL_KEY, extended: bool, up: bool) -> INPUT {
     }
 }
 
+/// One batch of a chord: how many of `inputs` Windows took.
+fn send_chord(inputs: &[INPUT]) -> u32 {
+    #[cfg(test)]
+    if let Some(taken) = faults::take_input_budget() {
+        let taken = taken.min(inputs.len());
+        if taken == 0 {
+            return 0;
+        }
+        return unsafe { SendInput(&inputs[..taken], std::mem::size_of::<INPUT>() as i32) };
+    }
+    unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) }
+}
+
+/// Faults the real replacement bench injects (scripts/test-replacement-windows.mjs). Test
+/// builds only, per thread: never in the shipped application.
+#[cfg(test)]
+pub(crate) mod faults {
+    use std::cell::Cell;
+    thread_local! {
+        static INPUT_BUDGET: Cell<Option<usize>> = const { Cell::new(None) };
+    }
+    /// The next chord of this thread is cut after `taken` inputs, as when SendInput stops
+    /// part-way (UIPI, a desktop switch): the rest of that batch never leaves.
+    pub fn cut_next_chord(taken: usize) {
+        INPUT_BUDGET.with(|b| b.set(Some(taken)));
+    }
+    pub(super) fn take_input_budget() -> Option<usize> {
+        INPUT_BUDGET.with(Cell::take)
+    }
+}
+
 /// Sends Ctrl+Insert to the foreground window: the copy chord, never SIGINT.
 pub fn send_copy_chord() -> Result<(), String> {
     let inputs = [
@@ -1685,7 +1716,7 @@ pub fn send_copy_chord() -> Result<(), String> {
         key_input(VK_INSERT, true, true),
         key_input(VK_CONTROL, false, true),
     ];
-    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    let sent = send_chord(&inputs);
     if sent as usize != inputs.len() {
         return Err("La copie synthétique a été bloquée.".into());
     }
@@ -1702,7 +1733,7 @@ pub fn send_paste_chord() -> Result<(), u32> {
         key_input(VK_V, false, true),
         key_input(VK_CONTROL, false, true),
     ];
-    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    let sent = send_chord(&inputs);
     if sent as usize != inputs.len() {
         if sent > 0 {
             let release = [

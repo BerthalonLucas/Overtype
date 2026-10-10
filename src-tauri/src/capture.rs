@@ -63,6 +63,44 @@ pub(crate) fn ui_automation() -> Result<UIAutomation, ()> {
     })
 }
 
+/// The focused element as UI Automation answers it now (None: it does not answer).
+pub(crate) fn focused_element() -> Option<UIElement> {
+    #[cfg(test)]
+    if faults::uia_unanswered() {
+        return None;
+    }
+    ui_automation().ok()?.get_focused_element().ok()
+}
+
+/// Faults the real replacement bench injects (scripts/test-replacement-windows.mjs). Test
+/// builds only, per thread: the shipped application has no such switch, and no environment
+/// variable reaches it.
+#[cfg(test)]
+pub(crate) mod faults {
+    use std::cell::Cell;
+    use std::time::Duration;
+    thread_local! {
+        static SILENT: Cell<bool> = const { Cell::new(false) };
+        static STALL: Cell<Option<Duration>> = const { Cell::new(None) };
+    }
+    /// From now on, on this thread, UI Automation gives no focused element (a provider that
+    /// stopped answering).
+    pub fn silence_uia(silent: bool) {
+        SILENT.with(|s| s.set(silent));
+    }
+    /// The next focused-element request of this thread takes `delay` before it answers (a
+    /// provider that hangs for a while).
+    pub fn stall_next_uia(delay: Duration) {
+        STALL.with(|s| s.set(Some(delay)));
+    }
+    pub(super) fn uia_unanswered() -> bool {
+        if let Some(delay) = STALL.with(Cell::take) {
+            std::thread::sleep(delay);
+        }
+        SILENT.with(Cell::get)
+    }
+}
+
 /// What `selection` answers when the control is readable but holds no selection (none,
 /// or collapsed to the caret by a click or an arrow key).
 const NO_SELECTION: &str = "Aucune sélection active.";
@@ -73,12 +111,11 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
     let pattern = element
         .get_pattern::<UITextPattern>()
         .map_err(|_| "La sélection n’est pas accessible par UI Automation.".to_string())?;
-    let range = pattern
-        .get_selection()
-        .map_err(|_| "La sélection n’est pas accessible par UI Automation.".to_string())?
-        .into_iter()
-        .next()
-        .ok_or_else(|| NO_SELECTION.to_string())?;
+    let range = selected_range(
+        pattern
+            .get_selection()
+            .map_err(|_| "La sélection n’est pas accessible par UI Automation.".to_string())?,
+    )?;
     let text = range
         .get_text(MAX_CHARS as i32 + 1)
         .map_err(|_| "Impossible de lire la sélection.".to_string())?;
@@ -96,6 +133,15 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
         .is_some_and(|v| !v);
     let rects = range_rects(&range);
     Ok((text, rects, selection_len, range_editable))
+}
+
+/// The range a capture acts on, among those `GetSelection` gives (one per disjoint part of the
+/// selection).
+pub(crate) fn selected_range<R>(ranges: Vec<R>) -> Result<R, String> {
+    ranges
+        .into_iter()
+        .next()
+        .ok_or_else(|| NO_SELECTION.to_string())
 }
 
 /// The visible runs of a range, physical, as `GetBoundingRectangles` gives them (none when
@@ -480,7 +526,10 @@ fn read_clipboard() -> Option<String> {
 /// Without a UIA selection: copies for the user (synthetic Ctrl+Insert), else accepts a
 /// copy he made himself in the last three seconds, else nothing to translate. A copy
 /// that worked proves a selection: it can be pasted over (origin `copy`).
-fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredCapture, AppError> {
+pub(crate) fn clipboard_capture(
+    source_window: isize,
+    source_class: &str,
+) -> Result<StoredCapture, AppError> {
     let pressed_at = crate::host::now_ms();
     let changed_at = crate::host::clipboard_changed_at();
     // The user's own fresh copy may serve as the source (decision B, 01/10), never one a
@@ -614,10 +663,7 @@ pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
     let Some(runtime_id) = &target.runtime_id else {
         return Ok(());
     };
-    let Some(element) = ui_automation()
-        .ok()
-        .and_then(|a| a.get_focused_element().ok())
-    else {
+    let Some(element) = focused_element() else {
         return Ok(());
     };
     if element_changed(
@@ -746,10 +792,7 @@ pub fn readback_confirms(field_text: Option<&str>, value: &str) -> Option<bool> 
 /// Reads the focused field: UI Automation first (its value, else its document), then
 /// WM_GETTEXT on a Win32 Edit/RichEdit control. None when nothing can read it.
 pub(crate) fn field_text(window: isize) -> Option<String> {
-    if let Some(element) = ui_automation()
-        .ok()
-        .and_then(|a| a.get_focused_element().ok())
-    {
+    if let Some(element) = focused_element() {
         if let Ok(value) = element
             .get_pattern::<UIValuePattern>()
             .and_then(|p| p.get_value())
@@ -1419,6 +1462,25 @@ mod tests {
             paste(&target, "ok", false).unwrap_err().kind,
             ErrorKind::TargetChanged,
             "refused before any key or clipboard"
+        );
+    }
+
+    /// NATIVE-012 (Elio audit), KNOWN RISK, EXPECTED TO FAIL until it is fixed: a selection in
+    /// several ranges (a simulated provider giving two) must be refused, never cut down to its
+    /// first range. Today the first one is taken, so the assertion panics as declared. The fix
+    /// removes `should_panic`; the real bench reports the same risk
+    /// (`selection-multiple-uia-simulee`, scripts/test-replacement-windows.mjs).
+    #[test]
+    #[should_panic(expected = "NATIVE-012")]
+    fn known_risk_native_012_a_selection_in_several_ranges_is_refused() {
+        assert_eq!(selected_range(vec!["bloc"]), Ok("bloc"));
+        assert_eq!(
+            selected_range(Vec::<&str>::new()),
+            Err(NO_SELECTION.to_string())
+        );
+        assert!(
+            selected_range(vec!["premier bloc", "second bloc"]).is_err(),
+            "NATIVE-012: the first of two selected ranges was taken for the whole selection"
         );
     }
 

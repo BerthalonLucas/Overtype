@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useCallback, useImperativeHandle, useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'motion/react';
 import { animateSurface, surfaceRadius } from '../motion/surface';
 import {
@@ -23,6 +23,10 @@ export type SurfaceSize = { width: number; height: number };
 export type ShapeChange = { from: SurfaceSize | null; to: SurfaceSize; phase: 'start' | 'end' };
 // The side of the surface that faces the selection: 'top' when it opens below the selection.
 export type SurfaceOrigin = 'top' | 'bottom';
+// finish(): the spring in flight, if any, ends on the next frame at its shape (out of sight: the
+// Îlot's pill faded out takes its place at once, and its shape with it); its end is reported as
+// ever.
+export type MorphSurfaceHandle = { finish: () => void };
 
 export type MorphSurfaceProps = {
   contentKey: string;
@@ -33,6 +37,7 @@ export type MorphSurfaceProps = {
   originX?: string;
   className?: string;
   onShapeChange?: (change: ShapeChange) => void;
+  ref?: Ref<MorphSurfaceHandle>;
   children: ReactNode;
   // data-* attributes for the parent and the tests.
   [data: `data-${string}`]: string | undefined;
@@ -45,6 +50,7 @@ export function MorphSurface({
   originX = '50%',
   className = '',
   onShapeChange,
+  ref,
   children,
   ...data
 }: MorphSurfaceProps) {
@@ -112,6 +118,7 @@ export function MorphSurface({
     },
     [],
   );
+  useImperativeHandle(ref, () => ({ finish: () => running.current?.complete() }), []);
 
   const register = useCallback((element: HTMLElement | null) => {
     if (element) layer.current = element;

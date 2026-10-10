@@ -697,7 +697,9 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     if (!moving.current) settle();
   };
   // Out of sight: the corner takes its place at once, the region with it (the boxes painted since
-  // the surface last rested, at the new place, and the shape still on its spring, carried).
+  // the surface last rested, at the new place, and the shape still on its spring, carried). The
+  // shape takes its own at once too, faded out: it fades back in at rest, its left edge on the
+  // margin's, never still shrinking from a corner placed for its end (over the text).
   const jump = (place: IlotPlace | null, pillSide: PillSide | null) => {
     const size = shapeNow.current;
     if (!side || !size) return;
@@ -707,6 +709,7 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     span.current = [...span.current.map((shape) => boxOf(shape)), box, ...carried(box)];
     void publish(ilotRegion(presentation, side, ...span.current));
     moveCorner({ x: box.shift ?? 0, y: box.dy ?? 0 }, 'instant');
+    if (springing.current) handle.current?.finishShape();
     settle();
   };
   // Across the text (its other side, the margin), or while out of sight: fade out, jump, fade

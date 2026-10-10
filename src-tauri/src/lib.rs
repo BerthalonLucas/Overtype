@@ -1410,7 +1410,7 @@ fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, S
 /// What a shortcut opens: one action at once, or (a `menu` binding under the Îlot) the
 /// menu beside the selection, with the settings of the moment frozen for the choice.
 enum Opening {
-    Direct(Execution),
+    Direct(Box<Execution>),
     Menu(Box<Settings>),
 }
 /// The windows that draw over the source: the overlay (Îlot, pill, glass) and the halo.
@@ -1546,7 +1546,10 @@ fn capture_with_binding(
                         ))
                     }
                     _ => Ok((
-                        Opening::Direct(Execution::snapshot(&i.settings, binding.as_ref())?),
+                        Opening::Direct(Box::new(Execution::snapshot(
+                            &i.settings,
+                            binding.as_ref(),
+                        )?)),
                         None,
                         flight,
                     )),
@@ -1904,7 +1907,7 @@ fn capture_opening(
     }
     let result = match opening {
         Opening::Direct(execution) => {
-            store_capture(&app, state, captured, source, Some(execution), None)
+            store_capture(&app, state, captured, source, Some(*execution), None)
         }
         Opening::Menu(settings) => {
             // The last action chosen in this application, if it still exists. The demo reads
@@ -3790,6 +3793,7 @@ fn altgr_types(shortcut: &Shortcut) -> Option<char> {
 /// The frontend reserves the window once per form (src/layout.ts): anchored, the short
 /// glass with the menu under its pill; bottom, the reader band with the menu above its
 /// pill. The ceiling is the current screen's work area (2026-09-14), no longer 640 × 800.
+#[allow(clippy::too_many_arguments)] // Signature inherited as is: reshaping it is out of this change's scope.
 #[tauri::command]
 async fn resize_overlay(
     app: AppHandle,
@@ -4249,6 +4253,7 @@ fn cancel_probe(
 }
 /// « Essayer avec une phrase »: one fixed, synthetic sentence sent to the model being chosen
 /// (what is typed, not what is saved). The reply goes back to the window and nowhere else.
+#[allow(clippy::too_many_arguments)] // Signature inherited as is: reshaping it is out of this change's scope.
 #[tauri::command]
 async fn try_model(
     app: AppHandle,
@@ -4479,6 +4484,7 @@ fn shift_regions(regions: &[SurfaceRegion], dy: f64) -> Vec<SurfaceRegion> {
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)] // Signature inherited as is: reshaping it is out of this change's scope.
 fn finish_position(
     app: &AppHandle,
     capture_id: String,
@@ -4696,7 +4702,7 @@ fn watch_context(app: AppHandle) {
             // Dates the user's own copies (the three-second freshness rule), visible or not.
             host::track_clipboard();
             let state = app.state::<AppState>();
-            if ticks % 102857 == 0 {
+            if ticks.is_multiple_of(102857) {
                 let _ = state.history.maintain();
             }
             let snapshot = {
@@ -4707,7 +4713,7 @@ fn watch_context(app: AppHandle) {
                     // The pill left, the marks stay (Lucas, 25/09): still watched, every 105 ms.
                     let marks = i.marks.clone();
                     drop(i);
-                    if let Some(marks) = marks.filter(|_| ticks % 3 == 0 && !state.demo) {
+                    if let Some(marks) = marks.filter(|_| ticks.is_multiple_of(3) && !state.demo) {
                         watch_marks(&app, &state, &marks);
                     }
                     continue;
@@ -4764,7 +4770,7 @@ fn watch_context(app: AppHandle) {
             } else {
                 12
             };
-            if (ticks % period != 0 && suspected.is_none()) || state.demo {
+            if (!ticks.is_multiple_of(period) && suspected.is_none()) || state.demo {
                 continue;
             }
             if let Some((request_id, window, window_rect, located)) = snapshot.4 {
@@ -6439,8 +6445,10 @@ mod tests {
             invalidated: false,
             levels: levels.clone(),
         };
-        let mut settings = Settings::default();
-        settings.ui_version = UiVersion::V4;
+        let mut settings = Settings {
+            ui_version: UiVersion::V4,
+            ..Settings::default()
+        };
         assert_eq!(
             halo_scene(&settings, &stored(capture.clone())),
             None,

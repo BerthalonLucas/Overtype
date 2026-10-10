@@ -160,7 +160,9 @@ fn blit(x: i32, y: i32, width: i32, height: i32) -> Option<Vec<[u8; 3]>> {
                 // Top-down 32-bit DIB: B, G, R, unused per pixel.
                 let read = copied.then(|| {
                     std::slice::from_raw_parts(bits as *const u8, (width * height * 4) as usize)
-                        .chunks_exact(4)
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
                         .map(|p| [p[2], p[1], p[0]])
                         .collect()
                 });

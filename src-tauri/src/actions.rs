@@ -1076,8 +1076,10 @@ mod tests {
     }
     #[test]
     fn under_the_0_4_interface_a_menu_shortcut_runs_the_default_action_and_replaces() {
-        let mut settings = Settings::default();
-        settings.default_action_id = "translate".into();
+        let settings = Settings {
+            default_action_id: "translate".into(),
+            ..Settings::default()
+        };
         let menu = settings.shortcut_bindings[0].clone();
         let run = Execution::snapshot(&settings, Some(&menu)).unwrap();
         assert_eq!(

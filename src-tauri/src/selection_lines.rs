@@ -32,7 +32,9 @@ pub fn drawable(rect: &Rect) -> bool {
 /// The flat `[x, y, width, height, …]` array of `GetBoundingRectangles`, as rectangles.
 pub fn from_flat(values: &[f64]) -> Vec<Rect> {
     values
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|v| Rect {
             x: v[0],
             y: v[1],

@@ -112,11 +112,11 @@ mod tests {
     }
 
     fn vtable() -> [usize; 25] {
-        let mut slots = [other as usize; 25];
-        slots[0] = query as usize;
-        slots[1] = add_ref as usize;
-        slots[2] = release as usize;
-        slots[PUT_BROWSER_KEYS] = put as usize;
+        let mut slots = [other as *const () as usize; 25];
+        slots[0] = query as *const () as usize;
+        slots[1] = add_ref as *const () as usize;
+        slots[2] = release as *const () as usize;
+        slots[PUT_BROWSER_KEYS] = put as *const () as usize;
         slots
     }
 

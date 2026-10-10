@@ -284,6 +284,7 @@ pub fn close_choice_grace() {
 }
 /// Whether the key `vk` typed at `now` in the window `fg` is dropped by the grace that lasts
 /// until `until` (0: none) and `end` at most. `other`: Ctrl, Alt or Windows is held.
+#[allow(clippy::too_many_arguments)] // Signature inherited as is: reshaping it is out of this change's scope.
 pub fn grace_takes(
     now: u64,
     until: u64,

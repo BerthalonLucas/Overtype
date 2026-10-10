@@ -872,14 +872,16 @@ mod tests {
     fn saved_credentials_are_dpapi_encrypted_and_a_server_without_key_keeps_none() {
         let root = temp_root("key");
         let store = SettingsStore::new(&root);
-        let mut value = Settings::default();
-        value.servers = vec![
-            server("s1", "https://llm.exemple.com", "m", "synthetic-test-key"),
-            Server {
-                no_key: true,
-                ..server("s2", "http://127.0.0.1:8002", "m", "left-over-key")
-            },
-        ];
+        let value = Settings {
+            servers: vec![
+                server("s1", "https://llm.exemple.com", "m", "synthetic-test-key"),
+                Server {
+                    no_key: true,
+                    ..server("s2", "http://127.0.0.1:8002", "m", "left-over-key")
+                },
+            ],
+            ..Settings::default()
+        };
         store.save(&value).unwrap();
         let written = fs::read_to_string(&store.path).unwrap();
         assert!(!written.contains("synthetic-test-key") && !written.contains("left-over-key"));
@@ -1350,7 +1352,7 @@ mod tests {
                 "shorten",
                 "email"
             ]
-            .map(|id| key(id)),
+            .map(key),
             ["F", "T", "P", "S", "E"].map(|k| Some(k.to_string()))
         );
         assert_eq!(

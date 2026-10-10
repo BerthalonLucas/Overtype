@@ -1,5 +1,7 @@
 # Essai FlowTranslate 0.1.6 sur un autre poste
 
+> Document historique (essai 0.1.6, 10 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Ce guide accompagne le kit `FlowTranslate-0.1.6-test-kit.zip`. Il sert à installer
 le client Windows sur un poste qui n’est pas celui de Lucas et à observer la
 nouvelle interface : bulle de verre, onglet replié en bas de l’écran, anneau

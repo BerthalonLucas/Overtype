@@ -18,7 +18,9 @@ export function reducedMotionConfig(preference: MotionPreference): 'user' | 'nev
 
 // Applies the preference now and follows the system while it is « system ».
 export function applyMotion(preference: MotionPreference, root: HTMLElement = document.documentElement): () => void {
-  const update = () => { root.dataset.motion = resolveMotion(preference, systemReducesMotion()); };
+  const update = () => {
+    root.dataset.motion = resolveMotion(preference, systemReducesMotion());
+  };
   update();
   return preference === 'system' ? subscribeSystemMotion(update) : () => undefined;
 }

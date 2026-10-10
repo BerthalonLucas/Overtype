@@ -6,50 +6,7 @@ on:
 permissions:
   contents: read
 jobs:
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
-      - run: npx playwright install --with-deps chromium --only-shell
-      - run: npx playwright test
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: ui-test-failures
-          path: test-results/
-  evaluation-harness:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - run: python -m unittest discover -s server -p 'test_*.py' -v
-      - run: docker compose -f server/compose.yaml --profile fast --profile quality config --quiet
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-      - run: npm ci
-      - run: npm run build
-      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
-      - run: npm run tauri -- build --bundles nsis
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Overtype-Windows
-          path: src-tauri/target/release/bundle/nsis/*.exe
+  checks:
+    uses: ./.github/workflows/checks.yml
+    permissions:
+      contents: read

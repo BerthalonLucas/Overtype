@@ -16,7 +16,7 @@ function receive(value: SystemMotion | null | undefined) {
   const next = typeof value?.reduced === 'boolean' ? value.reduced : null;
   if (next === fromWindows) return;
   fromWindows = next;
-  listeners.forEach(listener => listener());
+  listeners.forEach((listener) => listener());
 }
 
 // Listens before asking, so that a change between the two is not lost; once per window.

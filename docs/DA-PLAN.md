@@ -1,5 +1,7 @@
 # Plan d’implémentation de la nouvelle DA (« Îlot ») — FlowTranslate 0.5
 
+> Document historique (plan exécuté de la DA Îlot, 0.5, 24 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Rédigé le 24 septembre 2026 à partir de la session labo (23–24 septembre) et d’une lecture
 complète du code (`src/`, `src-tauri/`, `e2e/`, `visual-tests/`, `docs/`). Ce document est un
 **plan**, pas du code. Il est destiné à une session Claude Code lancée sur le PC Windows de Lucas,

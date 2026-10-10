@@ -58,11 +58,21 @@ pub struct Conditions {
 }
 
 pub fn fallback(c: Conditions) -> Option<Fallback> {
-    if c.build < FIRST_BUILD { return Some(Fallback::OldWindows); }
-    if c.remote { return Some(Fallback::RemoteDesktop); }
-    if c.high_contrast { return Some(Fallback::HighContrast); }
-    if !c.transparency { return Some(Fallback::Transparency); }
-    if c.energy_saver { return Some(Fallback::EnergySaver); }
+    if c.build < FIRST_BUILD {
+        return Some(Fallback::OldWindows);
+    }
+    if c.remote {
+        return Some(Fallback::RemoteDesktop);
+    }
+    if c.high_contrast {
+        return Some(Fallback::HighContrast);
+    }
+    if !c.transparency {
+        return Some(Fallback::Transparency);
+    }
+    if c.energy_saver {
+        return Some(Fallback::EnergySaver);
+    }
     None
 }
 
@@ -77,9 +87,17 @@ pub enum Painted {
 }
 
 /// Whether the real glass shows. Windows is only read with the setting on and no native failure.
-pub fn material(setting: GlassMaterial, failed: bool, conditions: impl FnOnce() -> Conditions) -> Result<(), Painted> {
-    if setting != GlassMaterial::Glass { return Err(Painted::Setting); }
-    if failed { return Err(Painted::Native); }
+pub fn material(
+    setting: GlassMaterial,
+    failed: bool,
+    conditions: impl FnOnce() -> Conditions,
+) -> Result<(), Painted> {
+    if setting != GlassMaterial::Glass {
+        return Err(Painted::Setting);
+    }
+    if failed {
+        return Err(Painted::Native);
+    }
     match fallback(conditions()) {
         Some(reason) => Err(Painted::Fallback(reason)),
         None => Ok(()),
@@ -106,7 +124,9 @@ pub fn conditions() -> Conditions {
     let now = Instant::now();
     let mut last = LAST.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Some((at, conditions)) = *last {
-        if now.duration_since(at) < CONDITIONS_TTL { return conditions; }
+        if now.duration_since(at) < CONDITIONS_TTL {
+            return conditions;
+        }
     }
     let conditions = forced(std::env::var(FORCE_FALLBACK).ok().as_deref(), imp::read());
     *last = Some((now, conditions));
@@ -142,10 +162,18 @@ pub struct Pane {
 /// fully transparent is not drawn, a radius never exceeds half the smaller side (a « 999 px »
 /// pill), coordinates stay within ±32 000 px and no more than `MAX_SHAPES` are kept.
 pub fn panes(shapes: &[Shape], scale: f64) -> Vec<Pane> {
-    let scale = if scale.is_finite() { scale.clamp(0.5, 8.) } else { 1. };
+    let scale = if scale.is_finite() {
+        scale.clamp(0.5, 8.)
+    } else {
+        1.
+    };
     shapes
         .iter()
-        .filter(|s| [s.x, s.y, s.width, s.height, s.radius, s.opacity].iter().all(|v| v.is_finite()))
+        .filter(|s| {
+            [s.x, s.y, s.width, s.height, s.radius, s.opacity]
+                .iter()
+                .all(|v| v.is_finite())
+        })
         .filter(|s| s.width >= 1. && s.height >= 1. && s.opacity > 0.004)
         .take(MAX_SHAPES)
         .map(|s| {
@@ -180,7 +208,14 @@ static FAILED: AtomicBool = AtomicBool::new(false);
 /// Returns whether the real glass shows, so the page knows which material to paint; the
 /// second value is the cause of a native failure, the one time it happens (for the journal:
 /// an error code of Windows, never anything of the user's).
-pub fn frame(label: &str, hwnd: isize, seq: u64, shapes: &[Shape], scale: f64, setting: GlassMaterial) -> (bool, Option<String>) {
+pub fn frame(
+    label: &str,
+    hwnd: isize,
+    seq: u64,
+    shapes: &[Shape],
+    scale: f64,
+    setting: GlassMaterial,
+) -> (bool, Option<String>) {
     let real = material(setting, FAILED.load(Ordering::Acquire), conditions).is_ok();
     if !real {
         imp::clear(label);
@@ -208,8 +243,12 @@ pub fn hide(app: &AppHandle, label: &'static str) {
 /// as soon as created, the setup window was a white rectangle for four frames, then an empty
 /// frame with a shadow, before its page faded in (filmed). A cloaked window still counts as
 /// visible, so its page runs and draws meanwhile. Any thread.
-pub fn veil(hwnd: isize) { imp::cloak(hwnd, true); }
-pub fn unveil(hwnd: isize) { imp::cloak(hwnd, false); }
+pub fn veil(hwnd: isize) {
+    imp::cloak(hwnd, true);
+}
+pub fn unveil(hwnd: isize) {
+    imp::cloak(hwnd, false);
+}
 
 /// The window is destroyed (the setup closes): its visual tree goes with it. Any thread.
 pub fn forget(app: &AppHandle, label: &'static str) {
@@ -222,20 +261,35 @@ mod imp {
     use std::cell::RefCell;
     use std::collections::HashMap;
     use windows::core::{s, w, Interface, PCWSTR};
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_TRANSITIONS_FORCEDISABLED, DWMWA_USE_HOSTBACKDROPBRUSH};
-    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-    use windows::Win32::System::Registry::{RegGetValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RRF_RT_REG_SZ};
-    use windows::Win32::System::WinRT::Composition::ICompositorDesktopInterop;
-    use windows::Win32::System::WinRT::{CreateDispatcherQueueController, DispatcherQueueOptions, DQTAT_COM_NONE, DQTYPE_THREAD_CURRENT};
-    use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
-    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, IsWindow, SystemParametersInfoW, SM_REMOTESESSION, SPI_GETHIGHCONTRAST, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS};
     use windows::System::{DispatcherQueue, DispatcherQueueController};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Dwm::{
+        DwmSetWindowAttribute, DWMWA_CLOAK, DWMWA_TRANSITIONS_FORCEDISABLED,
+        DWMWA_USE_HOSTBACKDROPBRUSH,
+    };
+    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+    use windows::Win32::System::Registry::{
+        RegGetValueW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RRF_RT_REG_SZ,
+    };
+    use windows::Win32::System::WinRT::Composition::ICompositorDesktopInterop;
+    use windows::Win32::System::WinRT::{
+        CreateDispatcherQueueController, DispatcherQueueOptions, DQTAT_COM_NONE,
+        DQTYPE_THREAD_CURRENT,
+    };
+    use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, IsWindow, SystemParametersInfoW, SM_REMOTESESSION, SPI_GETHIGHCONTRAST,
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+    };
     use windows::UI::Composition::Desktop::DesktopWindowTarget;
-    use windows::UI::Composition::{CompositionBrush, CompositionRoundedRectangleGeometry, Compositor, ContainerVisual};
+    use windows::UI::Composition::{
+        CompositionBrush, CompositionRoundedRectangleGeometry, Compositor, ContainerVisual,
+    };
     use windows_numerics::Vector2;
 
-    fn v2(x: f32, y: f32) -> Vector2 { Vector2 { X: x, Y: y } }
+    fn v2(x: f32, y: f32) -> Vector2 {
+        Vector2 { X: x, Y: y }
+    }
 
     /// One surface: a container the size of the window, clipped to the rounded rectangle, with
     /// the host backdrop inside. Kept and reused from one frame to the next.
@@ -266,13 +320,21 @@ mod imp {
     // Everything of the compositor lives on the main thread, where the windows are.
     thread_local! { static GLASS: RefCell<Glass> = RefCell::new(Glass::default()); }
 
-    fn text(error: windows::core::Error) -> String { format!("0x{:08X}", error.code().0) }
+    fn text(error: windows::core::Error) -> String {
+        format!("0x{:08X}", error.code().0)
+    }
 
     impl Glass {
         fn compositor(&mut self) -> windows::core::Result<(Compositor, CompositionBrush)> {
-            if let (Some(compositor), Some(brush)) = (&self.compositor, &self.brush) { return Ok((compositor.clone(), brush.clone())); }
+            if let (Some(compositor), Some(brush)) = (&self.compositor, &self.brush) {
+                return Ok((compositor.clone(), brush.clone()));
+            }
             if DispatcherQueue::GetForCurrentThread().is_err() {
-                let options = DispatcherQueueOptions { dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32, threadType: DQTYPE_THREAD_CURRENT, apartmentType: DQTAT_COM_NONE };
+                let options = DispatcherQueueOptions {
+                    dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
+                    threadType: DQTYPE_THREAD_CURRENT,
+                    apartmentType: DQTAT_COM_NONE,
+                };
                 self.queue = Some(unsafe { CreateDispatcherQueueController(options) }?);
             }
             let compositor = Compositor::new()?;
@@ -284,15 +346,31 @@ mod imp {
 
         fn surface(&mut self, label: &str, hwnd: isize) -> windows::core::Result<&mut Surface> {
             // A window created again under the same label (the setup, reopened) starts afresh.
-            if self.surfaces.get(label).is_some_and(|surface| surface.hwnd != hwnd) { self.drop_surface(label); }
+            if self
+                .surfaces
+                .get(label)
+                .is_some_and(|surface| surface.hwnd != hwnd)
+            {
+                self.drop_surface(label);
+            }
             if !self.surfaces.contains_key(label) {
                 let (compositor, _) = self.compositor()?;
                 let window = HWND(hwnd as *mut _);
                 unsafe {
                     // Without it the host backdrop of a Win32 window is black.
                     let on = 1i32;
-                    DwmSetWindowAttribute(window, DWMWA_USE_HOSTBACKDROPBRUSH, &on as *const i32 as *const _, std::mem::size_of::<i32>() as u32)?;
-                    let _ = DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &on as *const i32 as *const _, std::mem::size_of::<i32>() as u32);
+                    DwmSetWindowAttribute(
+                        window,
+                        DWMWA_USE_HOSTBACKDROPBRUSH,
+                        &on as *const i32 as *const _,
+                        std::mem::size_of::<i32>() as u32,
+                    )?;
+                    let _ = DwmSetWindowAttribute(
+                        window,
+                        DWMWA_TRANSITIONS_FORCEDISABLED,
+                        &on as *const i32 as *const _,
+                        std::mem::size_of::<i32>() as u32,
+                    );
                 }
                 let interop: ICompositorDesktopInterop = compositor.cast()?;
                 // Not topmost: under the window's children, so under the transparent WebView.
@@ -300,7 +378,16 @@ mod imp {
                 let root = compositor.CreateContainerVisual()?;
                 root.SetRelativeSizeAdjustment(v2(1., 1.))?;
                 target.SetRoot(&root)?;
-                self.surfaces.insert(label.to_string(), Surface { hwnd, seq: 0, target, root, slots: Vec::new() });
+                self.surfaces.insert(
+                    label.to_string(),
+                    Surface {
+                        hwnd,
+                        seq: 0,
+                        target,
+                        root,
+                        slots: Vec::new(),
+                    },
+                );
             }
             Ok(self.surfaces.get_mut(label).expect("just inserted"))
         }
@@ -309,14 +396,21 @@ mod imp {
             if let Some(surface) = self.surfaces.remove(label) {
                 // The handle may already be gone: nothing to tell Windows then.
                 if unsafe { IsWindow(Some(HWND(surface.hwnd as *mut _))) }.as_bool() {
-                    let _ = surface.root.Children().and_then(|children| children.RemoveAll());
+                    let _ = surface
+                        .root
+                        .Children()
+                        .and_then(|children| children.RemoveAll());
                 }
                 let _ = surface.target.Close();
             }
         }
     }
 
-    fn slot(compositor: &Compositor, brush: &CompositionBrush, root: &ContainerVisual) -> windows::core::Result<Slot> {
+    fn slot(
+        compositor: &Compositor,
+        brush: &CompositionBrush,
+        root: &ContainerVisual,
+    ) -> windows::core::Result<Slot> {
         let visual = compositor.CreateContainerVisual()?;
         visual.SetRelativeSizeAdjustment(v2(1., 1.))?;
         let geometry = compositor.CreateRoundedRectangleGeometry()?;
@@ -327,14 +421,26 @@ mod imp {
         visual.Children()?.InsertAtTop(&blur)?;
         visual.SetIsVisible(false)?;
         root.Children()?.InsertAtTop(&visual)?;
-        Ok(Slot { visual, geometry, shown: None })
+        Ok(Slot {
+            visual,
+            geometry,
+            shown: None,
+        })
     }
 
-    fn apply_panes(glass: &mut Glass, label: &str, hwnd: isize, seq: u64, panes: &[Pane]) -> windows::core::Result<()> {
+    fn apply_panes(
+        glass: &mut Glass,
+        label: &str,
+        hwnd: isize,
+        seq: u64,
+        panes: &[Pane],
+    ) -> windows::core::Result<()> {
         let (compositor, brush) = glass.compositor()?;
         let surface = glass.surface(label, hwnd)?;
         // Messages of one page are numbered; one that arrives after a later one is dropped.
-        if seq < surface.seq { return Ok(()); }
+        if seq < surface.seq {
+            return Ok(());
+        }
         surface.seq = seq;
         while surface.slots.len() < panes.len() {
             let slot = slot(&compositor, &brush, &surface.root)?;
@@ -342,14 +448,19 @@ mod imp {
         }
         for (index, slot) in surface.slots.iter_mut().enumerate() {
             let pane = panes.get(index).copied();
-            if slot.shown == pane { continue; }
+            if slot.shown == pane {
+                continue;
+            }
             match pane {
                 Some(pane) => {
                     slot.geometry.SetOffset(v2(pane.x, pane.y))?;
                     slot.geometry.SetSize(v2(pane.width, pane.height))?;
-                    slot.geometry.SetCornerRadius(v2(pane.radius, pane.radius))?;
+                    slot.geometry
+                        .SetCornerRadius(v2(pane.radius, pane.radius))?;
                     slot.visual.SetOpacity(pane.opacity)?;
-                    if slot.shown.is_none() { slot.visual.SetIsVisible(true)?; }
+                    if slot.shown.is_none() {
+                        slot.visual.SetIsVisible(true)?;
+                    }
                 }
                 None => slot.visual.SetIsVisible(false)?,
             }
@@ -371,8 +482,12 @@ mod imp {
     /// next frame.
     pub fn clear(label: &str) {
         GLASS.with(|glass| {
-            let Ok(mut glass) = glass.try_borrow_mut() else { return };
-            let Some(surface) = glass.surfaces.get_mut(label) else { return };
+            let Ok(mut glass) = glass.try_borrow_mut() else {
+                return;
+            };
+            let Some(surface) = glass.surfaces.get_mut(label) else {
+                return;
+            };
             for slot in surface.slots.iter_mut().filter(|slot| slot.shown.is_some()) {
                 let _ = slot.visual.SetIsVisible(false);
                 slot.shown = None;
@@ -381,28 +496,52 @@ mod imp {
     }
 
     pub fn cloak(hwnd: isize, on: bool) {
-        if hwnd == 0 { return; }
+        if hwnd == 0 {
+            return;
+        }
         let window = HWND(hwnd as *mut _);
         let (yes, value) = (1i32, i32::from(on));
         unsafe {
-            let _ = DwmSetWindowAttribute(window, DWMWA_TRANSITIONS_FORCEDISABLED, &yes as *const i32 as *const _, std::mem::size_of::<i32>() as u32);
-            let _ = DwmSetWindowAttribute(window, DWMWA_CLOAK, &value as *const i32 as *const _, std::mem::size_of::<i32>() as u32);
+            let _ = DwmSetWindowAttribute(
+                window,
+                DWMWA_TRANSITIONS_FORCEDISABLED,
+                &yes as *const i32 as *const _,
+                std::mem::size_of::<i32>() as u32,
+            );
+            let _ = DwmSetWindowAttribute(
+                window,
+                DWMWA_CLOAK,
+                &value as *const i32 as *const _,
+                std::mem::size_of::<i32>() as u32,
+            );
         }
     }
 
     /// The window is gone (main thread).
     pub fn forget(label: &str) {
         GLASS.with(|glass| {
-            if let Ok(mut glass) = glass.try_borrow_mut() { glass.drop_surface(label); }
+            if let Ok(mut glass) = glass.try_borrow_mut() {
+                glass.drop_surface(label);
+            }
         });
     }
 
     fn dword(root: HKEY, key: PCWSTR, value: PCWSTR) -> Option<u32> {
         let mut data = 0u32;
         let mut size = std::mem::size_of::<u32>() as u32;
-        unsafe { RegGetValueW(root, key, value, RRF_RT_REG_DWORD, None, Some(&mut data as *mut u32 as *mut _), Some(&mut size)) }
-            .is_ok()
-            .then_some(data)
+        unsafe {
+            RegGetValueW(
+                root,
+                key,
+                value,
+                RRF_RT_REG_DWORD,
+                None,
+                Some(&mut data as *mut u32 as *mut _),
+                Some(&mut size),
+            )
+        }
+        .is_ok()
+        .then_some(data)
     }
 
     fn build() -> u32 {
@@ -419,22 +558,38 @@ mod imp {
                 Some(&mut size),
             )
         };
-        if status.is_err() { return 0; }
+        if status.is_err() {
+            return 0;
+        }
         let len = text.iter().position(|c| *c == 0).unwrap_or(text.len());
-        String::from_utf16_lossy(&text[..len]).trim().parse().unwrap_or(0)
+        String::from_utf16_lossy(&text[..len])
+            .trim()
+            .parse()
+            .unwrap_or(0)
     }
 
     #[repr(C)]
     #[derive(Default)]
-    struct PowerStatus { ac: u8, battery: u8, percent: u8, system: u8, life: u32, full: u32 }
+    struct PowerStatus {
+        ac: u8,
+        battery: u8,
+        percent: u8,
+        system: u8,
+        life: u32,
+        full: u32,
+    }
 
     // GetSystemPowerStatus, looked up in kernel32: its SystemStatusFlag is 1 while the battery
     // (energy) saver is on. Found by name to keep the crate's feature list short.
     fn energy_saver() -> bool {
         type GetSystemPowerStatus = unsafe extern "system" fn(*mut PowerStatus) -> i32;
         unsafe {
-            let Ok(kernel32) = GetModuleHandleW(w!("kernel32.dll")) else { return false };
-            let Some(entry) = GetProcAddress(kernel32, s!("GetSystemPowerStatus")) else { return false };
+            let Ok(kernel32) = GetModuleHandleW(w!("kernel32.dll")) else {
+                return false;
+            };
+            let Some(entry) = GetProcAddress(kernel32, s!("GetSystemPowerStatus")) else {
+                return false;
+            };
             let get: GetSystemPowerStatus = std::mem::transmute(entry);
             let mut status = PowerStatus::default();
             get(&mut status) != 0 && status.system == 1
@@ -442,9 +597,18 @@ mod imp {
     }
 
     fn high_contrast() -> bool {
-        let mut contrast = HIGHCONTRASTW { cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32, ..Default::default() };
+        let mut contrast = HIGHCONTRASTW {
+            cbSize: std::mem::size_of::<HIGHCONTRASTW>() as u32,
+            ..Default::default()
+        };
         unsafe {
-            SystemParametersInfoW(SPI_GETHIGHCONTRAST, contrast.cbSize, Some(&mut contrast as *mut _ as *mut _), SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0)).is_ok()
+            SystemParametersInfoW(
+                SPI_GETHIGHCONTRAST,
+                contrast.cbSize,
+                Some(&mut contrast as *mut _ as *mut _),
+                SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+            )
+            .is_ok()
                 && contrast.dwFlags.contains(HCF_HIGHCONTRASTON)
         }
     }
@@ -453,7 +617,11 @@ mod imp {
         Conditions {
             build: build(),
             // Missing value: Windows' default, transparency on.
-            transparency: dword(HKEY_CURRENT_USER, w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"), w!("EnableTransparency")) != Some(0),
+            transparency: dword(
+                HKEY_CURRENT_USER,
+                w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+                w!("EnableTransparency"),
+            ) != Some(0),
             energy_saver: energy_saver(),
             high_contrast: high_contrast(),
             remote: unsafe { GetSystemMetrics(SM_REMOTESESSION) } != 0,
@@ -464,37 +632,117 @@ mod imp {
 #[cfg(not(windows))]
 mod imp {
     use super::{Conditions, Pane};
-    pub fn apply(_: &str, _: isize, _: u64, _: &[Pane]) -> Result<(), String> { Err("unsupported".into()) }
+    pub fn apply(_: &str, _: isize, _: u64, _: &[Pane]) -> Result<(), String> {
+        Err("unsupported".into())
+    }
     pub fn clear(_: &str) {}
     pub fn cloak(_: isize, _: bool) {}
     pub fn forget(_: &str) {}
-    pub fn read() -> Conditions { Conditions { build: 0, transparency: false, energy_saver: false, high_contrast: false, remote: false } }
+    pub fn read() -> Conditions {
+        Conditions {
+            build: 0,
+            transparency: false,
+            energy_saver: false,
+            high_contrast: false,
+            remote: false,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const WINDOWS_11: Conditions = Conditions { build: 26200, transparency: true, energy_saver: false, high_contrast: false, remote: false };
+    const WINDOWS_11: Conditions = Conditions {
+        build: 26200,
+        transparency: true,
+        energy_saver: false,
+        high_contrast: false,
+        remote: false,
+    };
 
     #[test]
-    fn the_real_glass_shows_only_with_the_setting_on_no_native_failure_and_windows_able_to_draw_it() {
+    fn the_real_glass_shows_only_with_the_setting_on_no_native_failure_and_windows_able_to_draw_it()
+    {
         let read = std::cell::Cell::new(0);
-        let conditions = || { read.set(read.get() + 1); WINDOWS_11 };
-        assert_eq!(material(GlassMaterial::Painted, false, conditions), Err(Painted::Setting));
-        assert_eq!(material(GlassMaterial::Glass, true, conditions), Err(Painted::Native));
-        assert_eq!(read.get(), 0, "Windows is read only when the material could show");
+        let conditions = || {
+            read.set(read.get() + 1);
+            WINDOWS_11
+        };
+        assert_eq!(
+            material(GlassMaterial::Painted, false, conditions),
+            Err(Painted::Setting)
+        );
+        assert_eq!(
+            material(GlassMaterial::Glass, true, conditions),
+            Err(Painted::Native)
+        );
+        assert_eq!(
+            read.get(),
+            0,
+            "Windows is read only when the material could show"
+        );
         assert_eq!(material(GlassMaterial::Glass, false, conditions), Ok(()));
         assert_eq!(read.get(), 1);
         let off = |c: Conditions| material(GlassMaterial::Glass, false, || c);
-        assert_eq!(off(Conditions { build: 19045, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::OldWindows)));
-        assert_eq!(off(Conditions { build: 21999, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::OldWindows)));
-        assert_eq!(off(Conditions { build: FIRST_BUILD, ..WINDOWS_11 }), Ok(()), "Windows 11 21H2 has the host backdrop");
-        assert_eq!(off(Conditions { remote: true, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::RemoteDesktop)));
-        assert_eq!(off(Conditions { high_contrast: true, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::HighContrast)));
-        assert_eq!(off(Conditions { transparency: false, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::Transparency)));
-        assert_eq!(off(Conditions { energy_saver: true, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::EnergySaver)));
-        assert_eq!(off(Conditions { build: 0, ..WINDOWS_11 }), Err(Painted::Fallback(Fallback::OldWindows)), "an unreadable build falls back");
+        assert_eq!(
+            off(Conditions {
+                build: 19045,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::OldWindows))
+        );
+        assert_eq!(
+            off(Conditions {
+                build: 21999,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::OldWindows))
+        );
+        assert_eq!(
+            off(Conditions {
+                build: FIRST_BUILD,
+                ..WINDOWS_11
+            }),
+            Ok(()),
+            "Windows 11 21H2 has the host backdrop"
+        );
+        assert_eq!(
+            off(Conditions {
+                remote: true,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::RemoteDesktop))
+        );
+        assert_eq!(
+            off(Conditions {
+                high_contrast: true,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::HighContrast))
+        );
+        assert_eq!(
+            off(Conditions {
+                transparency: false,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::Transparency))
+        );
+        assert_eq!(
+            off(Conditions {
+                energy_saver: true,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::EnergySaver))
+        );
+        assert_eq!(
+            off(Conditions {
+                build: 0,
+                ..WINDOWS_11
+            }),
+            Err(Painted::Fallback(Fallback::OldWindows)),
+            "an unreadable build falls back"
+        );
     }
 
     #[test]
@@ -504,28 +752,80 @@ mod tests {
         assert_eq!(fallback_of(Some("windows10")), Some(Fallback::OldWindows));
         assert_eq!(fallback_of(Some("remote")), Some(Fallback::RemoteDesktop));
         assert_eq!(fallback_of(Some("contrast")), Some(Fallback::HighContrast));
-        assert_eq!(fallback_of(Some("transparency")), Some(Fallback::Transparency));
+        assert_eq!(
+            fallback_of(Some("transparency")),
+            Some(Fallback::Transparency)
+        );
         assert_eq!(fallback_of(Some("energy")), Some(Fallback::EnergySaver));
         assert_eq!(fallback_of(Some("anything")), None);
-        assert_eq!(forced(Some("energy"), WINDOWS_11), Conditions { energy_saver: true, ..WINDOWS_11 });
+        assert_eq!(
+            forced(Some("energy"), WINDOWS_11),
+            Conditions {
+                energy_saver: true,
+                ..WINDOWS_11
+            }
+        );
     }
 
-    fn shape(x: f64, y: f64, width: f64, height: f64, radius: f64, opacity: f64) -> Shape { Shape { x, y, width, height, radius, opacity } }
+    fn shape(x: f64, y: f64, width: f64, height: f64, radius: f64, opacity: f64) -> Shape {
+        Shape {
+            x,
+            y,
+            width,
+            height,
+            radius,
+            opacity,
+        }
+    }
 
     #[test]
     fn a_shape_reaches_the_compositor_in_physical_pixels_with_the_radius_of_the_page() {
         // The work pill (a capsule: « 999 px ») and the grid (16 px), at 100 and 150 %.
-        assert_eq!(panes(&[shape(40., 12., 300., 44., 999., 1.)], 1.), vec![Pane { x: 40., y: 12., width: 300., height: 44., radius: 22., opacity: 1. }]);
-        assert_eq!(panes(&[shape(40., 12., 218., 176., 16., 0.5)], 1.5), vec![Pane { x: 60., y: 18., width: 327., height: 264., radius: 24., opacity: 0.75 }]);
+        assert_eq!(
+            panes(&[shape(40., 12., 300., 44., 999., 1.)], 1.),
+            vec![Pane {
+                x: 40.,
+                y: 12.,
+                width: 300.,
+                height: 44.,
+                radius: 22.,
+                opacity: 1.
+            }]
+        );
+        assert_eq!(
+            panes(&[shape(40., 12., 218., 176., 16., 0.5)], 1.5),
+            vec![Pane {
+                x: 60.,
+                y: 18.,
+                width: 327.,
+                height: 264.,
+                radius: 24.,
+                opacity: 0.75
+            }]
+        );
         // Sub-pixel places are kept: the page's own layout is not rounded either.
-        assert_eq!(panes(&[shape(10.25, 0.5, 20.5, 20.5, 4., 1.)], 1.)[0], Pane { x: 10.25, y: 0.5, width: 20.5, height: 20.5, radius: 4., opacity: 1. });
+        assert_eq!(
+            panes(&[shape(10.25, 0.5, 20.5, 20.5, 4., 1.)], 1.)[0],
+            Pane {
+                x: 10.25,
+                y: 0.5,
+                width: 20.5,
+                height: 20.5,
+                radius: 4.,
+                opacity: 1.
+            }
+        );
     }
 
     #[test]
     fn the_blur_comes_faster_than_the_surface_fades_in_and_meets_it_at_both_ends() {
         assert_eq!((blur_opacity(0.), blur_opacity(1.)), (0., 1.));
         assert_eq!(blur_opacity(0.5), 0.75);
-        assert!((0..=100).map(|i| blur_opacity(i as f64 / 100.)).collect::<Vec<_>>().windows(2).all(|pair| pair[0] <= pair[1]));
+        assert!((0..=100)
+            .map(|i| blur_opacity(i as f64 / 100.))
+            .collect::<Vec<_>>()
+            .windows(2)
+            .all(|pair| pair[0] <= pair[1]));
         assert_eq!((blur_opacity(-3.), blur_opacity(9.)), (0., 1.));
     }
 
@@ -541,12 +841,35 @@ mod tests {
             shape(0., 0., 10., 10., 0., 0.),
             shape(0., 0., 10., 10., 0., -1.),
         ];
-        assert!(panes(&hostile, 1.).is_empty(), "no number, no area or no opacity: not drawn");
+        assert!(
+            panes(&hostile, 1.).is_empty(),
+            "no number, no area or no opacity: not drawn"
+        );
         let pane = panes(&[shape(-1e9, 1e9, 1e9, 30., -5., 7.)], 1.)[0];
-        assert_eq!(pane, Pane { x: -32000., y: 32000., width: 32000., height: 30., radius: 0., opacity: 1. });
-        assert_eq!(panes(&[shape(0., 0., 10., 10., 0., 1.)], nan)[0].width, 10., "an unreadable scale is 100 %");
-        assert_eq!(panes(&[shape(0., 0., 10., 10., 0., 1.)], 1e9)[0].width, 80., "a scale stays within 50 and 800 %");
-        let many: Vec<Shape> = (0..40).map(|i| shape(i as f64, 0., 10., 10., 0., 1.)).collect();
+        assert_eq!(
+            pane,
+            Pane {
+                x: -32000.,
+                y: 32000.,
+                width: 32000.,
+                height: 30.,
+                radius: 0.,
+                opacity: 1.
+            }
+        );
+        assert_eq!(
+            panes(&[shape(0., 0., 10., 10., 0., 1.)], nan)[0].width,
+            10.,
+            "an unreadable scale is 100 %"
+        );
+        assert_eq!(
+            panes(&[shape(0., 0., 10., 10., 0., 1.)], 1e9)[0].width,
+            80.,
+            "a scale stays within 50 and 800 %"
+        );
+        let many: Vec<Shape> = (0..40)
+            .map(|i| shape(i as f64, 0., 10., 10., 0., 1.))
+            .collect();
         assert_eq!(panes(&many, 1.).len(), MAX_SHAPES);
     }
 }

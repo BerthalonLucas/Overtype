@@ -38,10 +38,16 @@ const cases = [
 for (const { scenario, journey, query, pill } of cases) {
   test(`${scenario} is inspectable, cannot be copied and can be dismissed${journey}`, async ({ page }) => {
     await page.goto(`/lab-frame.html?scenario=${scenario}&motion=reduce${query}`);
-    await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', scenario === 'pending' ? 'streaming' : 'error');
-    if (scenario === 'pending') { await expect(page.locator(pill)).toBeVisible(); await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toHaveCount(0); }
-    else await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeDisabled();
-    if (scenario === 'partial') await expect(page.locator('.translation-text')).toHaveText('Pourriez-vous envoyer la proposition');
+    await expect(page.locator('[data-lab-phase]')).toHaveAttribute(
+      'data-lab-phase',
+      scenario === 'pending' ? 'streaming' : 'error',
+    );
+    if (scenario === 'pending') {
+      await expect(page.locator(pill)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toHaveCount(0);
+    } else await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeDisabled();
+    if (scenario === 'partial')
+      await expect(page.locator('.translation-text')).toHaveText('Pourriez-vous envoyer la proposition');
     await page.keyboard.press('Escape');
     await expect(page.locator('.glass-overlay')).toHaveCount(0);
   });

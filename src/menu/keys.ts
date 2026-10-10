@@ -19,7 +19,7 @@ export const maxTiles = 6;
 export type IlotTile = { kind: 'action'; action: IlotAction } | { kind: 'ask' };
 
 export function ilotTiles(actions: readonly IlotAction[]): IlotTile[] {
-  const tiles: IlotTile[] = actions.slice(0, maxTiles).map(action => ({ kind: 'action', action }));
+  const tiles: IlotTile[] = actions.slice(0, maxTiles).map((action) => ({ kind: 'action', action }));
   if (tiles.length < maxTiles) tiles.push({ kind: 'ask' });
   return tiles;
 }
@@ -64,10 +64,21 @@ export type IlotKeyContext = {
 
 // `known`: every saved action, so a last action (or the default one) outside the grid is still the
 // one Enter relaunches, as the double press does; its letter stays with the grid's.
-export function ilotKeyContext(actions: readonly IlotAction[], lastActionId: string | undefined, promptAvailable: boolean, known: readonly IlotAction[] = []): IlotKeyContext {
+export function ilotKeyContext(
+  actions: readonly IlotAction[],
+  lastActionId: string | undefined,
+  promptAvailable: boolean,
+  known: readonly IlotAction[] = [],
+): IlotKeyContext {
   const tiles = ilotTiles(actions);
-  const last = actions.find(action => action.id === lastActionId) ?? known.find(action => action.id === lastActionId) ?? actions[0];
-  const lastTile = Math.max(0, tiles.findIndex(tile => tile.kind === 'action' && tile.action.id === last?.id));
+  const last =
+    actions.find((action) => action.id === lastActionId) ??
+    known.find((action) => action.id === lastActionId) ??
+    actions[0];
+  const lastTile = Math.max(
+    0,
+    tiles.findIndex((tile) => tile.kind === 'action' && tile.action.id === last?.id),
+  );
   return { tiles, columns: gridColumns(tiles.length), letters: letterTable(actions), last, lastTile, promptAvailable };
 }
 
@@ -86,8 +97,14 @@ export type KeyInput = {
 
 export function keyInputOf(event: KeyboardEvent): KeyInput {
   return {
-    key: event.key, code: event.code, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, shiftKey: event.shiftKey,
-    altGraph: event.getModifierState?.('AltGraph') ?? false, isComposing: event.isComposing || event.keyCode === 229,
+    key: event.key,
+    code: event.code,
+    ctrlKey: event.ctrlKey,
+    metaKey: event.metaKey,
+    altKey: event.altKey,
+    shiftKey: event.shiftKey,
+    altGraph: event.getModifierState?.('AltGraph') ?? false,
+    isComposing: event.isComposing || event.keyCode === 229,
   };
 }
 
@@ -107,9 +124,15 @@ export function browserShortcut(input: KeyInput): boolean {
   if (key.startsWith('Browser') || key === 'F3' || key === 'F5' || key === 'F7') return true;
   if (input.ctrlKey && !input.altKey && !input.metaKey) {
     const letter = /^[a-z]$/i.test(key) ? key.toLowerCase() : code?.match(/^Key([A-Z])$/)?.[1].toLowerCase();
-    return (letter !== undefined && browserLetters.has(letter)) || zoomKeys.has(key) || (code !== undefined && zoomCodes.has(code));
+    return (
+      (letter !== undefined && browserLetters.has(letter)) ||
+      zoomKeys.has(key) ||
+      (code !== undefined && zoomCodes.has(code))
+    );
   }
-  return Boolean(input.altKey && !input.ctrlKey && !input.metaKey && (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'Home'));
+  return Boolean(
+    input.altKey && !input.ctrlKey && !input.metaKey && (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'Home'),
+  );
 }
 
 export type IlotState = { mode: IlotMode; hot: number; compactHot: CompactItem };
@@ -140,11 +163,16 @@ export function moveHot(hot: number, key: string, shiftKey: boolean, count: numb
   if (count <= 0) return null;
   const column = hot % columns;
   switch (key) {
-    case 'ArrowRight': return (hot + 1) % count;
-    case 'ArrowLeft': return (hot - 1 + count) % count;
-    case 'Tab': return shiftKey ? (hot - 1 + count) % count : (hot + 1) % count;
-    case 'Home': return 0;
-    case 'End': return count - 1;
+    case 'ArrowRight':
+      return (hot + 1) % count;
+    case 'ArrowLeft':
+      return (hot - 1 + count) % count;
+    case 'Tab':
+      return shiftKey ? (hot - 1 + count) % count : (hot + 1) % count;
+    case 'Home':
+      return 0;
+    case 'End':
+      return count - 1;
     case 'ArrowDown': {
       const below = hot + columns;
       return below < count ? below : column;
@@ -156,7 +184,8 @@ export function moveHot(hot: number, key: string, shiftKey: boolean, count: numb
       const wrapped = lastRow * columns + column;
       return wrapped < count ? wrapped : Math.max(column, wrapped - columns);
     }
-    default: return null;
+    default:
+      return null;
   }
 }
 
@@ -172,7 +201,8 @@ export function resolveIlotKey(input: KeyInput, state: IlotState, context: IlotK
   // its ↵ must not leave Escape to close the whole menu (review of bc57857, finding 5).
   if (state.mode === 'prompt') return key === 'Escape' ? { type: 'compact' } : null;
   const { tiles, promptAvailable } = context;
-  const openPrompt = (seed: string): IlotCommand | null => promptAvailable ? { type: 'prompt', seed } : seed ? null : { type: 'none' };
+  const openPrompt = (seed: string): IlotCommand | null =>
+    promptAvailable ? { type: 'prompt', seed } : seed ? null : { type: 'none' };
 
   // Échap goes back one step (grid → compact), then closes (menus.jsx:47, 69).
   if (key === 'Escape') return state.mode === 'grid' ? { type: 'compact' } : { type: 'close' };

@@ -1,5 +1,7 @@
 # Labo FlowTranslate — la référence de la nouvelle DA « Îlot »
 
+> Référence figée, datée des 23–25 septembre 2026 (avant la 0.5.0) : elle ne suit plus l’app. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 **Ce dossier est la référence visuelle et de mouvement de FlowTranslate.** Tout ce que Lucas a
 choisi les 23 et 24 septembre 2026 y est visible, manipulable et réglable, avec les pistes
 écartées à côté pour comparaison. Le plan d’implémentation (`../docs/DA-PLAN.md`) s’appuie dessus :
@@ -14,8 +16,9 @@ quand le plan dit « comme dans le labo », c’est ici qu’il faut regarder, e
   Chrome (double-clic suffit ; React est chargé depuis cdnjs, il faut donc Internet).
 - Copie identique : `../docs/design/labo-flowtranslate.html`.
 - Version publiée pour Lucas : https://claude.ai/artifact/AtzY6pK6b6TvWsF8Be3MPt (privée).
-- **`mise-en-valeur.html`** (25/09) : les prototypes de la mise en valeur du texte, **à choisir
-  par Lucas avant tout code** : la sélection à trois niveaux pendant le menu, l’effet pendant le
+- **`mise-en-valeur.html`** (25/09) : les prototypes de la mise en valeur du texte. Lucas a choisi
+  depuis, et c’est implémenté (fenêtre `halo`, `src-tauri/src/halo.rs`, `src/halo/` ; style des mots
+  changés « Encre irisée » ou « Éclat », 60 s par défaut, réglable de 5 à 120 s). Le prototype montrait : la sélection à trois niveaux pendant le menu, l’effet pendant le
   travail, l’arrivée du texte, les mots changés tenus jusqu’à la prochaine action (60 s au plus),
   en clair et en sombre. Page autonome sans dépendance ni build ; « Copier mon choix » donne le
   choix en texte + JSON. Version publiée : https://claude.ai/artifact/95Hn4JpMoSe8sHTneT7hBE
@@ -86,14 +89,15 @@ La liste complète des choix, des pistes écartées et de leurs raisons est dans
   `src/data.js`).
 - **Navigateur seulement** : rien ici ne valide la vraie fenêtre Windows.
 - **Le flou du verre** marche dans le labo parce que le bureau est dessiné dans la page. Dans l’app,
-  la fenêtre WebView2 ne voit pas le bureau : il faut l’Acrylic de Windows ou un verre « peint »
-  plus opaque (lot 12 du plan).
+  la fenêtre WebView2 ne voit pas le bureau : le vrai verre est livré en 0.6 par le compositeur de
+  Windows, sous la page (`src-tauri/src/backdrop.rs`, matière par défaut), avec le verre « peint »
+  en repli.
 - **Effets marqués « démo seulement »** (lettres colorées, scintillement des lettres, vague de mots,
   arrivée mot à mot, machine à écrire) : impossibles dans une autre application, car FlowTranslate
   ne peut pas redessiner le texte d’une autre fenêtre. Seuls les effets **dessinés par-dessus les
   lignes sélectionnées** sont faisables (balayage de lumière, lueur, contour, soulignement, voile).
-- **Le menu au clavier** marche ici parce que la page a le focus. Dans l’app, la fenêtre de
-  FlowTranslate ne prend pas le focus aujourd’hui : c’est le lot 3 du plan.
+- **Le menu au clavier** marche ici parce que la page a le focus. Dans l’app, la fenêtre prend le
+  focus le temps du menu par la commande `focus_overlay` (lot 3, livré), puis le rend à la source.
 
 ## Reconstruire et vérifier
 

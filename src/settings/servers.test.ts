@@ -1,8 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import type { Server, Settings } from '../types';
-import { addServer, canAddServer, emptyServer, newServerId, removeServer, setDefaultServer, updateServer, usable } from './servers';
+import {
+  addServer,
+  canAddServer,
+  emptyServer,
+  newServerId,
+  removeServer,
+  setDefaultServer,
+  updateServer,
+  usable,
+} from './servers';
 
-const server = (id: string, over: Partial<Server> = {}): Server => ({ ...emptyServer(id), endpoint: `https://${id}.exemple.com`, model: 'm', ...over });
+const server = (id: string, over: Partial<Server> = {}): Server => ({
+  ...emptyServer(id),
+  endpoint: `https://${id}.exemple.com`,
+  model: 'm',
+  ...over,
+});
 const settings = (servers: Server[], defaultServerId = servers[0].id) => ({ servers, defaultServerId }) as Settings;
 
 describe('the servers of the Settings', () => {
@@ -11,7 +25,14 @@ describe('the servers of the Settings', () => {
     expect(canAddServer(one)).toBe(true);
     const added = addServer(one);
     expect(added.id).toBe('s2');
-    expect(added.settings.servers[1]).toEqual({ id: 's2', name: '', endpoint: '', apiKey: '', noKey: false, model: '' });
+    expect(added.settings.servers[1]).toEqual({
+      id: 's2',
+      name: '',
+      endpoint: '',
+      apiKey: '',
+      noKey: false,
+      model: '',
+    });
     expect(added.settings.defaultServerId).toBe('s1');
     expect(canAddServer(added.settings)).toBe(false);
     const again = addServer(added.settings);
@@ -25,7 +46,7 @@ describe('the servers of the Settings', () => {
   it('never removes the last server, and hands the default to the one left', () => {
     const two = settings([server('s1'), server('s2')], 's2');
     const left = removeServer(two, 's2');
-    expect(left.servers.map(item => item.id)).toEqual(['s1']);
+    expect(left.servers.map((item) => item.id)).toEqual(['s1']);
     expect(left.defaultServerId).toBe('s1');
     expect(removeServer(left, 's1')).toBe(left);
     expect(removeServer(two, 'unknown')).toBe(two);
@@ -47,10 +68,16 @@ describe('the servers of the Settings', () => {
   });
 
   it('drops the key of a server declared without one, and leaves the others alone', () => {
-    const two = settings([server('s1', { apiKey: 'sk-secret-000000000000' }), server('s2', { apiKey: 'sk-other-0000000000000' })]);
+    const two = settings([
+      server('s1', { apiKey: 'sk-secret-000000000000' }),
+      server('s2', { apiKey: 'sk-other-0000000000000' }),
+    ]);
     const next = updateServer(two, 's1', { noKey: true });
     expect(next.servers[0]).toMatchObject({ id: 's1', noKey: true, apiKey: '' });
     expect(next.servers[1]).toBe(two.servers[1]);
-    expect(updateServer(two, 's1', { model: 'other' }).servers[0]).toMatchObject({ model: 'other', apiKey: 'sk-secret-000000000000' });
+    expect(updateServer(two, 's1', { model: 'other' }).servers[0]).toMatchObject({
+      model: 'other',
+      apiKey: 'sk-secret-000000000000',
+    });
   });
 });

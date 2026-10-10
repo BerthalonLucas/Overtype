@@ -18,8 +18,9 @@ mod imp {
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, RegisterClassW,
-        SystemParametersInfoW, MSG, SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
-        WM_SETTINGCHANGE, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP,
+        SystemParametersInfoW, MSG, SPI_GETCLIENTAREAANIMATION,
+        SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, WM_SETTINGCHANGE, WNDCLASSW, WS_EX_TOOLWINDOW,
+        WS_POPUP,
     };
 
     // None when Windows does not answer: the front keeps prefers-reduced-motion.
@@ -39,7 +40,12 @@ mod imp {
 
     static ON_CHANGE: OnceLock<Box<dyn Fn() + Send + Sync>> = OnceLock::new();
 
-    unsafe extern "system" fn proc(hwnd: HWND, message: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    unsafe extern "system" fn proc(
+        hwnd: HWND,
+        message: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
         if message == WM_SETTINGCHANGE {
             if let Some(on_change) = ON_CHANGE.get() {
                 on_change();
@@ -56,38 +62,42 @@ mod imp {
         if ON_CHANGE.set(Box::new(on_change)).is_err() {
             return;
         }
-        let _ = std::thread::Builder::new().name("system-motion".into()).spawn(|| unsafe {
-            let Ok(module) = GetModuleHandleW(None) else { return };
-            let class = WNDCLASSW {
-                lpfnWndProc: Some(proc),
-                hInstance: module.into(),
-                lpszClassName: w!("FlowTranslateSystemMotion"),
-                ..Default::default()
-            };
-            if RegisterClassW(&class) == 0 {
-                return;
-            }
-            let Ok(_window) = CreateWindowExW(
-                WS_EX_TOOLWINDOW,
-                w!("FlowTranslateSystemMotion"),
-                w!(""),
-                WS_POPUP,
-                0,
-                0,
-                0,
-                0,
-                None,
-                None,
-                Some(module.into()),
-                None,
-            ) else {
-                return;
-            };
-            let mut message = MSG::default();
-            while GetMessageW(&mut message, None, 0, 0).0 > 0 {
-                DispatchMessageW(&message);
-            }
-        });
+        let _ = std::thread::Builder::new()
+            .name("system-motion".into())
+            .spawn(|| unsafe {
+                let Ok(module) = GetModuleHandleW(None) else {
+                    return;
+                };
+                let class = WNDCLASSW {
+                    lpfnWndProc: Some(proc),
+                    hInstance: module.into(),
+                    lpszClassName: w!("FlowTranslateSystemMotion"),
+                    ..Default::default()
+                };
+                if RegisterClassW(&class) == 0 {
+                    return;
+                }
+                let Ok(_window) = CreateWindowExW(
+                    WS_EX_TOOLWINDOW,
+                    w!("FlowTranslateSystemMotion"),
+                    w!(""),
+                    WS_POPUP,
+                    0,
+                    0,
+                    0,
+                    0,
+                    None,
+                    None,
+                    Some(module.into()),
+                    None,
+                ) else {
+                    return;
+                };
+                let mut message = MSG::default();
+                while GetMessageW(&mut message, None, 0, 0).0 > 0 {
+                    DispatchMessageW(&message);
+                }
+            });
     }
 }
 

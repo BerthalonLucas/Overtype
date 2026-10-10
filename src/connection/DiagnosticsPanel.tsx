@@ -27,35 +27,68 @@ type Props = {
   limit?: number;
 };
 
-function Entry({ entry, open, onOpenChange }: { entry: DiagEntry; open: boolean; onOpenChange: (open: boolean) => void }) {
+function Entry({
+  entry,
+  open,
+  onOpenChange,
+}: {
+  entry: DiagEntry;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const t = useT();
   const duration = useDuration(1000);
   const message = redact(entryMessage(entry, t));
-  const detail = ([
+  const detail = [
     [t('diag.colStep'), stepName(entry.step, t)],
     entry.method && [t('diag.request'), redact(`${entry.method} ${entry.url ?? ''}`)],
     entry.status != null && [t('diag.status'), String(entry.status)],
     entry.ms != null && [t('diag.colDuration'), duration(entry.ms)],
     // Every error says why: Rust's cause, else the status the server answered with.
-    entry.cause ? [t('diag.cause'), redact(causeText(entry.cause, t))] : entry.level === 'error' && entry.status != null && [t('diag.cause'), `HTTP ${entry.status}`],
+    entry.cause
+      ? [t('diag.cause'), redact(causeText(entry.cause, t))]
+      : entry.level === 'error' && entry.status != null && [t('diag.cause'), `HTTP ${entry.status}`],
     entry.detail && [t('diag.detail'), redact(entry.detail)],
     entry.key && [t('diag.key'), entry.key],
     entry.proxy && [t('diag.proxy'), redact(entry.proxy)],
-  ].filter(Boolean)) as Array<[string, string]>;
-  return <Collapsible.Root open={open} onOpenChange={onOpenChange} className="st-log-entry" data-level={entry.level} data-entry={entry.id}>
-    <Collapsible.Trigger className="st-log-row">
-      <time className="st-log-time">{clockTime(entry.at)}</time>
-      <span className="st-log-level" aria-label={t(`diag.level.${entry.level}`)}>{levelGlyph(entry.level)}</span>
-      <span className="st-log-step">{stepName(entry.step, t)}</span>
-      <span className="st-log-msg">{message}</span>
-      <span className="st-log-status">{entry.status != null ? <span className="st-http" data-bad={entry.status >= 400 ? '' : undefined}>{entry.status}</span> : null}</span>
-      <span className="st-log-ms">{entry.ms != null ? duration(entry.ms) : ''}</span>
-      <ChevronRight className="st-chevron" size={14} strokeWidth={1.75} aria-hidden="true" />
-    </Collapsible.Trigger>
-    <Collapsible.Content className="st-collapse">
-      <dl className="st-log-detail">{detail.map(([name, value]) => <div key={name}><dt>{name}</dt><dd>{value}</dd></div>)}</dl>
-    </Collapsible.Content>
-  </Collapsible.Root>;
+  ].filter(Boolean) as Array<[string, string]>;
+  return (
+    <Collapsible.Root
+      open={open}
+      onOpenChange={onOpenChange}
+      className="st-log-entry"
+      data-level={entry.level}
+      data-entry={entry.id}
+    >
+      <Collapsible.Trigger className="st-log-row">
+        <time className="st-log-time">{clockTime(entry.at)}</time>
+        <span className="st-log-level" aria-label={t(`diag.level.${entry.level}`)}>
+          {levelGlyph(entry.level)}
+        </span>
+        <span className="st-log-step">{stepName(entry.step, t)}</span>
+        <span className="st-log-msg">{message}</span>
+        <span className="st-log-status">
+          {entry.status != null ? (
+            <span className="st-http" data-bad={entry.status >= 400 ? '' : undefined}>
+              {entry.status}
+            </span>
+          ) : null}
+        </span>
+        <span className="st-log-ms">{entry.ms != null ? duration(entry.ms) : ''}</span>
+        <ChevronRight className="st-chevron" size={14} strokeWidth={1.75} aria-hidden="true" />
+      </Collapsible.Trigger>
+      <Collapsible.Content className="st-collapse">
+        <dl className="st-log-detail">
+          {detail.map(([name, value]) => (
+            <div key={name}>
+              <dt>{name}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Collapsible.Content>
+    </Collapsible.Root>
+  );
 }
 
 export function DiagnosticsPanel({ landing, onCheck, limit }: Props) {
@@ -72,19 +105,21 @@ export function DiagnosticsPanel({ landing, onCheck, limit }: Props) {
   // « Voir le journal »: errors only, the failure unfolded (its entry, else the check's first
   // error, else the latest error). The entry may arrive a moment after the landing.
   const landed = useRef<number | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on a new landing or new entries; openId is read, not watched
   useEffect(() => {
     if (!landing) return;
     if (landed.current !== landing.at) setFilter(landing.filter);
-    const target = entries.find(entry => entry.id === landing.logId)
-      ?? entries.find(entry => entry.level === 'error' && landing.run != null && entry.run === landing.run)
-      ?? (landed.current !== landing.at ? entries.find(entry => entry.level === 'error') : undefined);
+    const target =
+      entries.find((entry) => entry.id === landing.logId) ??
+      entries.find((entry) => entry.level === 'error' && landing.run != null && entry.run === landing.run) ??
+      (landed.current !== landing.at ? entries.find((entry) => entry.level === 'error') : undefined);
     if (target && (landed.current !== landing.at || openId === null)) setOpenId(target.id);
     landed.current = landing.at;
-  }, [landing, entries]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [landing, entries]);
 
-  const rows = entries.filter(entry => filter === 'all' || entry.level === 'error');
+  const rows = entries.filter((entry) => filter === 'all' || entry.level === 'error');
   const shown = limit ? rows.slice(0, limit) : rows;
-  const errors = entries.filter(entry => entry.level === 'error').length;
+  const errors = entries.filter((entry) => entry.level === 'error').length;
   const copy = async () => {
     const text = journalText(entries, filter, t) || t('diag.emptyLog');
     try {
@@ -92,43 +127,133 @@ export function DiagnosticsPanel({ landing, onCheck, limit }: Props) {
       setCopied(true);
       window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1600);
-    } catch { setManual(text); }
+    } catch {
+      setManual(text);
+    }
   };
   const clear = async () => {
     if (clearing) return;
     setClearing(true);
-    try { await clearJournal(); setOpenId(null); } catch { /* the journal stays as it is */ } finally { setClearing(false); }
+    try {
+      await clearJournal();
+      setOpenId(null);
+    } catch {
+      /* the journal stays as it is */
+    } finally {
+      setClearing(false);
+    }
   };
 
-  return <>
-    <div className="st-log-bar">
-      <Segmented<JournalFilter> label={t('diag.filter')} size="sm" value={filter} onChange={setFilter}
-        options={[{ value: 'all', label: t('diag.all', { count: entries.length }) }, { value: 'errors', label: t('diag.errors', { count: errors }) }]} />
-      <span className="st-log-tools">
-        <Button size="sm" icon={copied ? <Check size={14} strokeWidth={2} /> : <Copy {...ICON} size={14} />} onClick={() => void copy()} disabled={!rows.length}>{t(copied ? 'diag.copied' : 'diag.copy')}</Button>
-        <Button size="sm" variant="ghost" icon={<Eraser {...ICON} size={14} />} onClick={() => void clear()} disabled={!entries.length || clearing}>{t('diag.clear')}</Button>
-      </span>
-    </div>
+  return (
+    <>
+      <div className="st-log-bar">
+        <Segmented<JournalFilter>
+          label={t('diag.filter')}
+          size="sm"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all', label: t('diag.all', { count: entries.length }) },
+            { value: 'errors', label: t('diag.errors', { count: errors }) },
+          ]}
+        />
+        <span className="st-log-tools">
+          <Button
+            size="sm"
+            icon={copied ? <Check size={14} strokeWidth={2} /> : <Copy {...ICON} size={14} />}
+            onClick={() => void copy()}
+            disabled={!rows.length}
+          >
+            {t(copied ? 'diag.copied' : 'diag.copy')}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<Eraser {...ICON} size={14} />}
+            onClick={() => void clear()}
+            disabled={!entries.length || clearing}
+          >
+            {t('diag.clear')}
+          </Button>
+        </span>
+      </div>
 
-    <div className="st-log" role="list" aria-label={t('diag.title')}>
-      <div className="st-log-head" aria-hidden="true"><span>{t('diag.colTime')}</span><span /><span>{t('diag.colStep')}</span><span>{t('diag.colMessage')}</span><span>{t('diag.colStatus')}</span><span>{t('diag.colDuration')}</span><span /></div>
-      <AnimatePresence initial={false}>
-        {shown.map(entry => <motion.div key={entry.id} role="listitem" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={tx('smooth')}>
-          <Entry entry={entry} open={openId === entry.id} onOpenChange={open => setOpenId(open ? entry.id : null)} />
-        </motion.div>)}
-      </AnimatePresence>
-      {!shown.length && <div className="st-log-empty">
-        <span className="st-empty-icon" aria-hidden="true"><Activity size={18} strokeWidth={1.5} /></span>
-        <strong>{state === 'unavailable' ? t('diag.unavailable') : filter === 'errors' && entries.length ? t('diag.emptyErrors') : t('diag.emptyTitle')}</strong>
-        <span>{t('diag.emptyText')}</span>
-        {onCheck && <Button size="sm" icon={<RotateCw {...ICON} size={14} />} onClick={onCheck}>{t('diag.check')}</Button>}
-      </div>}
-    </div>
-    <p className="st-footnote st-footnote-tight">{t('diag.footnote')} {t('diag.note')}</p>
+      <div className="st-log" role="list" aria-label={t('diag.title')}>
+        <div className="st-log-head" aria-hidden="true">
+          <span>{t('diag.colTime')}</span>
+          <span />
+          <span>{t('diag.colStep')}</span>
+          <span>{t('diag.colMessage')}</span>
+          <span>{t('diag.colStatus')}</span>
+          <span>{t('diag.colDuration')}</span>
+          <span />
+        </div>
+        <AnimatePresence initial={false}>
+          {shown.map((entry) => (
+            <motion.div
+              key={entry.id}
+              role="listitem"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={tx('smooth')}
+            >
+              <Entry
+                entry={entry}
+                open={openId === entry.id}
+                onOpenChange={(open) => setOpenId(open ? entry.id : null)}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+        {!shown.length && (
+          <div className="st-log-empty">
+            <span className="st-empty-icon" aria-hidden="true">
+              <Activity size={18} strokeWidth={1.5} />
+            </span>
+            <strong>
+              {state === 'unavailable'
+                ? t('diag.unavailable')
+                : filter === 'errors' && entries.length
+                  ? t('diag.emptyErrors')
+                  : t('diag.emptyTitle')}
+            </strong>
+            <span>{t('diag.emptyText')}</span>
+            {onCheck && (
+              <Button size="sm" icon={<RotateCw {...ICON} size={14} />} onClick={onCheck}>
+                {t('diag.check')}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+      <p className="st-footnote st-footnote-tight">
+        {t('diag.footnote')} {t('diag.note')}
+      </p>
 
-    <Dialog open={manual != null} onOpenChange={open => { if (!open) setManual(null); }} title={t('diag.manualTitle')} description={t('diag.manualText')} width={520}
-      actions={<Button variant="primary" onClick={() => setManual(null)}>{t('ui.close')}</Button>}>
-      <textarea className="ft-input st-textarea st-mono" rows={10} readOnly value={manual ?? ''} onFocus={event => event.currentTarget.select()} autoFocus />
-    </Dialog>
-  </>;
+      <Dialog
+        open={manual != null}
+        onOpenChange={(open) => {
+          if (!open) setManual(null);
+        }}
+        title={t('diag.manualTitle')}
+        description={t('diag.manualText')}
+        width={520}
+        actions={
+          <Button variant="primary" onClick={() => setManual(null)}>
+            {t('ui.close')}
+          </Button>
+        }
+      >
+        <textarea
+          className="ft-input st-textarea st-mono"
+          rows={10}
+          readOnly
+          value={manual ?? ''}
+          onFocus={(event) => event.currentTarget.select()}
+          autoFocus
+        />
+      </Dialog>
+    </>
+  );
 }

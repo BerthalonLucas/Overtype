@@ -13,16 +13,21 @@ export type Journal = { entries: DiagEntry[]; state: 'loading' | 'ready' | 'unav
 let journal: Journal = { entries: [], state: 'loading' };
 let started = false;
 const listeners = new Set<() => void>();
-const publish = (next: Journal) => { journal = next; listeners.forEach(listener => listener()); };
+const publish = (next: Journal) => {
+  journal = next;
+  listeners.forEach((listener) => listener());
+};
 
 export function addEntry(entries: DiagEntry[], entry: DiagEntry): DiagEntry[] {
-  if (entries.some(item => item.id === entry.id)) return entries;
+  if (entries.some((item) => item.id === entry.id)) return entries;
   return [entry, ...entries].sort((a, b) => b.id - a.id).slice(0, journalLimit);
 }
 function start() {
   if (started) return;
   started = true;
-  void bridge.on<DiagEntry>('diagnostic', entry => publish({ ...journal, entries: addEntry(journal.entries, entry) })).catch(() => undefined);
+  void bridge
+    .on<DiagEntry>('diagnostic', (entry) => publish({ ...journal, entries: addEntry(journal.entries, entry) }))
+    .catch(() => undefined);
   void load();
 }
 async function load() {
@@ -30,17 +35,31 @@ async function load() {
     const saved = await bridge.getDiagnostics();
     // Entries that arrived by event while the answer travelled are kept.
     publish({ entries: saved.reduce(addEntry, journal.entries), state: 'ready' });
-  } catch { publish({ ...journal, state: 'unavailable' }); }
+  } catch {
+    publish({ ...journal, state: 'unavailable' });
+  }
 }
-function subscribe(listener: () => void) { start(); listeners.add(listener); return () => { listeners.delete(listener); }; }
+function subscribe(listener: () => void) {
+  start();
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
 const snapshot = () => journal;
-export function useJournal(): Journal { return useSyncExternalStore(subscribe, snapshot, snapshot); }
+export function useJournal(): Journal {
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
 export async function clearJournal() {
   await bridge.clearDiagnostics();
   publish({ entries: [], state: 'ready' });
 }
 // For the tests: back to an unread journal.
-export function resetJournal() { journal = { entries: [], state: 'loading' }; started = false; listeners.clear(); }
+export function resetJournal() {
+  journal = { entries: [], state: 'loading' };
+  started = false;
+  listeners.clear();
+}
 
 const pad = (value: number, width = 2) => String(value).padStart(width, '0');
 // The local time of an entry, to the millisecond: 14:03:27.512.
@@ -57,11 +76,29 @@ export function redact(text: string): string {
     .replace(/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{6,}/gi, '$1•••')
     .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, 'sk-•••');
 }
-export const levelGlyph = (level: DiagEntry['level']) => level === 'error' ? '✕' : level === 'ok' ? '✓' : '·';
+export const levelGlyph = (level: DiagEntry['level']) => (level === 'error' ? '✕' : level === 'ok' ? '✓' : '·');
 // The journal as text, for « Copier »: one line per entry, newest first.
 export function journalText(entries: readonly DiagEntry[], filter: 'all' | 'errors', t: Translate): string {
-  return entries.filter(entry => filter === 'all' || entry.level === 'error').map(entry => redact([
-    clockTime(entry.at), levelGlyph(entry.level), stepName(entry.step, t), entry.method ?? '', entry.url ?? '', entry.status ?? '',
-    entry.ms != null ? `${entry.ms} ms` : '', entryMessage(entry, t), entry.cause ? `(${causeText(entry.cause, t)})` : '', entry.proxy ? `[${entry.proxy}]` : '', entry.key ?? '',
-  ].filter(part => part !== '').join('  '))).join('\n');
+  return entries
+    .filter((entry) => filter === 'all' || entry.level === 'error')
+    .map((entry) =>
+      redact(
+        [
+          clockTime(entry.at),
+          levelGlyph(entry.level),
+          stepName(entry.step, t),
+          entry.method ?? '',
+          entry.url ?? '',
+          entry.status ?? '',
+          entry.ms != null ? `${entry.ms} ms` : '',
+          entryMessage(entry, t),
+          entry.cause ? `(${causeText(entry.cause, t)})` : '',
+          entry.proxy ? `[${entry.proxy}]` : '',
+          entry.key ?? '',
+        ]
+          .filter((part) => part !== '')
+          .join('  '),
+      ),
+    )
+    .join('\n');
 }

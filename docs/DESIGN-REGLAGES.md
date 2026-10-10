@@ -1,5 +1,7 @@
 # Refonte des Réglages et accueil (setup), design 29/09/2026
 
+> Document historique (design des Réglages 0.6, 29 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Demande de Lucas (29/09) : l'app est « un calvaire » à connecter. Il faut un seul serveur par défaut,
 une adresse sans « /v1 », une liste des modèles lue sur le serveur, une vérification précise, un
 diagnostic avec les journaux caché par défaut, et un accueil en 3 ou 4 étapes à l'installation.

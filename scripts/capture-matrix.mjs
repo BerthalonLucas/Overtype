@@ -6,6 +6,7 @@
 // scripts/capture-matrix.ps1 (Overtype started with --simulate-inference and a CDP port).
 import { chromium, expect } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -61,11 +62,28 @@ const shoot = async (previousId) => {
   }
   return { ...outcome, latencyMs, original };
 };
+// Applications are looked up on this machine, never at a path tied to one workstation:
+// an optional environment variable first, then the standard install locations.
+const findApp = (envName, relative) => {
+  const candidates = [process.env[envName], ...relative.flatMap(([base, path]) => process.env[base] ? [join(process.env[base], path)] : [])];
+  return candidates.find(candidate => candidate && existsSync(candidate)) ?? null;
+};
+const chromePath = findApp('OVERTYPE_MATRIX_CHROME', [
+  ['ProgramFiles', 'Google\\Chrome\\Application\\chrome.exe'],
+  ['ProgramFiles(x86)', 'Google\\Chrome\\Application\\chrome.exe'],
+  ['LOCALAPPDATA', 'Google\\Chrome\\Application\\chrome.exe'],
+]);
+const codePath = findApp('OVERTYPE_MATRIX_VSCODE', [
+  ['LOCALAPPDATA', 'Programs\\Microsoft VS Code\\Code.exe'],
+  ['ProgramFiles', 'Microsoft VS Code\\Code.exe'],
+]);
 const record = (entry) => { report.cases.push(entry); console.log(JSON.stringify(entry)); };
 
 // `launch` starts the application (the launcher process may differ from the window's:
 // Store Notepad, wt.exe, Code.exe), `title` finds the window that owns the text.
-const run = async (name, launch, title, prepare, expectation) => {
+// `app` is the executable the case needs: null means it is not installed, the case is skipped.
+const run = async (name, launch, title, prepare, expectation, app = 'built-in') => {
+  if (!app) { record({ name, expectation, skipped: 'application not found (set its environment variable or install it)' }); return; }
   const entry = { name, expectation, timeline: {} };
   const mark = (step) => { entry.timeline[step] = Math.round(performance.now()); };
   let processId = 0;
@@ -107,21 +125,26 @@ try {
     async () => { await sleep(1200); ps('keys', ['-Text', '{END}']); ps('setClipboard', ['-Text', SENTENCE]); await sleep(800); }, 'fresh clipboard (docked)');
   // Chrome on a data: URL in a throwaway profile: Chromium's UIA or the synthetic copy.
   const chromeProfile = join(scratch, 'chrome');
-  await run('Chrome (data: URL)', () => launch('C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', `--user-data-dir="${chromeProfile}" --no-first-run --no-default-browser-check --new-window "data:text/html,<title>FlowTranslateMatrix</title><p>${encodeURIComponent(SENTENCE)}</p>"`), 'FlowTranslateMatrix',
-    async () => { await sleep(3000); ps('keys', ['-Text', '^a']); await sleep(300); }, 'uia or synthetic copy, clipboard restored');
+  await run('Chrome (data: URL)', () => launch(chromePath, `--user-data-dir="${chromeProfile}" --no-first-run --no-default-browser-check --new-window "data:text/html,<title>FlowTranslateMatrix</title><p>${encodeURIComponent(SENTENCE)}</p>"`), 'FlowTranslateMatrix',
+    async () => { await sleep(3000); ps('keys', ['-Text', '^a']); await sleep(300); }, 'uia or synthetic copy, clipboard restored', chromePath);
   // VS Code in a throwaway profile on the text file: Monaco has no UIA TextPattern, the synthetic copy must do.
   // Escape first: a fresh profile opens the Copilot sign-in dialog over the editor (seen 2026-09-14).
   const codeProfile = join(scratch, 'code');
   await mkdir(join(codeProfile, 'User'), { recursive: true });
   await writeFile(join(codeProfile, 'User', 'settings.json'), JSON.stringify({ 'workbench.startupEditor': 'none', 'security.workspace.trust.enabled': false, 'telemetry.telemetryLevel': 'off', 'update.mode': 'none' }), 'utf8');
-  await run('VS Code', () => launch('C:\\Users\\Lucas\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe', `--user-data-dir "${codeProfile}" --extensions-dir "${join(scratch, 'ext')}" --new-window "${textFile}"`), 'sentence\\.txt',
-    async () => { await sleep(2500); ps('keys', ['-Text', '{ESC}']); await sleep(600); ps('keys', ['-Text', '^a']); await sleep(300); }, 'synthetic copy (docked), clipboard restored');
+  await run('VS Code', () => launch(codePath, `--user-data-dir "${codeProfile}" --extensions-dir "${join(scratch, 'ext')}" --new-window "${textFile}"`), 'sentence\\.txt',
+    async () => { await sleep(2500); ps('keys', ['-Text', '{ESC}']); await sleep(600); ps('keys', ['-Text', '^a']); await sleep(300); }, 'synthetic copy (docked), clipboard restored', codePath);
   // Windows Terminal: no selection, a copy made by hand 1 s ago counts (fresh rule), then nothing after 4 s.
   await run('Windows Terminal (fresh copy < 3 s)', () => launch('wt.exe', 'cmd.exe /k title FlowTranslateMatrix'), 'FlowTranslateMatrix',
     async () => { await sleep(2500); ps('setClipboard', ['-Text', SENTENCE]); await sleep(800); }, 'fresh clipboard (docked), no synthetic effect');
   await run('Windows Terminal (copy older than 3 s)', () => launch('wt.exe', 'cmd.exe /k title FlowTranslateMatrix'), 'FlowTranslateMatrix',
     async () => { await sleep(2500); }, 'notice « Rien à traduire dans la fenêtre active. »');
-  report.status = report.cases.every(c => !c.error) ? 'DONE' : 'ERRORS';
+  report.status = report.cases.every(c => !c.error) ? 'collecte terminée' : 'ERRORS';
+  if (report.status !== 'collecte terminée') process.exitCode = 1;
+} catch (error) {
+  report.status = 'ERRORS';
+  process.exitCode = 1;
+  throw error;
 } finally {
   await writeFile(join(output, 'result.json'), JSON.stringify(report, null, 2));
   await browser.close();

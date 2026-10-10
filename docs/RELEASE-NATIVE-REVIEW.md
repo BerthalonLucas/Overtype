@@ -1,5 +1,7 @@
 # Revue native de publication 0.1.5
 
+> Document historique (revue native 0.1.5, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Revue bornée du 9 septembre 2026 sur la capture réelle Windows et le cycle de vie de l’overlay. Aucun test d’inférence, lancement d’interface ou arrêt de processus n’a été effectué pendant cette passe.
 
 ## Correctifs appliqués

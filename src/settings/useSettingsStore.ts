@@ -18,7 +18,8 @@ export type SaveStatus = 'saved' | 'just-saved' | 'saving' | 'error';
 // Why a save failed: one of our messages, or Rust's refusal (shown translated when known).
 export type SaveProblem = { key: MessageKey } | { text: string };
 export const typingDelayMs = 300;
-const menuBindingId = (bindings: ShortcutBinding[]) => ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find(id => bindings.every(b => b.id !== id))!;
+const menuBindingId = (bindings: ShortcutBinding[]) =>
+  ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find((id) => bindings.every((b) => b.id !== id))!;
 
 export type SettingsStore = {
   settings: Settings | null;
@@ -61,32 +62,83 @@ export function useSettingsStore(): SettingsStore {
   const lastError = useRef<SaveProblem>({ key: 'settings.notSaved' });
   const settledTimer = useRef(0);
   // The window's own copy feeds its document preferences (language, theme) at once.
-  const show = (next: Settings) => { latest.current = next; setSettings(next); shareSettings(next); };
-  const adopt = (next: Settings) => { synced.current = next; show(next); };
-  const reload = () => { setLoadError(false); void bridge.getSettings().then(adopt).catch(() => setLoadError(true)); };
-  useEffect(() => { reload(); void bridge.getHistory().then(setHistory).catch(() => undefined); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { window.clearTimeout(saveTimer.current); window.clearTimeout(settledTimer.current); }, []);
+  const show = (next: Settings) => {
+    latest.current = next;
+    setSettings(next);
+    shareSettings(next);
+  };
+  const adopt = (next: Settings) => {
+    synced.current = next;
+    show(next);
+  };
+  const reload = () => {
+    setLoadError(false);
+    void bridge
+      .getSettings()
+      .then(adopt)
+      .catch(() => setLoadError(true));
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once on mount: the first load
+  useEffect(() => {
+    reload();
+    void bridge
+      .getHistory()
+      .then(setHistory)
+      .catch(() => undefined);
+  }, []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(saveTimer.current);
+      window.clearTimeout(settledTimer.current);
+    },
+    [],
+  );
   // The window stays alive while hidden: settings changed elsewhere (another window, the tray,
   // the setup) must replace its copy, or its next save would write the old values back.
   // Adopted only when nothing is being typed or saved here: a pending edit wins, and is saved.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: subscribed once; current values are read through refs
   useEffect(() => {
     let live = true;
     let off: (() => void) | undefined;
-    void bridge.on<Settings>('settings-changed', incoming => {
-      const current = latest.current;
-      if (current === null) { setLoadError(false); adopt(incoming); return; }
-      const editing = saveTimer.current !== 0 || inFlight.current > 0 || current !== synced.current;
-      // Our own echo, or a change we are about to overwrite: the window's copy stays the reference.
-      if (editing) { shareSettings(current); return; }
-      if (JSON.stringify(incoming) === JSON.stringify(current)) { synced.current = current; return; }
-      adopt(incoming);
-    }).then(unlisten => { if (live) off = unlisten; else unlisten(); }, () => undefined);
-    return () => { live = false; off?.(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    void bridge
+      .on<Settings>('settings-changed', (incoming) => {
+        const current = latest.current;
+        if (current === null) {
+          setLoadError(false);
+          adopt(incoming);
+          return;
+        }
+        const editing = saveTimer.current !== 0 || inFlight.current > 0 || current !== synced.current;
+        // Our own echo, or a change we are about to overwrite: the window's copy stays the reference.
+        if (editing) {
+          shareSettings(current);
+          return;
+        }
+        if (JSON.stringify(incoming) === JSON.stringify(current)) {
+          synced.current = current;
+          return;
+        }
+        adopt(incoming);
+      })
+      .then(
+        (unlisten) => {
+          if (live) off = unlisten;
+          else unlisten();
+        },
+        () => undefined,
+      );
+    return () => {
+      live = false;
+      off?.();
+    };
+  }, []);
   const settle = () => {
     setSaveStatus('just-saved');
     window.clearTimeout(settledTimer.current);
-    settledTimer.current = window.setTimeout(() => setSaveStatus(status => status === 'just-saved' ? 'saved' : status), 3000);
+    settledTimer.current = window.setTimeout(
+      () => setSaveStatus((status) => (status === 'just-saved' ? 'saved' : status)),
+      3000,
+    );
   };
   const commit = async (next: Settings): Promise<boolean> => {
     setSaveStatus('saving');
@@ -104,8 +156,16 @@ export function useSettingsStore(): SettingsStore {
       settle();
       return true;
     } catch (error) {
-      lastError.current = typeof error === 'string' ? { text: error } : error && typeof error === 'object' && 'key' in error ? error as SaveProblem : { key: 'settings.notSaved' };
-      if (latest.current === next) { setSaveError(lastError.current); setSaveStatus('error'); }
+      lastError.current =
+        typeof error === 'string'
+          ? { text: error }
+          : error && typeof error === 'object' && 'key' in error
+            ? (error as SaveProblem)
+            : { key: 'settings.notSaved' };
+      if (latest.current === next) {
+        setSaveError(lastError.current);
+        setSaveStatus('error');
+      }
       return false;
     } finally {
       inFlight.current -= 1;
@@ -116,16 +176,33 @@ export function useSettingsStore(): SettingsStore {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = 0;
     if (immediate) void commit(next);
-    else saveTimer.current = window.setTimeout(() => { saveTimer.current = 0; if (latest.current) void commit(latest.current); }, typingDelayMs);
+    else
+      saveTimer.current = window.setTimeout(() => {
+        saveTimer.current = 0;
+        if (latest.current) void commit(latest.current);
+      }, typingDelayMs);
   };
-  const retry = () => { if (latest.current) void commit(latest.current); };
+  const retry = () => {
+    if (latest.current) void commit(latest.current);
+  };
   const recordShortcut = async (id: string | null, shortcut: string): Promise<string | null> => {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = 0;
     const previous = latest.current!;
-    const bindings: ShortcutBinding[] = id === null
-      ? [...previous.shortcutBindings, { id: menuBindingId(previous.shortcutBindings), kind: 'menu', shortcut, actionId: previous.defaultActionId, outputMode: 'replace', enabled: true }]
-      : previous.shortcutBindings.map(b => b.id === id ? { ...b, shortcut, enabled: true } : b);
+    const bindings: ShortcutBinding[] =
+      id === null
+        ? [
+            ...previous.shortcutBindings,
+            {
+              id: menuBindingId(previous.shortcutBindings),
+              kind: 'menu',
+              shortcut,
+              actionId: previous.defaultActionId,
+              outputMode: 'replace',
+              enabled: true,
+            },
+          ]
+        : previous.shortcutBindings.map((b) => (b.id === id ? { ...b, shortcut, enabled: true } : b));
     const next = { ...previous, shortcutBindings: bindings };
     setRecording(true);
     show(next);
@@ -135,7 +212,10 @@ export function useSettingsStore(): SettingsStore {
         show(previous);
         // An edit typed just before stays to be saved; otherwise nothing changed.
         if (previous !== synced.current) persist(previous, false);
-        else { setSaveStatus('saved'); setSaveError(null); }
+        else {
+          setSaveStatus('saved');
+          setSaveError(null);
+        }
       }
       return 'key' in lastError.current ? tNow(lastError.current.key) : lastError.current.text;
     } finally {
@@ -174,12 +254,41 @@ export function useSettingsStore(): SettingsStore {
     await saveQueue.current;
     return latest.current === synced.current;
   };
-  const reloadHistory = () => { void bridge.getHistory().then(setHistory).catch(() => undefined); };
-  const removeHistory = async (id: string | null): Promise<boolean> => {
-    try { await bridge.deleteHistory(id); setHistory(await bridge.getHistory()); setHistoryError(false); return true; }
-    catch { setHistoryError(true); return false; }
+  const reloadHistory = () => {
+    void bridge
+      .getHistory()
+      .then(setHistory)
+      .catch(() => undefined);
   };
-  return { settings, loadError, reload, current: () => latest.current, persist, recordShortcut, recording, resetToDefaults, flush, saveStatus, saveError, retry, history, historyError, removeHistory, reloadHistory };
+  const removeHistory = async (id: string | null): Promise<boolean> => {
+    try {
+      await bridge.deleteHistory(id);
+      setHistory(await bridge.getHistory());
+      setHistoryError(false);
+      return true;
+    } catch {
+      setHistoryError(true);
+      return false;
+    }
+  };
+  return {
+    settings,
+    loadError,
+    reload,
+    current: () => latest.current,
+    persist,
+    recordShortcut,
+    recording,
+    resetToDefaults,
+    flush,
+    saveStatus,
+    saveError,
+    retry,
+    history,
+    historyError,
+    removeHistory,
+    reloadHistory,
+  };
 }
 
 // What the pages share (design-lab: SettingsContext).

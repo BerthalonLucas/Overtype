@@ -18,9 +18,14 @@ describe('document preferences', () => {
     let answer: unknown = null;
     const source: SystemThemeSource = {
       current: () => Promise.resolve(answer),
-      listen: handler => { emitSystem = handler; return Promise.resolve(() => { unlistened += 1; }); },
+      listen: (handler) => {
+        emitSystem = handler;
+        return Promise.resolve(() => {
+          unlistened += 1;
+        });
+      },
     };
-    const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
     // No value in the registry (or no Rust at all): the media query decides (none in jsdom: light).
     let stop = applyTheme('system', root, source);
     await settle();
@@ -55,7 +60,11 @@ describe('document preferences', () => {
     expect(resolveMotion('system', false)).toBe('full');
     expect(resolveMotion('full', true)).toBe('full');
     expect(resolveMotion('reduced', false)).toBe('reduced');
-    expect([reducedMotionConfig('system'), reducedMotionConfig('full'), reducedMotionConfig('reduced')]).toEqual(['user', 'never', 'always']);
+    expect([reducedMotionConfig('system'), reducedMotionConfig('full'), reducedMotionConfig('reduced')]).toEqual([
+      'user',
+      'never',
+      'always',
+    ]);
   });
 
   // The e2e suite and the visual references emulate prefers-reduced-motion: in « system »,
@@ -63,12 +72,28 @@ describe('document preferences', () => {
   describe('data-motion', () => {
     let reduces = false;
     const listeners = new Set<() => void>();
-    const media = { get matches() { return reduces; }, addEventListener: (_: string, fn: () => void) => listeners.add(fn), removeEventListener: (_: string, fn: () => void) => listeners.delete(fn) };
-    const flip = (next: boolean) => { reduces = next; listeners.forEach(fn => fn()); };
-    afterEach(() => { vi.unstubAllGlobals(); listeners.clear(); reduces = false; });
+    const media = {
+      get matches() {
+        return reduces;
+      },
+      addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+      removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
+    };
+    const flip = (next: boolean) => {
+      reduces = next;
+      listeners.forEach((fn) => fn());
+    };
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      listeners.clear();
+      reduces = false;
+    });
 
     it('follows prefers-reduced-motion while the setting is « system »', () => {
-      vi.stubGlobal('matchMedia', vi.fn(() => media));
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => media),
+      );
       const root = document.createElement('html');
       const stop = applyMotion('system', root);
       expect(window.matchMedia).toHaveBeenCalledWith('(prefers-reduced-motion: reduce)');
@@ -83,7 +108,10 @@ describe('document preferences', () => {
     });
 
     it('ignores the system when the user forced full or reduced motion', () => {
-      vi.stubGlobal('matchMedia', vi.fn(() => media));
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => media),
+      );
       reduces = true;
       const root = document.createElement('html');
       applyMotion('full', root);

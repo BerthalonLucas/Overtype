@@ -23,9 +23,19 @@ const box = (rect: Rect): CSSProperties => ({ left: rect.x, top: rect.y, width: 
 // from one line to the next instead of restarting on each.
 function stripped(rects: readonly Rect[]) {
   const strip = sweepStrip(rects);
-  return strip.lines.map(line => {
+  return strip.lines.map((line) => {
     const { from, to } = sweepPositions(strip.total, line.offset);
-    return { rect: line, style: { ...box(line), '--total': `${strip.total}px`, '--off': `${line.offset}px`, '--from': `${from}px`, '--to': `${to}px`, '--start': `${-line.offset}px` } as CSSProperties };
+    return {
+      rect: line,
+      style: {
+        ...box(line),
+        '--total': `${strip.total}px`,
+        '--off': `${line.offset}px`,
+        '--from': `${from}px`,
+        '--to': `${to}px`,
+        '--start': `${-line.offset}px`,
+      } as CSSProperties,
+    };
   });
 }
 
@@ -35,15 +45,29 @@ function stripped(rects: readonly Rect[]) {
 // passes a reflection over the letters: a veil of the ground's own colour.
 function HaloSelection({ run }: { run: HaloRun }) {
   const work = run.phase === 'work';
-  const exact = useMemo(() => stripped(run.lines.map(line => pad(line, 1))), [run.lines]);
+  const exact = useMemo(() => stripped(run.lines.map((line) => pad(line, 1))), [run.lines]);
   const textBox = run.textBox ? inset(run.textBox, 3) : null;
-  return <>
-    {textBox && (work
-      ? <div className="halo-aurora" style={box(textBox)}><i className="ring" /><i className="glow"><i className="ring" /></i></div>
-      : <div className="halo-box" style={box(textBox)} />)}
-    {(run.full ?? []).map((line, index) => <div key={`band-${index}`} className="halo-band" style={box(pad(line, 3, 1))} />)}
-    {exact.map(({ style }, index) => <div key={index} className={work ? 'halo-veil' : 'halo-tint'} style={style} />)}
-  </>;
+  return (
+    <>
+      {textBox &&
+        (work ? (
+          <div className="halo-aurora" style={box(textBox)}>
+            <i className="ring" />
+            <i className="glow">
+              <i className="ring" />
+            </i>
+          </div>
+        ) : (
+          <div className="halo-box" style={box(textBox)} />
+        ))}
+      {(run.full ?? []).map((line, index) => (
+        <div key={`band-${index}`} className="halo-band" style={box(pad(line, 3, 1))} />
+      ))}
+      {exact.map(({ style }, index) => (
+        <div key={index} className={work ? 'halo-veil' : 'halo-tint'} style={style} />
+      ))}
+    </>
+  );
 }
 
 // The result pasted: a wave of light over the new text (1 s, once), then the changed words:
@@ -51,11 +75,11 @@ function HaloSelection({ run }: { run: HaloRun }) {
 // a box. Through a mask of the glyphs when Rust read one (./ink.ts), else a feathered light.
 // Held until Rust's `leave` (the user's next action in the text, 60 s at most), then 900 ms out.
 function HaloMarks({ run, style }: { run: HaloRun; style: ChangedWordsStyle }) {
-  const whole = useMemo(() => stripped((run.whole ?? []).map(line => pad(line, 1))), [run.whole]);
+  const whole = useMemo(() => stripped((run.whole ?? []).map((line) => pad(line, 1))), [run.whole]);
   const words = useMemo(() => {
     const masks = usableMasks(run.masks);
     const strip = sweepStrip(run.lines);
-    return strip.lines.map(line => {
+    return strip.lines.map((line) => {
       const mask = maskOf(line, masks);
       const place = { '--total': `${strip.total}px`, '--off': `${line.offset}px` };
       return mask
@@ -63,37 +87,71 @@ function HaloMarks({ run, style }: { run: HaloRun; style: ChangedWordsStyle }) {
         : { ink: false, style: { ...box(line), ...place } as CSSProperties };
     });
   }, [run.lines, run.masks]);
-  return <>
-    {whole.map(({ style }, index) => <div key={`wave-${index}`} className="halo-wave" style={style} />)}
-    <div className="halo-marks" data-style={style} data-arrival={whole.length ? 'wave' : 'fade'}>
-      {words.map((word, index) => <div key={index} className={`halo-mark ${word.ink ? 'is-ink' : 'is-light'}`} style={word.style}>
-        <i className={word.ink ? 'halo-ink' : 'halo-light'} />
-        {style === 'eclat' && <i className="halo-line" />}
-      </div>)}
-    </div>
-  </>;
+  return (
+    <>
+      {whole.map(({ style }, index) => (
+        <div key={`wave-${index}`} className="halo-wave" style={style} />
+      ))}
+      <div className="halo-marks" data-style={style} data-arrival={whole.length ? 'wave' : 'fade'}>
+        {words.map((word, index) => (
+          <div key={index} className={`halo-mark ${word.ink ? 'is-ink' : 'is-light'}`} style={word.style}>
+            <i className={word.ink ? 'halo-ink' : 'halo-light'} />
+            {style === 'eclat' && <i className="halo-line" />}
+          </div>
+        ))}
+      </div>
+    </>
+  );
 }
 
 // One run of the halo, as Rust sent it. Its tone comes from the ground read under the text;
 // without one, from the app's theme (halo.css). `marks`: the style of the changed words when
 // the run does not carry its own. On a ground Rust read, the ink is made readable on it (4.5:1).
-export function HaloScene({ run, state, marks = 'encre' }: { run: HaloRun; state: HaloState; marks?: ChangedWordsStyle }) {
+export function HaloScene({
+  run,
+  state,
+  marks = 'encre',
+}: {
+  run: HaloRun;
+  state: HaloState;
+  marks?: ChangedWordsStyle;
+}) {
   const words = run.style === 'eclat' || run.style === 'encre' ? run.style : marks;
   const style = useMemo(() => {
     if (!run.ground) return undefined;
     const vars: Record<string, string> = { '--ground': run.ground.join(' ') };
-    if (run.phase === 'marks' && run.tone) inkFor(words, run.tone, run.ground).forEach((stop, index) => { vars[`--ink${index + 1}`] = stop.join(' '); });
+    if (run.phase === 'marks' && run.tone)
+      inkFor(words, run.tone, run.ground).forEach((stop, index) => {
+        vars[`--ink${index + 1}`] = stop.join(' ');
+      });
     return vars as CSSProperties;
   }, [run.ground, run.phase, run.tone, words]);
-  return <div className="halo" data-phase={run.phase} data-state={state} data-tone={run.tone ?? undefined} style={style} aria-hidden="true">
-    {run.phase === 'marks' ? <HaloMarks run={run} style={words} /> : <HaloSelection run={run} />}
-  </div>;
+  return (
+    <div
+      className="halo"
+      data-phase={run.phase}
+      data-state={state}
+      data-tone={run.tone ?? undefined}
+      style={style}
+      aria-hidden="true"
+    >
+      {run.phase === 'marks' ? <HaloMarks run={run} style={words} /> : <HaloSelection run={run} />}
+    </div>
+  );
 }
 
 // The same drawing without the bridge, for whoever builds a run itself (the demo, src/demo/).
 // `.halo` is `position: fixed; inset: 0`: inside a frame, give it a containing block (a parent
 // with a transform or `contain: layout`), the rectangles are then relative to that parent.
-export function HaloView({ event, state = 'shown', marks }: { event: HaloRun; state?: HaloState; marks?: ChangedWordsStyle }) {
+export function HaloView({
+  event,
+  state = 'shown',
+  marks,
+}: {
+  event: HaloRun;
+  state?: HaloState;
+  marks?: ChangedWordsStyle;
+}) {
   return <HaloScene key={event.generation} run={event} state={state} marks={marks} />;
 }
 
@@ -114,28 +172,38 @@ export function HaloWindow() {
     let off: (() => void) | undefined;
     let alive = true;
     let timer = 0;
-    void bridge.on<HaloRun>('halo', event => {
-      if (event.generation < latest.current) return;
-      latest.current = event.generation;
+    void bridge
+      .on<HaloRun>('halo', (event) => {
+        if (event.generation < latest.current) return;
+        latest.current = event.generation;
+        window.clearTimeout(timer);
+        const afterMenu = menuShown.current;
+        menuShown.current = event.phase === 'menu';
+        if (event.phase === 'work' && !afterMenu) {
+          setRun(event);
+          setState('waiting');
+          timer = window.setTimeout(() => setState('shown'), HALO_APPEAR_DELAY_MS);
+        } else if (event.phase === 'menu' || event.phase === 'work' || event.phase === 'marks') {
+          setRun(event);
+          setState('shown');
+        } else if (event.phase === 'leave') setState('leaving');
+        else {
+          setRun(null);
+          setState('waiting');
+        }
+      })
+      .then((listener) => {
+        if (!alive) return listener();
+        off = listener;
+        // Listening: the tests (and the real-window checks) wait for this before any event.
+        document.documentElement.dataset.haloReady = 'true';
+      });
+    return () => {
+      alive = false;
       window.clearTimeout(timer);
-      const afterMenu = menuShown.current;
-      menuShown.current = event.phase === 'menu';
-      if (event.phase === 'work' && !afterMenu) {
-        setRun(event);
-        setState('waiting');
-        timer = window.setTimeout(() => setState('shown'), HALO_APPEAR_DELAY_MS);
-      } else if (event.phase === 'menu' || event.phase === 'work' || event.phase === 'marks') {
-        setRun(event);
-        setState('shown');
-      } else if (event.phase === 'leave') setState('leaving');
-      else { setRun(null); setState('waiting'); }
-    }).then(listener => {
-      if (!alive) return listener();
-      off = listener;
-      // Listening: the tests (and the real-window checks) wait for this before any event.
-      document.documentElement.dataset.haloReady = 'true';
-    });
-    return () => { alive = false; window.clearTimeout(timer); off?.(); delete document.documentElement.dataset.haloReady; };
+      off?.();
+      delete document.documentElement.dataset.haloReady;
+    };
   }, []);
   if (!run) return null;
   return <HaloScene key={run.generation} run={run} state={state} marks={settings?.changedWordsStyle} />;

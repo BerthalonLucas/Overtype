@@ -13,7 +13,9 @@ import type { AfterReplace } from '../types';
 let root: Root | undefined;
 let host: HTMLElement | undefined;
 beforeEach(() => {
-  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'] });
+  vi.useFakeTimers({
+    toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame', 'performance'],
+  });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 afterEach(async () => {
@@ -30,12 +32,19 @@ async function mount(node: ReactNode, reduced = false) {
   await act(async () => root!.render(<MotionConfig reducedMotion={reduced ? 'always' : 'never'}>{node}</MotionConfig>));
   return host;
 }
-const advance = (ms: number) => act(async () => { vi.advanceTimersByTime(ms); });
-const arc = () => Number(host!.querySelector('.result-ring circle:not(.track)')!.getAttribute('stroke-dasharray')!.split(' ')[0]);
+const advance = (ms: number) =>
+  act(async () => {
+    vi.advanceTimersByTime(ms);
+  });
+const arc = () =>
+  Number(host!.querySelector('.result-ring circle:not(.track)')!.getAttribute('stroke-dasharray')!.split(' ')[0]);
 const full = 2 * Math.PI * 5;
-const hover = (element: Element, on: boolean) => act(async () => {
-  element.dispatchEvent(new MouseEvent(on ? 'mouseover' : 'mouseout', { bubbles: true, relatedTarget: document.body }));
-});
+const hover = (element: Element, on: boolean) =>
+  act(async () => {
+    element.dispatchEvent(
+      new MouseEvent(on ? 'mouseover' : 'mouseout', { bubbles: true, relatedTarget: document.body }),
+    );
+  });
 
 describe('DoneContent', () => {
   it('draws the check, then counts Undo down and ends once', async () => {
@@ -109,12 +118,24 @@ describe('DoneContent', () => {
     await mount(<DoneContent key="with-undo" check undo durationMs={4000} clock={clock} onExpire={onExpire} />);
     await advance(1000);
     // Undo on its way: the time stands still, the button waits.
-    await act(async () => root!.render(<MotionConfig reducedMotion="never"><DoneContent key="with-undo" check undo busy durationMs={4000} clock={clock} onExpire={onExpire} /></MotionConfig>));
+    await act(async () =>
+      root!.render(
+        <MotionConfig reducedMotion="never">
+          <DoneContent key="with-undo" check undo busy durationMs={4000} clock={clock} onExpire={onExpire} />
+        </MotionConfig>,
+      ),
+    );
     expect(host!.querySelector('.result-undo')!.getAttribute('aria-disabled')).toBe('true');
     await advance(10_000);
     expect(onExpire).not.toHaveBeenCalled();
     // Withdrawn: the check alone takes its place, already drawn, on the same clock (3 s left).
-    await act(async () => root!.render(<MotionConfig reducedMotion="never"><DoneContent key="check" check undo={false} drawn durationMs={1100} clock={clock} onExpire={onExpire} /></MotionConfig>));
+    await act(async () =>
+      root!.render(
+        <MotionConfig reducedMotion="never">
+          <DoneContent key="check" check undo={false} drawn durationMs={1100} clock={clock} onExpire={onExpire} />
+        </MotionConfig>,
+      ),
+    );
     expect(host!.querySelector('.result-undo')).toBeNull();
     expect(host!.querySelector('.result-check')!.classList.contains('is-drawn')).toBe(true);
     // The busy hold went with the content that held it.
@@ -166,11 +187,21 @@ describe('ErrorContent', () => {
     const onDismiss = vi.fn();
     const onAction = vi.fn(async () => true);
     await mount(<ErrorContent error="target_changed" onAction={onAction} onDismiss={onDismiss} />);
-    const labels = () => [...host!.querySelectorAll('.result-swap > span')].map(span => [span.textContent, span.getAttribute('aria-hidden')]);
-    expect(labels()).toEqual([['Copy result', null], ['Copied', 'true']]);
+    const labels = () =>
+      [...host!.querySelectorAll('.result-swap > span')].map((span) => [
+        span.textContent,
+        span.getAttribute('aria-hidden'),
+      ]);
+    expect(labels()).toEqual([
+      ['Copy result', null],
+      ['Copied', 'true'],
+    ]);
     await act(async () => host!.querySelector<HTMLButtonElement>('.result-action')!.click());
     expect(onAction).toHaveBeenCalledWith({ type: 'copy' });
-    expect(labels()).toEqual([['Copy result', 'true'], ['Copied', null]]);
+    expect(labels()).toEqual([
+      ['Copy result', 'true'],
+      ['Copied', null],
+    ]);
     await advance(899);
     expect(onDismiss).not.toHaveBeenCalled();
     await advance(1);
@@ -202,8 +233,10 @@ describe('ErrorContent', () => {
     const onAction = vi.fn();
     await mount(<ErrorContent error="target_changed" source="undo" onAction={onAction} onDismiss={() => undefined} />);
     expect(host!.querySelector('[role="alert"]')!.textContent).toBe('Text changed — can’t undo');
-    expect([...host!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Close']);
-    await act(async () => root!.render(<ErrorContent error="paste_blocked" source="undo-sent" onDismiss={() => undefined} />));
+    expect([...host!.querySelectorAll('button')].map((button) => button.getAttribute('aria-label'))).toEqual(['Close']);
+    await act(async () =>
+      root!.render(<ErrorContent error="paste_blocked" source="undo-sent" onDismiss={() => undefined} />),
+    );
     expect(host!.querySelector('[role="alert"]')!.textContent).toBe('Undo not confirmed — check text');
     expect(onAction).not.toHaveBeenCalled();
   });
@@ -226,11 +259,29 @@ describe('ErrorContent', () => {
 });
 
 describe('resultContent', () => {
-  const after = (patch: Partial<AfterReplace> = {}): AfterReplace => ({ check: true, undo: true, undoSeconds: 8, changedWords: true, changedWordsSeconds: 60, ...patch });
+  const after = (patch: Partial<AfterReplace> = {}): AfterReplace => ({
+    check: true,
+    undo: true,
+    undoSeconds: 8,
+    changedWords: true,
+    changedWordsSeconds: 60,
+    ...patch,
+  });
   it('keys each stage, sizes the work pill, and leaves the others to their content', () => {
-    expect(resultContent({ stage: 'working', indicator: 'perle' })).toMatchObject({ key: 'working', size: { width: 44, height: 28 } });
-    expect(resultContent({ stage: 'working', indicator: 'ruban' })).toMatchObject({ key: 'working', size: { width: 52, height: 28 } });
-    for (const [stage, key] of [[{ stage: 'done', afterReplace: after() }, 'done'], [{ stage: 'done', afterReplace: after({ undo: false }) }, 'done-check'], [{ stage: 'undone' }, 'undone'], [{ stage: 'error', error: 'busy' }, 'error-busy']] as const) {
+    expect(resultContent({ stage: 'working', indicator: 'perle' })).toMatchObject({
+      key: 'working',
+      size: { width: 44, height: 28 },
+    });
+    expect(resultContent({ stage: 'working', indicator: 'ruban' })).toMatchObject({
+      key: 'working',
+      size: { width: 52, height: 28 },
+    });
+    for (const [stage, key] of [
+      [{ stage: 'done', afterReplace: after() }, 'done'],
+      [{ stage: 'done', afterReplace: after({ undo: false }) }, 'done-check'],
+      [{ stage: 'undone' }, 'undone'],
+      [{ stage: 'error', error: 'busy' }, 'error-busy'],
+    ] as const) {
       const content = resultContent(stage)!;
       expect(content.key).toBe(key);
       expect(content.size).toBeUndefined();

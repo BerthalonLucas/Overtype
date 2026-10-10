@@ -1,5 +1,7 @@
 # Essai réel FlowTranslate 0.1.5
 
+> Document historique (essai 0.1.5, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Cette recette vérifie l’installation Windows et une traduction réelle avec un
 serveur local. Elle n’utilise aucun mode de démonstration. Les deux profils sont
 déjà démarrés sur le poste de Lucas ; la section suivante sert après leur arrêt.

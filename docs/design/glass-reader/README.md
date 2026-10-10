@@ -1,5 +1,7 @@
 # Exploration verre et lecteur bas
 
+> Document historique (exploration verre 0.1.x, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../../../README.md) et [docs/BRIDGE.md](../../../docs/BRIDGE.md).
+
 Statut : **planche C validée par Lucas le 9 septembre 2026**, avec demande d'implémentation, animations fluides et rendu performant. Elle devient la référence courante pour la matière, la pilule chevauchante et le lecteur bas. A et B restent des explorations historiques.
 
 ## Intention confirmée le 9 septembre 2026

@@ -1,0 +1,53 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": {
+    "includes": ["src/**", "e2e/**", "visual-tests/**", "*.ts", "!**/*.css", "!**/*.html", "!**/*.graphql"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all",
+      "arrowParentheses": "always"
+    }
+  },
+  "assist": { "enabled": false },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      // Rules of the recommended preset still broken in the code: warn, not error, until fixed.
+      // The number is the count of occurrences when the rule was set to warn.
+      "correctness": {
+        "useExhaustiveDependencies": "warn", // 27 occurrences (the 25 intentional cases carry a biome-ignore with their reason)
+        "noUnsafeOptionalChaining": "warn" // 2 occurrences
+      },
+      "suspicious": {
+        "noControlCharactersInRegex": "warn", // 4 occurrences
+        "useIterableCallbackReturn": "warn", // 13 occurrences
+        "noAssignInExpressions": "warn", // 6 occurrences
+        "noDuplicateTestHooks": "warn", // 3 occurrences
+        "noImplicitAnyLet": "warn", // 1 occurrence
+        "noArrayIndexKey": "warn" // 16 occurrences
+      },
+      "a11y": {
+        "useAriaPropsSupportedByRole": "warn", // 2 occurrences
+        "noStaticElementInteractions": "warn", // 3 occurrences
+        "noNoninteractiveTabindex": "warn", // 2 occurrences
+        "useKeyWithClickEvents": "warn", // 2 occurrences
+        "useSemanticElements": "warn", // 7 occurrences
+        "noSvgWithoutTitle": "warn", // 2 occurrences
+        "useButtonType": "warn" // 11 occurrences
+      }
+    }
+  }
+}

@@ -6,7 +6,10 @@ import { setLanguage } from './i18n';
 import { applyMotionPreset } from './motion/tokens';
 import type { Settings } from './types';
 
-const systemTheme: SystemThemeSource = { current: bridge.systemTheme, listen: handler => bridge.on<unknown>('system-theme', handler) };
+const systemTheme: SystemThemeSource = {
+  current: bridge.systemTheme,
+  listen: (handler) => bridge.on<unknown>('system-theme', handler),
+};
 
 // Document-level preferences of every window: the interface language, the Îlot switch, the
 // theme, the motion and its preset (CSS custom properties for the animations Motion does not

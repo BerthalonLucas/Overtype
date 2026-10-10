@@ -32,7 +32,7 @@ export function shortModel(id: string): string {
 const notText = /(^|[^a-z])(embed(ding)?s?|rerank(er)?|bge|gte|e5)([^a-z]|$)/i;
 export const isTextModel = (id: string) => !notText.test(id);
 export function textModels<T extends { id: string }>(models: T[]): { models: T[]; hidden: number } {
-  const kept = models.filter(model => isTextModel(model.id));
+  const kept = models.filter((model) => isTextModel(model.id));
   return kept.length ? { models: kept, hidden: models.length - kept.length } : { models, hidden: 0 };
 }
 // What a key field may hold: no line break, no control character, bounded.

@@ -17,11 +17,21 @@ const PresetContext = createContext<MotionPreset>('smooth');
 // The setting « Animations : suivre Windows / toujours / réduites » for everything Motion
 // drives. « suivre Windows » is resolved here, live, rather than left to Motion's 'user' (read
 // once per component): Motion, useReducedMotionConfig and data-motion always agree.
-export function MotionPreferences({ motion, preset, children }: { motion: MotionPreference; preset: MotionPreset; children: ReactNode }) {
+export function MotionPreferences({
+  motion,
+  preset,
+  children,
+}: {
+  motion: MotionPreference;
+  preset: MotionPreset;
+  children: ReactNode;
+}) {
   const systemReduces = useSystemReducesMotion();
-  return <MotionConfig reducedMotion={reducedMotionConfig(resolveMotion(motion, systemReduces))}>
-    <PresetContext.Provider value={preset}>{children}</PresetContext.Provider>
-  </MotionConfig>;
+  return (
+    <MotionConfig reducedMotion={reducedMotionConfig(resolveMotion(motion, systemReduces))}>
+      <PresetContext.Provider value={preset}>{children}</PresetContext.Provider>
+    </MotionConfig>
+  );
 }
 
 // The tokens of the chosen preset (settings.motionPreset: « smooth » or « bouncy »).

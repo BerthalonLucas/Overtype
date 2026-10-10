@@ -4,15 +4,20 @@
 // changed-words and spring variants — then seeked to a few instants and compared, pixel by pixel,
 // to a fresh page seeked to the same instants. The scene is a pure function of time: any leftover
 // (a bubble stuck half-way, a halo that stayed, a pill in two places) shows as a difference.
-//   node scripts/demo-chaos.mjs [outDir] [--rounds=3]
+//   node scripts/demo-chaos.mjs [--out=dir] [--rounds=3]
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require(resolve('D:/src/Flow_Translate/node_modules/@playwright/test'));
+// Paths come from this file's location: the lab is design-lab/reglages/, the repository two levels up.
+const lab = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../../', import.meta.url));
+const require = createRequire(join(root, 'package.json'));
+const { chromium } = require('@playwright/test');
 const args = process.argv.slice(2);
-const out = resolve(args.find(a => !a.startsWith('--')) || 'C:/Users/agent/AppData/Local/Temp/claude/D--src/a9e04c7f-6ece-5d86-980b-e4bfe3913ac5/scratchpad/labo-shots-v2/demo/chaos');
+const outArg = args.find(a => a.startsWith('--out='));
+const out = resolve(outArg ? outArg.slice(6) : join(lab, 'shots', 'demo/chaos'));
 const rounds = +((args.find(a => a.startsWith('--rounds=')) || '--rounds=3').slice(9));
 mkdirSync(out, { recursive: true });
 const url = 'http://127.0.0.1:5180/labo-reglages.html';

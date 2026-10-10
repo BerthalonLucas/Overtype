@@ -11,10 +11,14 @@ for (const theme of ['light', 'dark']) {
   for (const id of v4States) {
     test(`${id} / ${theme}`, { tag: '@v4' }, async ({ page }) => {
       await page.goto(`/lab-frame.html?scenario=${id}&theme=${theme}&motion=reduce&ui=v4`);
-      if (['short', 'long'].includes(id)) await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'complete');
-      else if (['error', 'partial'].includes(id)) await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'error');
-      else if (id === 'pending') await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'streaming');
-      else if (id === 'notice') await expect(page.locator('.notice-pill')).toHaveText('Rien à traduire dans la fenêtre active.');
+      if (['short', 'long'].includes(id))
+        await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'complete');
+      else if (['error', 'partial'].includes(id))
+        await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'error');
+      else if (id === 'pending')
+        await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'streaming');
+      else if (id === 'notice')
+        await expect(page.locator('.notice-pill')).toHaveText('Rien à traduire dans la fenêtre active.');
       // The settings window and its history: their title (the app speaks English since lot 13).
       else await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
       if (id === 'history') await expect(page.locator('html')).toHaveAttribute('data-lab-ready', 'true');
@@ -29,7 +33,10 @@ for (const theme of ['light', 'dark']) {
   }
 }
 // The reader band on Lucas's screens: half of 1920 and of 2560, 22/33, 45 % of the height at most.
-for (const [width, height] of [[1920, 1080], [2560, 1440]]) {
+for (const [width, height] of [
+  [1920, 1080],
+  [2560, 1440],
+]) {
   test(`reader on a ${width} px screen`, { tag: '@v4' }, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto(`/lab-frame.html?scenario=long&theme=dark&motion=reduce&ui=v4`);
@@ -62,62 +69,101 @@ const circumference = 2 * Math.PI * 5;
 type Surface = { name: string; query: Record<string, string>; clock?: true; ready: (page: Page) => Promise<void> };
 const surfaces: Surface[] = [
   // The menu: compact, grid, prompt field (lot 7), held where it opens.
-  ...(['compact', 'grid', 'prompt'] as const).map(mode => ({ name: mode, query: { scenario: `ilot-${mode}`, hold: '1' }, ready: async (page: Page) => {
-    await expect(page.locator('[data-ilot]')).toHaveAttribute('data-mode', mode);
-    await atRest(page.locator('.ilot'));
-  } })),
+  ...(['compact', 'grid', 'prompt'] as const).map((mode) => ({
+    name: mode,
+    query: { scenario: `ilot-${mode}`, hold: '1' },
+    ready: async (page: Page) => {
+      await expect(page.locator('[data-ilot]')).toHaveAttribute('data-mode', mode);
+      await atRest(page.locator('.ilot'));
+    },
+  })),
   // The working pill (lot 8), in each indicator, its orb shown.
-  ...(['perle', 'nebuleuse', 'ruban'] as const).map(indicator => ({ name: `working-${indicator}`, query: { scenario: `working-${indicator}` }, ready: async (page: Page) => {
-    await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'streaming');
-    await expect(page.locator('.working-pill')).toHaveAttribute('data-orb', 'shown');
-    await atRest(page.locator('.working-pill'));
-  } })),
+  ...(['perle', 'nebuleuse', 'ruban'] as const).map((indicator) => ({
+    name: `working-${indicator}`,
+    query: { scenario: `working-${indicator}` },
+    ready: async (page: Page) => {
+      await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'streaming');
+      await expect(page.locator('.working-pill')).toHaveAttribute('data-orb', 'shown');
+      await atRest(page.locator('.working-pill'));
+    },
+  })),
   // The check and Undo (lot 9).
-  { name: 'done', query: { scenario: 'result-done', stage: 'done', hold: '1' }, clock: true, ready: async (page: Page) => {
-    await expect(page.locator('.result-pill')).toHaveAttribute('data-result', 'done');
-    await expect(page.locator('.result-check')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
-    await atRest(page.locator('.result-pill'));
-    const arc = await page.locator('.result-ring circle:not(.track)').evaluate(el => Number(el.getAttribute('stroke-dasharray')!.split(' ')[0]));
-    expect(arc).toBeCloseTo(circumference * 6 / 8, 1);
-  } },
+  {
+    name: 'done',
+    query: { scenario: 'result-done', stage: 'done', hold: '1' },
+    clock: true,
+    ready: async (page: Page) => {
+      await expect(page.locator('.result-pill')).toHaveAttribute('data-result', 'done');
+      await expect(page.locator('.result-check')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
+      await atRest(page.locator('.result-pill'));
+      const arc = await page
+        .locator('.result-ring circle:not(.track)')
+        .evaluate((el) => Number(el.getAttribute('stroke-dasharray')!.split(' ')[0]));
+      expect(arc).toBeCloseTo((circumference * 6) / 8, 1);
+    },
+  },
   // One error pill per family with a button or a ✕ (lot 10).
-  ...(['config', 'transient', 'paste', 'content'] as const).map(family => ({ name: `error-${family}`, query: { scenario: `result-error-${family}`, stage: 'error', hold: '1' }, ready: async (page: Page) => {
-    await expect(page.locator('.result-pill')).toHaveAttribute('data-result', 'error');
-    await expect(page.getByRole('alert')).toBeVisible();
-    await atRest(page.locator('.result-pill'));
-  } })),
+  ...(['config', 'transient', 'paste', 'content'] as const).map((family) => ({
+    name: `error-${family}`,
+    query: { scenario: `result-error-${family}`, stage: 'error', hold: '1' },
+    ready: async (page: Page) => {
+      await expect(page.locator('.result-pill')).toHaveAttribute('data-result', 'error');
+      await expect(page.getByRole('alert')).toBeVisible();
+      await atRest(page.locator('.result-pill'));
+    },
+  })),
   // A long result, shown (lot 11): the reader band in the Îlot's material.
-  { name: 'long', query: { scenario: 'long' }, ready: async (page: Page) => {
-    await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'complete');
-    await expect(page.locator('.glass-overlay')).toHaveAttribute('data-form', 'reader');
-  } },
+  {
+    name: 'long',
+    query: { scenario: 'long' },
+    ready: async (page: Page) => {
+      await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'complete');
+      await expect(page.locator('.glass-overlay')).toHaveAttribute('data-form', 'reader');
+    },
+  },
   // The Settings of the Îlot (lot 13).
-  { name: 'settings', query: { scenario: 'settings' }, ready: async (page: Page) => {
-    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'After replacing', exact: true })).toBeVisible();
-  } },
+  {
+    name: 'settings',
+    query: { scenario: 'settings' },
+    ready: async (page: Page) => {
+      await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'After replacing', exact: true })).toBeVisible();
+    },
+  },
   // The halo (lot 6, « mise en valeur », Lucas 25/09) under reduced motion: while the action
   // works, the still aurora, the bands and the still iridescent veil; the menu's three levels;
   // the changed words' iridescent glow, without the wave.
-  { name: 'halo', query: { scenario: 'halo' }, ready: async (page: Page) => {
-    await expect(page.locator('.halo-veil')).toHaveCount(3);
-    await expect(page.locator('.halo-aurora')).toHaveCount(1);
-    await expect(page.locator('.halo-band')).toHaveCount(3);
-  } },
-  { name: 'halo-menu', query: { scenario: 'halo', phase: 'menu' }, ready: async (page: Page) => {
-    await expect(page.locator('.halo-tint')).toHaveCount(3);
-    await expect(page.locator('.halo-box')).toHaveCount(1);
-  } },
-  { name: 'halo-marks', query: { scenario: 'halo', phase: 'marks' }, ready: async (page: Page) => {
-    await expect(page.locator('.halo-mark')).toHaveCount(2);
-    await expect(page.locator('.halo-mark').first()).toHaveCSS('opacity', '1');
-  } },
+  {
+    name: 'halo',
+    query: { scenario: 'halo' },
+    ready: async (page: Page) => {
+      await expect(page.locator('.halo-veil')).toHaveCount(3);
+      await expect(page.locator('.halo-aurora')).toHaveCount(1);
+      await expect(page.locator('.halo-band')).toHaveCount(3);
+    },
+  },
+  {
+    name: 'halo-menu',
+    query: { scenario: 'halo', phase: 'menu' },
+    ready: async (page: Page) => {
+      await expect(page.locator('.halo-tint')).toHaveCount(3);
+      await expect(page.locator('.halo-box')).toHaveCount(1);
+    },
+  },
+  {
+    name: 'halo-marks',
+    query: { scenario: 'halo', phase: 'marks' },
+    ready: async (page: Page) => {
+      await expect(page.locator('.halo-mark')).toHaveCount(2);
+      await expect(page.locator('.halo-mark').first()).toHaveCSS('opacity', '1');
+    },
+  },
 ];
 
 // Every state of the workbench keeps a reference, in one journey or the other.
 test('every state of the workbench has its reference', () => {
-  const covered: string[] = [...v4States, ...surfaces.map(surface => surface.query.scenario)];
+  const covered: string[] = [...v4States, ...surfaces.map((surface) => surface.query.scenario)];
   for (const { id } of scenarios) expect(covered, id).toContain(id);
 });
 

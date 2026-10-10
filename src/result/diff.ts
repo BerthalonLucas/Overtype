@@ -18,13 +18,17 @@ export function tokenize(text: string): string[] {
 // remains once the common prefix and suffix are set aside; `maxCells` bounds that table: past it
 // the answer is null (the caller then highlights the whole block rather than pay for it).
 export function diffTokens(A: readonly string[], B: readonly string[], maxCells = Infinity): DiffOp[] | null {
-  const n = A.length, m = B.length;
+  const n = A.length,
+    m = B.length;
   // Trim the common prefix and suffix first (cheap, a huge win for small edits).
   let p = 0;
   while (p < n && p < m && A[p] === B[p]) p++;
   let s = 0;
   while (s < n - p && s < m - p && A[n - 1 - s] === B[m - 1 - s]) s++;
-  const a2 = A.slice(p, n - s), b2 = B.slice(p, m - s), N = a2.length, M = b2.length;
+  const a2 = A.slice(p, n - s),
+    b2 = B.slice(p, m - s),
+    N = a2.length,
+    M = b2.length;
   if ((N + 1) * (M + 1) > maxCells) return null;
   const L = Array.from({ length: N + 1 }, () => new Uint32Array(M + 1));
   for (let i = N - 1; i >= 0; i--)
@@ -37,10 +41,14 @@ export function diffTokens(A: readonly string[], B: readonly string[], maxCells 
     else ops.push({ type, text });
   };
   for (const t of A.slice(0, p)) push('eq', t);
-  let i = 0, j = 0;
+  let i = 0,
+    j = 0;
   while (i < N && j < M) {
-    if (a2[i] === b2[j]) { push('eq', a2[i]); i++; j++; }
-    else if (L[i + 1][j] >= L[i][j + 1]) push('del', a2[i++]);
+    if (a2[i] === b2[j]) {
+      push('eq', a2[i]);
+      i++;
+      j++;
+    } else if (L[i + 1][j] >= L[i][j + 1]) push('del', a2[i++]);
     else push('ins', b2[j++]);
   }
   while (i < N) push('del', a2[i++]);

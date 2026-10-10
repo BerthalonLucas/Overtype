@@ -3,9 +3,13 @@
 //   node scripts/demo-check.mjs
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const app = p => readFileSync(resolve('D:/src/Flow_Translate', p), 'utf8');
-const demo = readFileSync(resolve('src/demo/app.js'), 'utf8');
+// Paths come from this file's location: the lab is design-lab/reglages/, the repository two levels up.
+const lab = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../../', import.meta.url));
+const app = p => readFileSync(resolve(root, p), 'utf8');
+const demo = readFileSync(resolve(lab, 'src/demo/app.js'), 'utf8');
 const val = name => Number((demo.match(new RegExp(`export const ${name} = (\\d+)`)) || [])[1]);
 const checks = [
   ['HALO_APPEAR_DELAY_MS', /HALO_APPEAR_DELAY_MS = (\d+)/, 'src/halo/HaloWindow.tsx'],

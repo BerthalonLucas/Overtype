@@ -1,5 +1,7 @@
 # Recette Windows
 
+> Document historique (recette de la 0.6.0, 2 octobre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Pour chaque passage, noter la version de l’application, l’échelle Windows, la configuration
 des écrans, la disposition du clavier, le thème, et la preuve de chaque ligne (capture, vidéo,
 résultat de sonde). Texte synthétique uniquement : une phrase courte, puis un paragraphe de

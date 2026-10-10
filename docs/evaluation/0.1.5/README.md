@@ -1,5 +1,7 @@
 # Mesures de recette 0.1.5
 
+> Document historique (mesures 0.1.5, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../../../README.md) et [docs/BRIDGE.md](../../../docs/BRIDGE.md).
+
 Exécutées le 9 septembre 2026 avec vLLM 0.28.0 et les deux modèles épinglés.
 Chaque ligne porte sur 100 extraits synthétiques courts (50 FR→EN, 50 EN→FR),
 après échauffement. Température 0.7, top_p 0.6, top_k 20, répétition 1.05, seed 42.

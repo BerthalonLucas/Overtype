@@ -33,10 +33,15 @@ impl HistoryStore {
         )
         .map_err(|_| "Impossible d’initialiser l’historique.".to_string())?;
         // 0.4.0: the action replaces the target language (kept as an empty column).
-        let has_action = conn.prepare("PRAGMA table_info(history)").and_then(|mut stmt| {
-            let names = stmt.query_map([], |row| row.get::<_, String>(1))?.collect::<Result<Vec<_>, _>>()?;
-            Ok(names.iter().any(|name| name == "action"))
-        }).map_err(|_| "Impossible d’initialiser l’historique.".to_string())?;
+        let has_action = conn
+            .prepare("PRAGMA table_info(history)")
+            .and_then(|mut stmt| {
+                let names = stmt
+                    .query_map([], |row| row.get::<_, String>(1))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(names.iter().any(|name| name == "action"))
+            })
+            .map_err(|_| "Impossible d’initialiser l’historique.".to_string())?;
         if !has_action {
             conn.execute_batch("ALTER TABLE history ADD COLUMN action TEXT NOT NULL DEFAULT ''")
                 .map_err(|_| "Impossible de migrer l’historique.".to_string())?;
@@ -102,7 +107,11 @@ impl HistoryStore {
                 id,
                 source_text: payload.source_text,
                 translated_text: payload.translated_text,
-                action_name: if action.is_empty() { "Traduire".into() } else { action },
+                action_name: if action.is_empty() {
+                    "Traduire".into()
+                } else {
+                    action
+                },
                 server: server_of(&mode),
                 created_at,
             });
@@ -161,7 +170,11 @@ mod tests {
                     source_text: "a".into(),
                     translated_text: "b".into(),
                     action_name: "Corriger".into(),
-                    server: if n % 2 == 0 { "quality".into() } else { "llm.exemple.com:8443".into() },
+                    server: if n % 2 == 0 {
+                        "quality".into()
+                    } else {
+                        "llm.exemple.com:8443".into()
+                    },
                     created_at: (Utc::now() + Duration::milliseconds(n)).to_rfc3339(),
                 })
                 .unwrap();
@@ -170,8 +183,13 @@ mod tests {
         assert_eq!(entries.len(), 100);
         assert!(entries.iter().all(|e| e.action_name == "Corriger"));
         // A row of 0.5 (`quality`) names no server; a row of 0.6 keeps its host.
-        assert!(entries.iter().all(|e| e.server.is_empty() || e.server == "llm.exemple.com:8443"));
-        assert!(entries.iter().any(|e| e.server.is_empty()) && entries.iter().any(|e| !e.server.is_empty()));
+        assert!(entries
+            .iter()
+            .all(|e| e.server.is_empty() || e.server == "llm.exemple.com:8443"));
+        assert!(
+            entries.iter().any(|e| e.server.is_empty())
+                && entries.iter().any(|e| !e.server.is_empty())
+        );
         assert!(!entries.iter().any(|e| e.id == "old"));
         store.delete(None).unwrap();
         assert!(store.list().unwrap().is_empty());

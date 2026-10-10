@@ -274,9 +274,9 @@ reste visible tant que les composants ne les implémentent pas.
 - Les premières références sont un **constat de 0.1.5 avec ses défauts**, pas un design approuvé.
 - Même Windows, version Chromium, polices et paramètres pour comparer. Les références
   sont séparées par plateforme. Textes/dates fictifs et stables ; aucune donnée utilisateur.
-- Les images figent les animations. `FLOWTRANSLATE_PROFILE_URL` peut cibler le serveur
-  d’atelier et `npm run ui:motion` enregistre les interactions du lecteur dans
-  `release/material-preview`. Cette vidéo navigateur ne mesure pas la fluidité native.
+- Les images figent les animations. L’ancien `npm run ui:motion`, qui enregistrait les
+  interactions du lecteur 0.4, est retiré depuis le 10/10/2026 : il visait des menus qui
+  n’existent plus. Une vidéo navigateur ne mesure de toute façon pas la fluidité native.
 
 ### Accès réel à Tauri / WebView2
 

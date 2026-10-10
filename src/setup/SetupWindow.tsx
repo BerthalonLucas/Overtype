@@ -17,7 +17,21 @@ import { shortcutKeys } from '../settings/ShortcutRecorder';
 import { useRegistrations } from '../settings/registrations';
 import type { DemoEnded, Language, ProbeProblem, Theme } from '../types';
 import { useSettings } from '../useSettings';
-import { canContinue, createNavLock, direction, isQuestion, isSetupStep, nextStep, ownsKey, previousStep, primaryBinding, setupQuestions, stepPage, type SetupQuestion, type SetupStep } from './model';
+import {
+  canContinue,
+  createNavLock,
+  direction,
+  isQuestion,
+  isSetupStep,
+  nextStep,
+  ownsKey,
+  previousStep,
+  primaryBinding,
+  setupQuestions,
+  stepPage,
+  type SetupQuestion,
+  type SetupStep,
+} from './model';
 import { DemoIntroScreen, DoneMark, Heartbeat, LookScreen, ModelScreen, Recap, ShortcutScreen } from './screens';
 import { useSetupSettings } from './useSetupSettings';
 import '../components/tokens.css';
@@ -50,8 +64,20 @@ const head: Record<SetupQuestion, { icon: LucideIcon; title: MessageKey; text: M
   model: { icon: Server, title: 'setup.model.title', text: 'setup.model.text' },
   demo: { icon: Play, title: 'setup.demo.title', text: 'setup.demo.text' },
 };
-const primaryLabel: Record<SetupStep, MessageKey> = { welcome: 'setup.welcome.start', appearance: 'setup.continue', shortcut: 'setup.continue', model: 'setup.continue', demo: 'setup.demo.start', ready: 'setup.ready.open' };
-const skipLabel: Record<SetupQuestion, MessageKey> = { appearance: 'setup.skip', shortcut: 'setup.skip', model: 'setup.later', demo: 'setup.demo.skip' };
+const primaryLabel: Record<SetupStep, MessageKey> = {
+  welcome: 'setup.welcome.start',
+  appearance: 'setup.continue',
+  shortcut: 'setup.continue',
+  model: 'setup.continue',
+  demo: 'setup.demo.start',
+  ready: 'setup.ready.open',
+};
+const skipLabel: Record<SetupQuestion, MessageKey> = {
+  appearance: 'setup.skip',
+  shortcut: 'setup.skip',
+  model: 'setup.later',
+  demo: 'setup.demo.skip',
+};
 // The window is 620 × 720 (src-tauri: SETUP_SIZE); smaller screens get a smaller window, whose
 // screens scroll.
 const SIZE = { width: 620, height: 720 };
@@ -68,13 +94,19 @@ const FOLD_MS = 520;
 // `&motion=full|reduced` set the simulated settings before the first render.
 if (!bridge.native) {
   const params = new URLSearchParams(location.search);
-  const lang = params.get('lang'), theme = params.get('theme'), motion = params.get('motion');
+  const lang = params.get('lang'),
+    theme = params.get('theme'),
+    motion = params.get('motion');
   const patch = {
-    ...(lang === 'fr' || lang === 'en' ? { language: lang } as const : {}),
-    ...(theme === 'light' || theme === 'dark' || theme === 'system' ? { theme } as const : {}),
-    ...(motion === 'full' || motion === 'reduced' ? { motion } as const : {}),
+    ...(lang === 'fr' || lang === 'en' ? ({ language: lang } as const) : {}),
+    ...(theme === 'light' || theme === 'dark' || theme === 'system' ? ({ theme } as const) : {}),
+    ...(motion === 'full' || motion === 'reduced' ? ({ motion } as const) : {}),
   };
-  if (params.get('window') === 'setup' && Object.keys(patch).length) void bridge.getSettings().then(settings => bridge.saveSettings({ ...settings, ...patch })).catch(() => undefined);
+  if (params.get('window') === 'setup' && Object.keys(patch).length)
+    void bridge
+      .getSettings()
+      .then((settings) => bridge.saveSettings({ ...settings, ...patch }))
+      .catch(() => undefined);
 }
 
 export function SetupWindow() {
@@ -86,11 +118,19 @@ export function SetupWindow() {
 function DemoStage() {
   const settings = useSettings();
   const onDone = useCallback((done: boolean) => {
-    void bridge.closeDemo(done).catch(() => undefined).then(() => { if (!bridge.native) location.assign('?window=setup&step=ready'); });
+    void bridge
+      .closeDemo(done)
+      .catch(() => undefined)
+      .then(() => {
+        if (!bridge.native) location.assign('?window=setup&step=ready');
+      });
   }, []);
   // The settings decide the names, the shortcut and the style: the demo waits for them, briefly.
   const [waited, setWaited] = useState(false);
-  useEffect(() => { const timer = window.setTimeout(() => setWaited(true), 1500); return () => window.clearTimeout(timer); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setWaited(true), 1500);
+    return () => window.clearTimeout(timer);
+  }, []);
   if (!settings && !waited) return null;
   return <Demo settings={settings} onDone={onDone} />;
 }
@@ -104,7 +144,7 @@ function Setup({ initial }: { initial: string | null }) {
   const store = useSetupSettings(useCallback(() => tNow('setup.notSaved'), []));
   const { settings } = store;
   const registrations = useRegistrations();
-  const [step, setStep] = useState<SetupStep>(() => !bridge.native && isSetupStep(initial) ? initial : 'welcome');
+  const [step, setStep] = useState<SetupStep>(() => (!bridge.native && isSetupStep(initial) ? initial : 'welcome'));
   const [dir, setDir] = useState<1 | -1>(1);
   const [phase, setPhase] = useState<Phase>('setup');
   const [modelReady, setModelReady] = useState(false);
@@ -120,14 +160,22 @@ function Setup({ initial }: { initial: string | null }) {
   const phaseNow = useRef(phase);
   phaseNow.current = phase;
 
-  useEffect(() => { document.title = t('setup.windowTitle', { app: appName }); }, [t]);
+  useEffect(() => {
+    document.title = t('setup.windowTitle', { app: appName });
+  }, [t]);
 
-  const go = useCallback((to: SetupStep, force = false) => {
-    if (!force && lock.locked()) return;
-    setDir(direction(stepNow.current, to));
-    setStep(to);
-  }, [lock]);
-  const back = useCallback(() => { const to = previousStep(stepNow.current); if (to !== stepNow.current) go(to); }, [go]);
+  const go = useCallback(
+    (to: SetupStep, force = false) => {
+      if (!force && lock.locked()) return;
+      setDir(direction(stepNow.current, to));
+      setStep(to);
+    },
+    [lock],
+  );
+  const back = useCallback(() => {
+    const to = previousStep(stepNow.current);
+    if (to !== stepNow.current) go(to);
+  }, [go]);
 
   // ——— The demo ———
   // The window steps aside (its own fade), then the demo plays: natively in its own window
@@ -139,7 +187,7 @@ function Setup({ initial }: { initial: string | null }) {
     setFold(folds ? { x: window.innerWidth / 2 - 96, y: window.innerHeight / 2 - 24 } : null);
     setPhase('leaving');
     await store.flush();
-    await new Promise(resolve => window.setTimeout(resolve, reduced ? 0 : folds ? FOLD_MS + 120 : 180));
+    await new Promise((resolve) => window.setTimeout(resolve, reduced ? 0 : folds ? FOLD_MS + 120 : 180));
     try {
       await bridge.openDemo();
       if ((phaseNow.current as Phase) === 'leaving') setPhase('demo');
@@ -160,32 +208,61 @@ function Setup({ initial }: { initial: string | null }) {
   useEffect(() => {
     let live = true;
     let off: (() => void) | undefined;
-    void bridge.on<DemoEnded>('demo-ended', () => { if (live) endDemo(); }).then(unlisten => { if (live) off = unlisten; else unlisten(); }, () => undefined);
-    return () => { live = false; off?.(); };
+    void bridge
+      .on<DemoEnded>('demo-ended', () => {
+        if (live) endDemo();
+      })
+      .then(
+        (unlisten) => {
+          if (live) off = unlisten;
+          else unlisten();
+        },
+        () => undefined,
+      );
+    return () => {
+      live = false;
+      off?.();
+    };
   }, [endDemo]);
   useEffect(() => {
     if (phase !== 'demo') return;
-    const timer = window.setTimeout(() => { void bridge.closeDemo(false).catch(() => undefined); endDemo(); }, DEMO_WATCHDOG_MS);
+    const timer = window.setTimeout(() => {
+      void bridge.closeDemo(false).catch(() => undefined);
+      endDemo();
+    }, DEMO_WATCHDOG_MS);
     return () => window.clearTimeout(timer);
   }, [phase, endDemo]);
 
   // ——— The end ———
-  const finish = useCallback(async (openSettings: boolean) => {
-    if (closing || lock.locked()) return;
-    setClosing(true);
-    setFinishFailed(false);
-    await store.flush();
-    try { await bridge.finishSetup(openSettings); if (!bridge.native && !openSettings) location.assign('/'); }
-    // Refused (the file could not be written): said under the button, which works again.
-    catch { setClosing(false); setFinishFailed(true); lock.release(); }
-  }, [closing, lock, store]);
+  const finish = useCallback(
+    async (openSettings: boolean) => {
+      if (closing || lock.locked()) return;
+      setClosing(true);
+      setFinishFailed(false);
+      await store.flush();
+      try {
+        await bridge.finishSetup(openSettings);
+        if (!bridge.native && !openSettings) location.assign('/');
+      } catch {
+        // Refused (the file could not be written): said under the button, which works again.
+        setClosing(false);
+        setFinishFailed(true);
+        lock.release();
+      }
+    },
+    [closing, lock, store],
+  );
   // « C'est prêt » is the end: the setup is done from here, however the window is closed (its
   // cross used to bring the whole setup back at the next launch, the server already saved).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once when the ready step is reached with settings loaded
   useEffect(() => {
     if (step !== 'ready' || !settings) return;
     setFinishFailed(false);
-    void store.flush().then(() => bridge.completeSetup()).catch(() => undefined);
-  }, [step, settings !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+    void store
+      .flush()
+      .then(() => bridge.completeSetup())
+      .catch(() => undefined);
+  }, [step, settings !== null]);
   const closeWindow = useCallback(async () => {
     await store.flush();
     void bridge.closeSettings().catch(() => undefined);
@@ -198,31 +275,57 @@ function Setup({ initial }: { initial: string | null }) {
     else if (step === 'demo') void startDemo();
     else go(nextStep(step));
   }, [primaryDisabled, step, finish, startDemo, go]);
-  const skip = () => { if (step === 'demo') go('ready'); else go(nextStep(step)); };
-  useEffect(() => { if (step !== 'model') { setLog(null); setModelReady(false); } if (step !== 'demo') setDemoFailed(false); }, [step]);
+  const skip = () => {
+    if (step === 'demo') go('ready');
+    else go(nextStep(step));
+  };
+  useEffect(() => {
+    if (step !== 'model') {
+      setLog(null);
+      setModelReady(false);
+    }
+    if (step !== 'demo') setDemoFailed(false);
+  }, [step]);
 
   // Theme and language apply at once (the document follows the shared settings), then are saved.
   const setTheme = (theme: Theme) => {
     if (!settings || theme === settings.theme) return;
     const apply = () => store.persist({ ...settings, theme }, true);
-    const transition = (document as Document & { startViewTransition?: (run: () => void) => unknown }).startViewTransition;
-    if (!reduced && typeof transition === 'function') { try { transition.call(document, () => flushSync(apply)); return; } catch { /* plain change below */ } }
+    const transition = (document as Document & { startViewTransition?: (run: () => void) => unknown })
+      .startViewTransition;
+    if (!reduced && typeof transition === 'function') {
+      try {
+        transition.call(document, () => flushSync(apply));
+        return;
+      } catch {
+        /* plain change below */
+      }
+    }
     apply();
   };
   // The default actions nobody renamed follow the language (« Corriger » / « Fix grammar »).
-  const setLanguage = (language: Language) => { if (settings && language !== settings.language) store.persist(withLanguage(settings, language), true); };
+  const setLanguage = (language: Language) => {
+    if (settings && language !== settings.language) store.persist(withLanguage(settings, language), true);
+  };
 
   // Focus: each screen's heading (read first by a screen reader; Enter still presses the big
   // button), the address field on « Votre modèle ».
+  // biome-ignore lint/correctness/useExhaustiveDependencies: focus moves when the screen changes, not on each settings edit
   useEffect(() => {
     if (phase !== 'setup' || !settings) return;
-    const timer = window.setTimeout(() => {
-      const screen = document.querySelector(`.su-screen[data-screen="${step}"]`);
-      const target = (step === 'model' ? screen?.querySelector('.ft-connection input') : null) ?? screen?.querySelector('.su-title, .su-hero');
-      if (target instanceof HTMLElement && !(target as HTMLInputElement).disabled) target.focus({ preventScroll: true });
-    }, step === 'welcome' ? 700 : 380);
+    const timer = window.setTimeout(
+      () => {
+        const screen = document.querySelector(`.su-screen[data-screen="${step}"]`);
+        const target =
+          (step === 'model' ? screen?.querySelector('.ft-connection input') : null) ??
+          screen?.querySelector('.su-title, .su-hero');
+        if (target instanceof HTMLElement && !(target as HTMLInputElement).disabled)
+          target.focus({ preventScroll: true });
+      },
+      step === 'welcome' ? 700 : 380,
+    );
     return () => window.clearTimeout(timer);
-  }, [phase, step, settings !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [phase, step, settings !== null]);
 
   // Enter = the big button, Escape = Retour: never while a shortcut is being recorded, a list is
   // open, or the journal shows (Escape then closes the journal). Enter mashed (twelve presses
@@ -230,7 +333,9 @@ function Setup({ initial }: { initial: string | null }) {
   // only on a screen that had the time to show, and after a pause since the previous Enter.
   const shownAt = useRef(0);
   const lastEnter = useRef(-Infinity);
-  useEffect(() => { shownAt.current = performance.now(); }, [step]);
+  useEffect(() => {
+    shownAt.current = performance.now();
+  }, [step]);
   useEffect(() => {
     if (phase !== 'setup') return;
     const onKey = (event: KeyboardEvent) => {
@@ -238,11 +343,21 @@ function Setup({ initial }: { initial: string | null }) {
       if (event.key !== 'Escape' && event.key !== 'Enter') return;
       if (document.querySelector('[data-recording]')) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (log) { if (event.key === 'Escape' && !ownsKey(target, 'Escape')) { event.preventDefault(); setLog(null); } return; }
-      if (ownsKey(target, event.key) || document.querySelector('[data-radix-popper-content-wrapper], .ft-dialog')) return;
+      if (log) {
+        if (event.key === 'Escape' && !ownsKey(target, 'Escape')) {
+          event.preventDefault();
+          setLog(null);
+        }
+        return;
+      }
+      if (ownsKey(target, event.key) || document.querySelector('[data-radix-popper-content-wrapper], .ft-dialog'))
+        return;
       event.preventDefault();
       if (event.repeat) return;
-      if (event.key === 'Escape') { back(); return; }
+      if (event.key === 'Escape') {
+        back();
+        return;
+      }
       const now = performance.now();
       const deliberate = now - lastEnter.current >= ENTER_PAUSE_MS && now - shownAt.current >= ENTER_SETTLE_MS;
       lastEnter.current = now;
@@ -255,41 +370,89 @@ function Setup({ initial }: { initial: string | null }) {
   const page = stepPage[step];
   const question = isQuestion(step) ? step : null;
   const keys = settings ? shortcutKeys(primaryBinding(settings)?.shortcut ?? '', t) : [];
-  const openLog = (problem: ProbeProblem | null, run: string | null) => setLog({ filter: 'errors', logId: problem?.logId, run, at: Date.now() });
+  const openLog = (problem: ProbeProblem | null, run: string | null) =>
+    setLog({ filter: 'errors', logId: problem?.logId, run, at: Date.now() });
 
   let body: React.ReactNode = null;
   if (settings) {
-    body = step === 'welcome' ? <div className="su-welcome">
-        <motion.span className="su-welcome-mark" initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={tx('bouncy', { delay: 0.15 })}><Heartbeat size={88} /></motion.span>
-        <motion.h1 className="su-hero" tabIndex={-1} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={tx('smooth', { delay: 0.3 })}>{t('setup.welcome.title', { app: appName })}</motion.h1>
-        <motion.p className="su-sub" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={tx('smooth', { delay: 0.38 })}>{t('setup.welcome.text')}</motion.p>
-      </div>
-      : step === 'appearance' ? <LookScreen theme={settings.theme} language={settings.language} onTheme={setTheme} onLanguage={setLanguage} />
-      : step === 'shortcut' ? <ShortcutScreen store={store} settings={settings} registrations={registrations} />
-      : step === 'model' ? <ModelScreen store={store} settings={settings} onReady={setModelReady} onOpenLog={openLog} />
-      : step === 'demo' ? <DemoIntroScreen keys={keys} problem={demoFailed} />
-      : <div className="su-done">
-        <DoneMark />
-        <h1 className="su-hero" tabIndex={-1}>{t('setup.ready.title')}</h1>
-        <p className="su-sub">{t('setup.ready.text')}</p>
-        <Recap settings={settings} onEdit={to => go(to)} />
-      </div>;
+    body =
+      step === 'welcome' ? (
+        <div className="su-welcome">
+          <motion.span
+            className="su-welcome-mark"
+            initial={{ opacity: 0, scale: 0.7 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={tx('bouncy', { delay: 0.15 })}
+          >
+            <Heartbeat size={88} />
+          </motion.span>
+          <motion.h1
+            className="su-hero"
+            tabIndex={-1}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={tx('smooth', { delay: 0.3 })}
+          >
+            {t('setup.welcome.title', { app: appName })}
+          </motion.h1>
+          <motion.p
+            className="su-sub"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={tx('smooth', { delay: 0.38 })}
+          >
+            {t('setup.welcome.text')}
+          </motion.p>
+        </div>
+      ) : step === 'appearance' ? (
+        <LookScreen theme={settings.theme} language={settings.language} onTheme={setTheme} onLanguage={setLanguage} />
+      ) : step === 'shortcut' ? (
+        <ShortcutScreen store={store} settings={settings} registrations={registrations} />
+      ) : step === 'model' ? (
+        <ModelScreen store={store} settings={settings} onReady={setModelReady} onOpenLog={openLog} />
+      ) : step === 'demo' ? (
+        <DemoIntroScreen keys={keys} problem={demoFailed} />
+      ) : (
+        <div className="su-done">
+          <DoneMark />
+          <h1 className="su-hero" tabIndex={-1}>
+            {t('setup.ready.title')}
+          </h1>
+          <p className="su-sub">{t('setup.ready.text')}</p>
+          <Recap settings={settings} onEdit={(to) => go(to)} />
+        </div>
+      );
   }
   // « Fondu et échelle »: the screen leaves growing a little, the next one enters from 96 %; in
   // place, no travel. Reduced motion: a short fade.
   const screenMotion = reduced
-    ? { variants: { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }, transition: tx({ duration: 0.16, ease: 'out' }) }
+    ? {
+        variants: { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } },
+        transition: tx({ duration: 0.16, ease: 'out' }),
+      }
     : {
-      variants: {
-        enter: (d: number) => ({ opacity: 0, scale: d > 0 ? 0.96 : 1.03 }),
-        center: { opacity: 1, scale: 1 },
-        exit: (d: number) => ({ opacity: 0, scale: d > 0 ? 1.03 : 0.96, transition: tx({ duration: 0.18, ease: 'out' }) }),
-      },
-      transition: tx('smooth', { delay: 0.06 }),
-    };
+        variants: {
+          enter: (d: number) => ({ opacity: 0, scale: d > 0 ? 0.96 : 1.03 }),
+          center: { opacity: 1, scale: 1 },
+          exit: (d: number) => ({
+            opacity: 0,
+            scale: d > 0 ? 1.03 : 0.96,
+            transition: tx({ duration: 0.18, ease: 'out' }),
+          }),
+        },
+        transition: tx('smooth', { delay: 0.06 }),
+      };
 
   // The preview has no window of its own: it paints a desktop and plays the demo in place.
-  if (phase === 'demo' && !bridge.native) return <Demo settings={settings} onDone={done => { void bridge.closeDemo(done).catch(() => endDemo()); }} />;
+  if (phase === 'demo' && !bridge.native)
+    return (
+      <Demo
+        settings={settings}
+        onDone={(done) => {
+          void bridge.closeDemo(done).catch(() => endDemo());
+        }}
+      />
+    );
 
   const native = bridge.native;
   const Head = question ? head[question].icon : null;
@@ -297,87 +460,256 @@ function Setup({ initial }: { initial: string | null }) {
   // (the lab's « Repli vers la barre des tâches »); natively Windows hides the window itself, the
   // page only fades. AnimatePresence hands `fold` to the leaving window.
   const exits = {
-    out: (folding: { x: number; y: number } | null) => folding && !native && !reduced
-      ? { opacity: [1, 1, 0], scale: 0.06, x: folding.x, y: folding.y, transition: { duration: FOLD_MS / 1000, ease: [0.5, 0, 0.2, 1] as [number, number, number, number], opacity: { duration: FOLD_MS / 1000, ease: 'linear' as const, times: [0, 0.6, 1] } } }
-      : native || reduced ? { opacity: 0, transition: tx({ duration: 0.16, ease: 'out' }) } : { opacity: 0, scale: 0.97, y: 4, transition: tx({ duration: 0.16, ease: 'out' }) },
+    out: (folding: { x: number; y: number } | null) =>
+      folding && !native && !reduced
+        ? {
+            opacity: [1, 1, 0],
+            scale: 0.06,
+            x: folding.x,
+            y: folding.y,
+            transition: {
+              duration: FOLD_MS / 1000,
+              ease: [0.5, 0, 0.2, 1] as [number, number, number, number],
+              opacity: { duration: FOLD_MS / 1000, ease: 'linear' as const, times: [0, 0.6, 1] },
+            },
+          }
+        : native || reduced
+          ? { opacity: 0, transition: tx({ duration: 0.16, ease: 'out' }) }
+          : { opacity: 0, scale: 0.97, y: 4, transition: tx({ duration: 0.16, ease: 'out' }) },
   };
-  return <div className="su-desk ft-scope" data-native={native ? '' : undefined} data-phase={phase}>
-    {!native && <Wallpaper />}
-    <AnimatePresence custom={fold}>
-      {phase === 'setup' && <motion.div key="window" className="ft-window su-window" data-material="floating" role="dialog" aria-label={t('setup.windowTitle', { app: appName })}
-        style={native ? undefined : { width: SIZE.width, height: SIZE.height }}
-        initial={native ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        variants={exits} custom={fold} exit="out" transition={tx('window')}>
-        <div className="su-setup" data-step={step} data-ft-page={page}>
-          {/* The faint veil of the question's colour, one per screen so colours cross-fade. */}
-          <AnimatePresence initial={false}>
-            <motion.span key={page} className="ft-page-veil su-veil" data-ft-page={page} aria-hidden="true" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tx(0.32)} />
-          </AnimatePresence>
-          <div className="su-nav">
-            {question && <>
-              <Button variant="ghost" size="sm" className="su-back" onClick={back} icon={<ChevronLeft {...ICON} />}>{t('setup.back')}</Button>
-              <span className="su-dots" role="img" aria-label={t('setup.progress', { n: setupQuestions.indexOf(question) + 1, total: setupQuestions.length })}>
-                {setupQuestions.map((id, index) => <i key={id} data-done={index < setupQuestions.indexOf(question) ? '' : undefined} />)}
-                <motion.b className="su-dots-on" initial={false} animate={{ x: setupQuestions.indexOf(question) * 16 }} transition={tx('snappy')} />
-              </span>
-              <Button variant="ghost" size="sm" className="su-skip" onClick={skip}>{t(skipLabel[question])}</Button>
-            </>}
-          </div>
+  return (
+    <div className="su-desk ft-scope" data-native={native ? '' : undefined} data-phase={phase}>
+      {!native && <Wallpaper />}
+      <AnimatePresence custom={fold}>
+        {phase === 'setup' && (
+          <motion.div
+            key="window"
+            className="ft-window su-window"
+            data-material="floating"
+            role="dialog"
+            aria-label={t('setup.windowTitle', { app: appName })}
+            style={native ? undefined : { width: SIZE.width, height: SIZE.height }}
+            initial={native ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            variants={exits}
+            custom={fold}
+            exit="out"
+            transition={tx('window')}
+          >
+            <div className="su-setup" data-step={step} data-ft-page={page}>
+              {/* The faint veil of the question's colour, one per screen so colours cross-fade. */}
+              <AnimatePresence initial={false}>
+                <motion.span
+                  key={page}
+                  className="ft-page-veil su-veil"
+                  data-ft-page={page}
+                  aria-hidden="true"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={tx(0.32)}
+                />
+              </AnimatePresence>
+              <div className="su-nav">
+                {question && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="su-back"
+                      onClick={back}
+                      icon={<ChevronLeft {...ICON} />}
+                    >
+                      {t('setup.back')}
+                    </Button>
+                    <span
+                      className="su-dots"
+                      role="img"
+                      aria-label={t('setup.progress', {
+                        n: setupQuestions.indexOf(question) + 1,
+                        total: setupQuestions.length,
+                      })}
+                    >
+                      {setupQuestions.map((id, index) => (
+                        <i key={id} data-done={index < setupQuestions.indexOf(question) ? '' : undefined} />
+                      ))}
+                      <motion.b
+                        className="su-dots-on"
+                        initial={false}
+                        animate={{ x: setupQuestions.indexOf(question) * 16 }}
+                        transition={tx('snappy')}
+                      />
+                    </span>
+                    <Button variant="ghost" size="sm" className="su-skip" onClick={skip}>
+                      {t(skipLabel[question])}
+                    </Button>
+                  </>
+                )}
+              </div>
 
-          <div className="su-screens">
-            {!settings && <div className="su-loading" role={store.loadError ? 'alert' : 'status'}>
-              {store.loadError
-                ? <Notice kind="error" title={t('setup.loadError')} action={<Button size="sm" onClick={store.load}>{t('common.retry')}</Button>} />
-                : <><Spinner size={18} /><span>{t('setup.loading')}</span></>}
-            </div>}
-            <AnimatePresence initial={false} custom={dir}>
-              {settings && <motion.section key={step} data-screen={step} data-ft-page={page} className="su-screen" custom={dir} initial="enter" animate="center" exit="exit" {...screenMotion}>
-                {/* Our ScrollArea (thin overlay thumb, edge fades), never the native grey scrollbar. */}
-                <ScrollArea className="su-scroll" viewportClassName="su-scroll-vp">
-                  <div className="su-screen-in">
-                    {question && Head && <header className="su-head">
-                      <span className="su-head-icon" aria-hidden="true"><Head {...ICON} /></span>
-                      <h1 className="su-title" tabIndex={-1}>{t(head[question].title, { app: appName })}</h1>
-                      <p className="su-sub">{t(head[question].text, { app: appName })}</p>
-                    </header>}
-                    <div className="su-body">{body}</div>
+              <div className="su-screens">
+                {!settings && (
+                  <div className="su-loading" role={store.loadError ? 'alert' : 'status'}>
+                    {store.loadError ? (
+                      <Notice
+                        kind="error"
+                        title={t('setup.loadError')}
+                        action={
+                          <Button size="sm" onClick={store.load}>
+                            {t('common.retry')}
+                          </Button>
+                        }
+                      />
+                    ) : (
+                      <>
+                        <Spinner size={18} />
+                        <span>{t('setup.loading')}</span>
+                      </>
+                    )}
                   </div>
-                </ScrollArea>
-              </motion.section>}
-            </AnimatePresence>
-          </div>
+                )}
+                <AnimatePresence initial={false} custom={dir}>
+                  {settings && (
+                    <motion.section
+                      key={step}
+                      data-screen={step}
+                      data-ft-page={page}
+                      className="su-screen"
+                      custom={dir}
+                      initial="enter"
+                      animate="center"
+                      exit="exit"
+                      {...screenMotion}
+                    >
+                      {/* Our ScrollArea (thin overlay thumb, edge fades), never the native grey scrollbar. */}
+                      <ScrollArea className="su-scroll" viewportClassName="su-scroll-vp">
+                        <div className="su-screen-in">
+                          {question && Head && (
+                            <header className="su-head">
+                              <span className="su-head-icon" aria-hidden="true">
+                                <Head {...ICON} />
+                              </span>
+                              <h1 className="su-title" tabIndex={-1}>
+                                {t(head[question].title, { app: appName })}
+                              </h1>
+                              <p className="su-sub">{t(head[question].text, { app: appName })}</p>
+                            </header>
+                          )}
+                          <div className="su-body">{body}</div>
+                        </div>
+                      </ScrollArea>
+                    </motion.section>
+                  )}
+                </AnimatePresence>
+              </div>
 
-          <footer className="su-foot">
-            {step === 'ready' && <Button size="xl" className="su-secondary" disabled={closing} onClick={() => void finish(false)}>{t('setup.ready.close')}</Button>}
-            <Button ref={primaryRef} variant="primary" size="xl" className="su-primary" onClick={primary} disabled={primaryDisabled || !settings}
-              iconEnd={step === 'ready' ? <Settings2 {...ICON} size={18} /> : step === 'welcome' ? <ArrowRight {...ICON} size={18} /> : step === 'demo' ? <Play {...ICON} size={18} /> : null}>
-              {t(primaryLabel[step])}
-            </Button>
-            {/* Always there (empty when there is nothing to say) so the big button never moves. */}
-            <span className="su-foot-note" aria-live="polite">
-              {finishFailed ? <span role="alert">{t('setup.notFinished')} <button type="button" className="ft-linklike" onClick={() => void finish(true)}>{t('common.retry')}</button></span>
-                : store.saveError ? <>{t('setup.notSaved')} <button type="button" className="ft-linklike" onClick={store.retry}>{t('common.retry')}</button></>
-                : step === 'welcome' ? t('setup.welcome.note')
-                : step === 'model' && !modelReady ? t('setup.model.wait')
-                : ' '}
-            </span>
-          </footer>
+              <footer className="su-foot">
+                {step === 'ready' && (
+                  <Button size="xl" className="su-secondary" disabled={closing} onClick={() => void finish(false)}>
+                    {t('setup.ready.close')}
+                  </Button>
+                )}
+                <Button
+                  ref={primaryRef}
+                  variant="primary"
+                  size="xl"
+                  className="su-primary"
+                  onClick={primary}
+                  disabled={primaryDisabled || !settings}
+                  iconEnd={
+                    step === 'ready' ? (
+                      <Settings2 {...ICON} size={18} />
+                    ) : step === 'welcome' ? (
+                      <ArrowRight {...ICON} size={18} />
+                    ) : step === 'demo' ? (
+                      <Play {...ICON} size={18} />
+                    ) : null
+                  }
+                >
+                  {t(primaryLabel[step])}
+                </Button>
+                {/* Always there (empty when there is nothing to say) so the big button never moves. */}
+                <span className="su-foot-note" aria-live="polite">
+                  {finishFailed ? (
+                    <span role="alert">
+                      {t('setup.notFinished')}{' '}
+                      <button type="button" className="ft-linklike" onClick={() => void finish(true)}>
+                        {t('common.retry')}
+                      </button>
+                    </span>
+                  ) : store.saveError ? (
+                    <>
+                      {t('setup.notSaved')}{' '}
+                      <button type="button" className="ft-linklike" onClick={store.retry}>
+                        {t('common.retry')}
+                      </button>
+                    </>
+                  ) : step === 'welcome' ? (
+                    t('setup.welcome.note')
+                  ) : step === 'model' && !modelReady ? (
+                    t('setup.model.wait')
+                  ) : (
+                    ' '
+                  )}
+                </span>
+              </footer>
 
-          <AnimatePresence>
-            {log && <motion.div key="log" className="su-log-layer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tx(0.18)}>
-              <button type="button" className="su-log-scrim" aria-label={t('setup.model.logClose')} tabIndex={-1} onClick={() => setLog(null)} />
-              <motion.div className="su-log-sheet" role="dialog" aria-label={t('setup.model.log')} data-ft-page="diagnostic" initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }} transition={tx('smooth')}>
-                <div className="su-log-head">
-                  <strong>{t('setup.model.log')}</strong>
-                  <IconButton label={t('setup.model.logClose')} size="sm" round autoFocus onClick={() => setLog(null)}><X {...ICON} /></IconButton>
-                </div>
-                <ScrollArea className="su-log-scroll"><DiagnosticsPanel landing={log} limit={40} /></ScrollArea>
-              </motion.div>
-            </motion.div>}
-          </AnimatePresence>
-        </div>
-        <TitleBar onDrag={() => { void bridge.dragWindow().catch(() => undefined); }} onClose={() => void closeWindow()} />
-      </motion.div>}
-    </AnimatePresence>
-  </div>;
+              <AnimatePresence>
+                {log && (
+                  <motion.div
+                    key="log"
+                    className="su-log-layer"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={tx(0.18)}
+                  >
+                    <button
+                      type="button"
+                      className="su-log-scrim"
+                      aria-label={t('setup.model.logClose')}
+                      tabIndex={-1}
+                      onClick={() => setLog(null)}
+                    />
+                    <motion.div
+                      className="su-log-sheet"
+                      role="dialog"
+                      aria-label={t('setup.model.log')}
+                      data-ft-page="diagnostic"
+                      initial={{ y: 40, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: 30, opacity: 0 }}
+                      transition={tx('smooth')}
+                    >
+                      <div className="su-log-head">
+                        <strong>{t('setup.model.log')}</strong>
+                        <IconButton
+                          label={t('setup.model.logClose')}
+                          size="sm"
+                          round
+                          autoFocus
+                          onClick={() => setLog(null)}
+                        >
+                          <X {...ICON} />
+                        </IconButton>
+                      </div>
+                      <ScrollArea className="su-log-scroll">
+                        <DiagnosticsPanel landing={log} limit={40} />
+                      </ScrollArea>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <TitleBar
+              onDrag={() => {
+                void bridge.dragWindow().catch(() => undefined);
+              }}
+              onClose={() => void closeWindow()}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }

@@ -7,7 +7,11 @@ import type { Settings } from '../types';
 export function resetFrom(fresh: Settings, current: Settings): Settings {
   return {
     ...structuredClone(fresh),
-    servers: structuredClone(current.servers), defaultServerId: current.defaultServerId, setupDone: current.setupDone,
-    historyEnabled: current.historyEnabled, autostart: current.autostart, language: current.language,
+    servers: structuredClone(current.servers),
+    defaultServerId: current.defaultServerId,
+    setupDone: current.setupDone,
+    historyEnabled: current.historyEnabled,
+    autostart: current.autostart,
+    language: current.language,
   };
 }

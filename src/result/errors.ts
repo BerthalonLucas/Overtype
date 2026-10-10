@@ -91,7 +91,7 @@ const table: Record<ErrorCode, Entry> = {
 };
 
 export function errorCodeOf(value: unknown): ErrorCode {
-  return (errorCodes as readonly unknown[]).includes(value) ? value as ErrorCode : 'internal';
+  return (errorCodes as readonly unknown[]).includes(value) ? (value as ErrorCode) : 'internal';
 }
 // A command refused with its code (`replace_result` since the review of da-ilot: `{message, code}`).
 // The message is Rust's French sentence for the 0.4 journey: never read here.
@@ -101,7 +101,11 @@ export function refusalCode(reason: unknown): ErrorCode {
 export const errorFamily = (code: ErrorCode): ErrorFamily => table[code].family;
 
 // The button's label per action (the lab's OUTCOMES action, data.js:66-71).
-const fieldLabel: Record<ProfileField, MessageKey> = { endpoint: 'result.action.endpoint', apiKey: 'result.action.apiKey', model: 'result.action.model' };
+const fieldLabel: Record<ProfileField, MessageKey> = {
+  endpoint: 'result.action.endpoint',
+  apiKey: 'result.action.apiKey',
+  model: 'result.action.model',
+};
 
 export type ErrorDescription = {
   code: ErrorCode;
@@ -119,12 +123,19 @@ const captureMessage: Partial<Record<ErrorCode, MessageKey>> = { target_changed:
 // the caret, the field or the window changed, or Undo was already withdrawn; keys still held; the
 // source could not be brought back or the chord was blocked; anything else (the command refused:
 // the result no longer current). Sent and not read back: the text may not be the original.
-const undoMessage: Partial<Record<ErrorCode, MessageKey>> = { target_changed: 'result.undo.target_changed', keys_held: 'result.undo.keys_held', paste_blocked: 'result.undo.paste_blocked' };
+const undoMessage: Partial<Record<ErrorCode, MessageKey>> = {
+  target_changed: 'result.undo.target_changed',
+  keys_held: 'result.undo.keys_held',
+  paste_blocked: 'result.undo.paste_blocked',
+};
 
 // serverId: the server the failed request used (its field then opens, else the default
 // server's). model: the model's name from the settings, for « Model not found: … » (the lab's
 // wording); never anything from the server's answer.
-export function describeError(code: ErrorCode, { serverId, model, source = 'request' }: { serverId?: string; model?: string; source?: ErrorSource } = {}): ErrorDescription {
+export function describeError(
+  code: ErrorCode,
+  { serverId, model, source = 'request' }: { serverId?: string; model?: string; source?: ErrorSource } = {},
+): ErrorDescription {
   const { family, field } = table[code];
   const named = code === 'model_not_found' && model?.trim();
   const message = (named ? 'result.error.model_not_found_named' : `result.error.${code}`) as MessageKey;
@@ -133,7 +144,12 @@ export function describeError(code: ErrorCode, { serverId, model, source = 'requ
   if (source === 'capture') return { ...none, message: captureMessage[code] ?? message };
   if (source === 'undo') return { ...none, message: undoMessage[code] ?? 'result.undo.internal' };
   if (source === 'undo-sent') return { ...none, message: 'result.undo.sent' };
-  if (family === 'config' && field) return { ...none, action: { type: 'settings', field: serverId ? `${serverId}.${field}` : field }, actionLabel: fieldLabel[field] };
+  if (family === 'config' && field)
+    return {
+      ...none,
+      action: { type: 'settings', field: serverId ? `${serverId}.${field}` : field },
+      actionLabel: fieldLabel[field],
+    };
   if (family === 'transient') return { ...none, action: { type: 'retry' }, actionLabel: 'common.retry' };
   if (family === 'paste') return { ...none, action: { type: 'copy' }, actionLabel: 'result.action.copy' };
   return none;

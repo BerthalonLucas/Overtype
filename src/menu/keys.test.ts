@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { browserShortcut, gridColumns, ilotKeyContext, ilotTiles, letterTable, moveHot, resolveIlotKey, type IlotAction, type IlotState, type KeyInput } from './keys';
+import {
+  browserShortcut,
+  gridColumns,
+  ilotKeyContext,
+  ilotTiles,
+  letterTable,
+  moveHot,
+  resolveIlotKey,
+  type IlotAction,
+  type IlotState,
+  type KeyInput,
+} from './keys';
 
 // The lab's five actions (design-lab/src/data.js:5-12); the sixth tile is the free instruction.
 const actions: IlotAction[] = [
@@ -14,22 +25,37 @@ const grid = (hot = 0): IlotState => ({ mode: 'grid', hot, compactHot: 'last' })
 const prompt: IlotState = { mode: 'prompt', hot: 0, compactHot: 'last' };
 const focused = ilotKeyContext(actions, 'translate', true);
 const injected = ilotKeyContext(actions, 'translate', false);
-const press = (key: string | KeyInput, state: IlotState = compact, context = focused) => resolveIlotKey(typeof key === 'string' ? { key } : key, state, context);
+const press = (key: string | KeyInput, state: IlotState = compact, context = focused) =>
+  resolveIlotKey(typeof key === 'string' ? { key } : key, state, context);
 
 describe('Îlot tiles', () => {
   it('fills the tiles in the given order and ends with the free instruction while there are fewer than six', () => {
-    expect(ilotTiles(actions).map(tile => tile.kind === 'action' ? tile.action.id : 'ask')).toEqual(['fix', 'translate', 'pro', 'shorten', 'email', 'ask']);
-    expect(ilotTiles(actions.slice(0, 2)).map(tile => tile.kind)).toEqual(['action', 'action', 'ask']);
-    expect(ilotTiles([]).map(tile => tile.kind)).toEqual(['ask']);
+    expect(ilotTiles(actions).map((tile) => (tile.kind === 'action' ? tile.action.id : 'ask'))).toEqual([
+      'fix',
+      'translate',
+      'pro',
+      'shorten',
+      'email',
+      'ask',
+    ]);
+    expect(ilotTiles(actions.slice(0, 2)).map((tile) => tile.kind)).toEqual(['action', 'action', 'ask']);
+    expect(ilotTiles([]).map((tile) => tile.kind)).toEqual(['ask']);
   });
 
   it('shows six actions and no « More » tile when there are six or more (default decision 6)', () => {
     const many = [...actions, { id: 'formal', name: 'Formal', key: 'O' }, { id: 'summary', name: 'Summary', key: 'U' }];
     const tiles = ilotTiles(many);
     expect(tiles).toHaveLength(6);
-    expect(tiles.every(tile => tile.kind === 'action')).toBe(true);
+    expect(tiles.every((tile) => tile.kind === 'action')).toBe(true);
     // The order is never changed by the last action: only the highlight follows it.
-    expect(ilotKeyContext(many, 'email', true).tiles.map(tile => tile.kind === 'action' && tile.action.id)).toEqual(['fix', 'translate', 'pro', 'shorten', 'email', 'formal']);
+    expect(ilotKeyContext(many, 'email', true).tiles.map((tile) => tile.kind === 'action' && tile.action.id)).toEqual([
+      'fix',
+      'translate',
+      'pro',
+      'shorten',
+      'email',
+      'formal',
+    ]);
     expect(ilotKeyContext(many, 'email', true).lastTile).toBe(4);
   });
 
@@ -50,9 +76,12 @@ describe('Îlot tiles', () => {
     const context = ilotKeyContext(actions, 'summary', true, [...actions, outside]);
     expect(context.last?.id).toBe('summary');
     expect(context.lastTile).toBe(0);
-    expect(context.tiles.some(tile => tile.kind === 'action' && tile.action.id === 'summary')).toBe(false);
+    expect(context.tiles.some((tile) => tile.kind === 'action' && tile.action.id === 'summary')).toBe(false);
     expect(context.letters.has('u')).toBe(false);
-    expect(resolveIlotKey({ key: 'Enter' }, { mode: 'compact', hot: 0, compactHot: 'last' }, context)).toEqual({ type: 'choose', actionId: 'summary' });
+    expect(resolveIlotKey({ key: 'Enter' }, { mode: 'compact', hot: 0, compactHot: 'last' }, context)).toEqual({
+      type: 'choose',
+      actionId: 'summary',
+    });
     // Unknown everywhere: the first action, as before.
     expect(ilotKeyContext(actions, 'gone', true, [...actions, outside]).last?.id).toBe('fix');
   });
@@ -60,12 +89,30 @@ describe('Îlot tiles', () => {
 
 describe('letter table', () => {
   it('takes the letters from action.key, case-insensitive, first claim wins', () => {
-    const table = letterTable([...actions, { id: 'again', name: 'Fix again', key: 'f' }, { id: 'summary', name: 'Summary', key: 'U' }]);
-    expect([...table]).toEqual([['f', 'fix'], ['t', 'translate'], ['p', 'pro'], ['s', 'shorten'], ['e', 'email'], ['u', 'summary']]);
+    const table = letterTable([
+      ...actions,
+      { id: 'again', name: 'Fix again', key: 'f' },
+      { id: 'summary', name: 'Summary', key: 'U' },
+    ]);
+    expect([...table]).toEqual([
+      ['f', 'fix'],
+      ['t', 'translate'],
+      ['p', 'pro'],
+      ['s', 'shorten'],
+      ['e', 'email'],
+      ['u', 'summary'],
+    ]);
   });
 
   it('ignores keys the menu uses itself, blanks and anything longer than one character', () => {
-    const table = letterTable([{ id: 'a', name: 'A', key: '1' }, { id: 'b', name: 'B', key: ' ' }, { id: 'c', name: 'C', key: '/' }, { id: 'd', name: 'D', key: 'Ctrl' }, { id: 'e', name: 'E' }, { id: 'f', name: 'F', key: 'é' }]);
+    const table = letterTable([
+      { id: 'a', name: 'A', key: '1' },
+      { id: 'b', name: 'B', key: ' ' },
+      { id: 'c', name: 'C', key: '/' },
+      { id: 'd', name: 'D', key: 'Ctrl' },
+      { id: 'e', name: 'E' },
+      { id: 'f', name: 'F', key: 'é' },
+    ]);
     expect([...table]).toEqual([['é', 'f']]);
   });
 });
@@ -97,7 +144,15 @@ describe('moveHot', () => {
 
 describe('resolveIlotKey', () => {
   it('runs the actions from their letters, in either case, compact or grid', () => {
-    for (const [key, id] of [['f', 'fix'], ['t', 'translate'], ['p', 'pro'], ['s', 'shorten'], ['e', 'email'], ['F', 'fix'], ['E', 'email']]) {
+    for (const [key, id] of [
+      ['f', 'fix'],
+      ['t', 'translate'],
+      ['p', 'pro'],
+      ['s', 'shorten'],
+      ['e', 'email'],
+      ['F', 'fix'],
+      ['E', 'email'],
+    ]) {
       expect(press(key)).toEqual({ type: 'choose', actionId: id });
       expect(press(key, grid(3))).toEqual({ type: 'choose', actionId: id });
     }
@@ -105,7 +160,9 @@ describe('resolveIlotKey', () => {
   });
 
   it('runs the tiles from the digits 1 to 6; the sixth opens the free instruction', () => {
-    expect(['1', '2', '3', '4', '5'].map(key => press(key))).toEqual(actions.map(action => ({ type: 'choose', actionId: action.id })));
+    expect(['1', '2', '3', '4', '5'].map((key) => press(key))).toEqual(
+      actions.map((action) => ({ type: 'choose', actionId: action.id })),
+    );
     expect(press('6')).toEqual({ type: 'prompt', seed: '' });
     // A digit without a tile is swallowed, not typed into a field.
     expect(press('5', compact, ilotKeyContext(actions.slice(0, 2), 'fix', true))).toEqual({ type: 'none' });
@@ -155,7 +212,10 @@ describe('resolveIlotKey', () => {
     }
     // Windows reports AltGr as Ctrl+Alt with the AltGraph modifier.
     expect(press({ key: '€', ctrlKey: true, altKey: true, altGraph: true })).toEqual({ type: 'prompt', seed: '€' });
-    expect(press({ key: '@', ctrlKey: true, altKey: true, altGraph: true }, grid(0))).toEqual({ type: 'prompt', seed: '@' });
+    expect(press({ key: '@', ctrlKey: true, altKey: true, altGraph: true }, grid(0))).toEqual({
+      type: 'prompt',
+      seed: '@',
+    });
     expect(press({ key: 'AltGraph', ctrlKey: true, altKey: true, altGraph: true })).toBeNull();
   });
 
@@ -203,25 +263,65 @@ describe('browser shortcuts in the Îlot', () => {
   const ctrl = (key: string, extra: Partial<KeyInput> = {}): KeyInput => ({ key, ctrlKey: true, ...extra });
   it('recognises reload, print, find, caret browsing, zoom and history, whatever the layout', () => {
     const shortcuts: KeyInput[] = [
-      { key: 'F5' }, ctrl('F5'), { key: 'F5', shiftKey: true }, ctrl('r', { code: 'KeyR' }), ctrl('R', { shiftKey: true, code: 'KeyR' }),
-      ctrl('p'), ctrl('f'), ctrl('g'), ctrl('G', { shiftKey: true }), { key: 'F3' }, { key: 'F3', shiftKey: true }, { key: 'F7' },
-      ctrl('s'), ctrl('o'), ctrl('u'),
-      ctrl('+', { shiftKey: true, code: 'Equal' }), ctrl('=', { code: 'Equal' }), ctrl('-', { code: 'Minus' }), ctrl('0', { code: 'Digit0' }),
-      ctrl('+', { code: 'NumpadAdd' }), ctrl('-', { code: 'NumpadSubtract' }),
+      { key: 'F5' },
+      ctrl('F5'),
+      { key: 'F5', shiftKey: true },
+      ctrl('r', { code: 'KeyR' }),
+      ctrl('R', { shiftKey: true, code: 'KeyR' }),
+      ctrl('p'),
+      ctrl('f'),
+      ctrl('g'),
+      ctrl('G', { shiftKey: true }),
+      { key: 'F3' },
+      { key: 'F3', shiftKey: true },
+      { key: 'F7' },
+      ctrl('s'),
+      ctrl('o'),
+      ctrl('u'),
+      ctrl('+', { shiftKey: true, code: 'Equal' }),
+      ctrl('=', { code: 'Equal' }),
+      ctrl('-', { code: 'Minus' }),
+      ctrl('0', { code: 'Digit0' }),
+      ctrl('+', { code: 'NumpadAdd' }),
+      ctrl('-', { code: 'NumpadSubtract' }),
       // AZERTY: Ctrl+à is Ctrl+0 for Chromium (its virtual key is VK_0).
       ctrl('à', { code: 'Digit0' }),
       // A Cyrillic layout: the key of R types к; Chromium still reads VK_R.
       ctrl('к', { code: 'KeyR' }),
-      { key: 'ArrowLeft', altKey: true }, { key: 'ArrowRight', altKey: true }, { key: 'Home', altKey: true },
-      { key: 'BrowserBack' }, { key: 'BrowserForward' }, { key: 'BrowserRefresh' }, { key: 'BrowserSearch' }, { key: 'BrowserHome' },
+      { key: 'ArrowLeft', altKey: true },
+      { key: 'ArrowRight', altKey: true },
+      { key: 'Home', altKey: true },
+      { key: 'BrowserBack' },
+      { key: 'BrowserForward' },
+      { key: 'BrowserRefresh' },
+      { key: 'BrowserSearch' },
+      { key: 'BrowserHome' },
     ];
     for (const input of shortcuts) expect(browserShortcut(input), JSON.stringify(input)).toBe(true);
   });
   it('lets the field edit, the menu keys through, and AltGr type', () => {
     const passing: KeyInput[] = [
-      ctrl('a'), ctrl('c'), ctrl('v'), ctrl('x'), ctrl('z'), ctrl('y'), ctrl('Z', { shiftKey: true }),
-      ctrl('Backspace'), ctrl('Delete'), ctrl('ArrowLeft'), ctrl('ArrowRight', { shiftKey: true }), ctrl('Home'), ctrl('End'),
-      { key: 'r' }, { key: 'F' }, { key: 'Enter' }, { key: 'Escape' }, { key: 'Tab' }, { key: 'ArrowLeft' }, { key: '0' }, { key: '+' },
+      ctrl('a'),
+      ctrl('c'),
+      ctrl('v'),
+      ctrl('x'),
+      ctrl('z'),
+      ctrl('y'),
+      ctrl('Z', { shiftKey: true }),
+      ctrl('Backspace'),
+      ctrl('Delete'),
+      ctrl('ArrowLeft'),
+      ctrl('ArrowRight', { shiftKey: true }),
+      ctrl('Home'),
+      ctrl('End'),
+      { key: 'r' },
+      { key: 'F' },
+      { key: 'Enter' },
+      { key: 'Escape' },
+      { key: 'Tab' },
+      { key: 'ArrowLeft' },
+      { key: '0' },
+      { key: '+' },
       // AZERTY: AltGr+à is @, AltGr+= is }, AltGr+E is € (Windows adds Ctrl and Alt).
       { key: '@', code: 'Digit0', ctrlKey: true, altKey: true, altGraph: true },
       { key: '}', code: 'Equal', ctrlKey: true, altKey: true, altGraph: true },

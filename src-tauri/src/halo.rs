@@ -92,7 +92,18 @@ pub struct HaloEvent {
 
 impl HaloEvent {
     fn empty(generation: u64, phase: HaloPhase) -> Self {
-        Self { generation, phase, lines: Vec::new(), full: Vec::new(), text_box: None, whole: Vec::new(), tone: None, ground: None, width: 0., height: 0. }
+        Self {
+            generation,
+            phase,
+            lines: Vec::new(),
+            full: Vec::new(),
+            text_box: None,
+            whole: Vec::new(),
+            tone: None,
+            ground: None,
+            width: 0.,
+            height: 0.,
+        }
     }
 }
 
@@ -118,7 +129,9 @@ pub fn marks(app: &AppHandle, scene: Scene, seconds: u32) -> Option<u64> {
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_secs(u64::from(seconds)));
-        if GENERATION.load(Ordering::Acquire) == generation && marking() { leave(&handle); }
+        if GENERATION.load(Ordering::Acquire) == generation && marking() {
+            leave(&handle);
+        }
     });
     Some(generation)
 }
@@ -139,14 +152,40 @@ fn margin(phase: HaloPhase, scene: &Scene) -> f64 {
 
 /// Physical rectangles as the page draws them: logical, relative to `window` at `scale`.
 fn local(rects: &[Rect], window: &Rect, scale: f64) -> Vec<Rect> {
-    rects.iter().map(|r| Rect { x: (r.x - window.x) / scale, y: (r.y - window.y) / scale, width: r.width / scale, height: r.height / scale }).collect()
+    rects
+        .iter()
+        .map(|r| Rect {
+            x: (r.x - window.x) / scale,
+            y: (r.y - window.y) / scale,
+            width: r.width / scale,
+            height: r.height / scale,
+        })
+        .collect()
 }
 
 /// The event of `scene` for a window drawn at `scale`, and where that window goes.
-fn event(generation: u64, phase: HaloPhase, scene: &Scene, scale: f64) -> Option<(Rect, HaloEvent)> {
-    let all: Vec<Rect> = scene.lines.iter().chain(&scene.full).chain(&scene.whole).chain(scene.text_box.iter()).copied().collect();
+fn event(
+    generation: u64,
+    phase: HaloPhase,
+    scene: &Scene,
+    scale: f64,
+) -> Option<(Rect, HaloEvent)> {
+    let all: Vec<Rect> = scene
+        .lines
+        .iter()
+        .chain(&scene.full)
+        .chain(&scene.whole)
+        .chain(scene.text_box.iter())
+        .copied()
+        .collect();
     let frame = halo_frame(&all, scale, margin(phase, scene))?;
-    let tone = scene.ground.map(|color| if ground::dark(color) { Tone::Dark } else { Tone::Light });
+    let tone = scene.ground.map(|color| {
+        if ground::dark(color) {
+            Tone::Dark
+        } else {
+            Tone::Light
+        }
+    });
     let event = HaloEvent {
         generation,
         phase,
@@ -166,26 +205,59 @@ fn event(generation: u64, phase: HaloPhase, scene: &Scene, scale: f64) -> Option
 /// another one (across two screens), placed again at its own. Answers the generation.
 fn show(app: &AppHandle, scene: Scene, phase: HaloPhase) -> Option<u64> {
     let generation = GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
-    let all: Vec<Rect> = scene.lines.iter().chain(&scene.full).chain(&scene.whole).chain(scene.text_box.iter()).copied().collect();
-    let Some(union) = bounds(&all) else { hide(app); return None };
+    let all: Vec<Rect> = scene
+        .lines
+        .iter()
+        .chain(&scene.full)
+        .chain(&scene.whole)
+        .chain(scene.text_box.iter())
+        .copied()
+        .collect();
+    let Some(union) = bounds(&all) else {
+        hide(app);
+        return None;
+    };
     let (_, scale, _) = host::monitor_at(Some(union));
-    let Some((window, first)) = event(generation, phase, &scene, scale) else { hide(app); return None };
+    let Some((window, first)) = event(generation, phase, &scene, scale) else {
+        hide(app);
+        return None;
+    };
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if GENERATION.load(Ordering::Acquire) != generation { return; }
-        let Some(halo) = handle.get_webview_window("halo") else { return };
-        let overlay = handle.get_webview_window("overlay").map(|window| host::handle(&window)).unwrap_or(0);
+        if GENERATION.load(Ordering::Acquire) != generation {
+            return;
+        }
+        let Some(halo) = handle.get_webview_window("halo") else {
+            return;
+        };
+        let overlay = handle
+            .get_webview_window("overlay")
+            .map(|window| host::handle(&window))
+            .unwrap_or(0);
         let mut sent = first;
-        if host::place_below(&halo, window, overlay).is_err() { return; }
-        if let Some((again, redrawn)) = halo.scale_factor().ok().filter(|actual| (actual - scale).abs() > 1e-3).and_then(|actual| event(generation, phase, &scene, actual)) {
+        if host::place_below(&halo, window, overlay).is_err() {
+            return;
+        }
+        if let Some((again, redrawn)) = halo
+            .scale_factor()
+            .ok()
+            .filter(|actual| (actual - scale).abs() > 1e-3)
+            .and_then(|actual| event(generation, phase, &scene, actual))
+        {
             sent = redrawn;
-            if host::place_below(&halo, again, overlay).is_err() { return; }
+            if host::place_below(&halo, again, overlay).is_err() {
+                return;
+            }
         }
         VISIBLE.store(true, Ordering::Release);
         LEAVING.store(false, Ordering::Release);
         let marked = phase == HaloPhase::Marks;
         MARKS.store(marked, Ordering::Release);
-        if marked { host::arm_marks_watch(overlay); } else { host::disarm_marks_watch(); }
+        if marked {
+            host::arm_marks_watch(overlay);
+        } else {
+            host::disarm_marks_watch();
+        }
         let _ = handle.emit_to("halo", "halo", sent);
     });
     Some(generation)
@@ -194,12 +266,22 @@ fn show(app: &AppHandle, scene: Scene, phase: HaloPhase) -> Option<u64> {
 /// The response arrived (a result or an error), or the marks' time is over, or the user's next
 /// action came: the page fades, then the window hides.
 pub fn leave(app: &AppHandle) {
-    if !visible() || LEAVING.swap(true, Ordering::AcqRel) { return; }
+    if !visible() || LEAVING.swap(true, Ordering::AcqRel) {
+        return;
+    }
     host::disarm_marks_watch();
     let generation = GENERATION.load(Ordering::Acquire);
     FADING.store(generation, Ordering::Release);
-    let delay = if MARKS.load(Ordering::Acquire) { LEAVE_MARKS } else { LEAVE };
-    let _ = app.emit_to("halo", "halo", HaloEvent::empty(generation, HaloPhase::Leave));
+    let delay = if MARKS.load(Ordering::Acquire) {
+        LEAVE_MARKS
+    } else {
+        LEAVE
+    };
+    let _ = app.emit_to(
+        "halo",
+        "halo",
+        HaloEvent::empty(generation, HaloPhase::Leave),
+    );
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(delay);
@@ -216,7 +298,9 @@ pub fn marking() -> bool {
 /// the overlay (their own end takes them), and a fade already under way ends as promised,
 /// then its window hides by itself (review of lot 9, finding 4).
 pub fn dismiss(app: &AppHandle) {
-    if !survives_dismissal(marking(), fading(&GENERATION, &FADING)) { hide(app); }
+    if !survives_dismissal(marking(), fading(&GENERATION, &FADING)) {
+        hide(app);
+    }
 }
 
 fn survives_dismissal(marking: bool, fading: bool) -> bool {
@@ -240,10 +324,18 @@ pub fn hide(app: &AppHandle) {
 fn hide_window(app: &AppHandle, generation: u64) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if GENERATION.load(Ordering::Acquire) != generation { return; }
-        if let Some(halo) = handle.get_webview_window("halo") { let _ = host::hide(&halo); }
+        if GENERATION.load(Ordering::Acquire) != generation {
+            return;
+        }
+        if let Some(halo) = handle.get_webview_window("halo") {
+            let _ = host::hide(&halo);
+        }
         if VISIBLE.swap(false, Ordering::AcqRel) {
-            let _ = handle.emit_to("halo", "halo", HaloEvent::empty(generation, HaloPhase::Clear));
+            let _ = handle.emit_to(
+                "halo",
+                "halo",
+                HaloEvent::empty(generation, HaloPhase::Clear),
+            );
         }
     });
 }
@@ -252,12 +344,22 @@ fn hide_window(app: &AppHandle, generation: u64) {
 mod tests {
     use super::*;
 
-    fn r(x: f64, y: f64, width: f64, height: f64) -> Rect { Rect { x, y, width, height } }
+    fn r(x: f64, y: f64, width: f64, height: f64) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
 
     #[test]
     fn a_dismissal_lets_a_halo_that_already_fades_out_end_its_fade() {
         let (generation, faded) = (AtomicU64::new(0), AtomicU64::new(0));
-        assert!(!fading(&generation, &faded), "nothing shown yet: a dismissal hides");
+        assert!(
+            !fading(&generation, &faded),
+            "nothing shown yet: a dismissal hides"
+        );
         // The marks of a paste are shown (generation 3).
         generation.store(3, Ordering::Release);
         assert!(!fading(&generation, &faded));
@@ -272,9 +374,18 @@ mod tests {
 
     #[test]
     fn the_marks_outlive_the_overlay_the_selection_does_not() {
-        assert!(survives_dismissal(true, false), "the pill left: the marks stay until the next action");
-        assert!(survives_dismissal(false, true), "a fade under way ends as promised");
-        assert!(!survives_dismissal(false, false), "the menu's or the work's halo hides with the overlay");
+        assert!(
+            survives_dismissal(true, false),
+            "the pill left: the marks stay until the next action"
+        );
+        assert!(
+            survives_dismissal(false, true),
+            "a fade under way ends as promised"
+        );
+        assert!(
+            !survives_dismissal(false, false),
+            "the menu's or the work's halo hides with the overlay"
+        );
     }
 
     #[test]
@@ -291,18 +402,48 @@ mod tests {
         assert_eq!(window, r(64., 44., 672., 272.));
         assert_eq!((drawn.width, drawn.height), (448., 181.33333333333334));
         assert_eq!(drawn.text_box, Some(r(24., 24., 400., 133.33333333333334)));
-        assert_eq!(drawn.lines[0], r(90.66666666666667, 37.333333333333336, 200., 13.333333333333334));
-        assert_eq!(drawn.full[1], r(37.333333333333336, 50.666666666666664, 240., 13.333333333333334));
-        assert_eq!((drawn.tone, drawn.ground), (Some(Tone::Light), Some([255, 255, 255])));
+        assert_eq!(
+            drawn.lines[0],
+            r(
+                90.66666666666667,
+                37.333333333333336,
+                200.,
+                13.333333333333334
+            )
+        );
+        assert_eq!(
+            drawn.full[1],
+            r(
+                37.333333333333336,
+                50.666666666666664,
+                240.,
+                13.333333333333334
+            )
+        );
+        assert_eq!(
+            (drawn.tone, drawn.ground),
+            (Some(Tone::Light), Some([255, 255, 255]))
+        );
         // The marks keep 16 px around the words and the new text; a dark ground, a dark tone.
-        let marks = Scene { lines: vec![r(10., 10., 40., 20.)], whole: vec![r(10., 10., 200., 20.)], ground: Some([30, 31, 34]), ..Scene::default() };
+        let marks = Scene {
+            lines: vec![r(10., 10., 40., 20.)],
+            whole: vec![r(10., 10., 200., 20.)],
+            ground: Some([30, 31, 34]),
+            ..Scene::default()
+        };
         let (window, drawn) = event(8, HaloPhase::Marks, &marks, 1.).expect("a frame");
         assert_eq!(window, r(-6., -6., 232., 52.));
         assert_eq!(drawn.tone, Some(Tone::Dark));
         // No ground read: no tone, the page follows the app's theme.
-        let unknown = Scene { lines: vec![r(10., 10., 40., 20.)], ..Scene::default() };
+        let unknown = Scene {
+            lines: vec![r(10., 10., 40., 20.)],
+            ..Scene::default()
+        };
         assert_eq!(event_tone(&unknown), None);
-        assert!(event(9, HaloPhase::Work, &Scene::default(), 1.).is_none(), "nothing to draw, no frame");
+        assert!(
+            event(9, HaloPhase::Work, &Scene::default(), 1.).is_none(),
+            "nothing to draw, no frame"
+        );
     }
 
     fn event_tone(scene: &Scene) -> Option<Tone> {

@@ -99,7 +99,13 @@ pub struct AfterReplace {
 
 impl Default for AfterReplace {
     fn default() -> Self {
-        Self { check: true, undo: true, undo_seconds: 8, changed_words: true, changed_words_seconds: 60 }
+        Self {
+            check: true,
+            undo: true,
+            undo_seconds: 8,
+            changed_words: true,
+            changed_words_seconds: 60,
+        }
     }
 }
 
@@ -540,7 +546,10 @@ impl Default for Settings {
             pill_placement: PillPlacement::default(),
             glass_material: GlassMaterial::default(),
             menu_action_ids: crate::actions::default_menu_action_ids(),
-            servers: vec![Server { id: FIRST_SERVER_ID.into(), ..Server::default() }],
+            servers: vec![Server {
+                id: FIRST_SERVER_ID.into(),
+                ..Server::default()
+            }],
             default_server_id: FIRST_SERVER_ID.into(),
             setup_done: false,
             changed_words_style: ChangedWordsStyle::default(),
@@ -553,12 +562,25 @@ impl Settings {
     /// the migration tests only: a request always names its server.
     #[cfg(test)]
     pub fn default_server(&self) -> &Server {
-        self.servers.iter().find(|server| server.id == self.default_server_id).unwrap_or(&self.servers[0])
+        self.servers
+            .iter()
+            .find(|server| server.id == self.default_server_id)
+            .unwrap_or(&self.servers[0])
     }
 }
-pub fn find_server<'a>(servers: &'a [Server], id: &str) -> Result<&'a Server, crate::error::AppError> {
-    servers.iter().find(|server| server.id == id)
-        .ok_or_else(|| crate::error::AppError::new(ErrorKind::BadEndpoint, "Ce serveur n’existe plus dans les réglages."))
+pub fn find_server<'a>(
+    servers: &'a [Server],
+    id: &str,
+) -> Result<&'a Server, crate::error::AppError> {
+    servers
+        .iter()
+        .find(|server| server.id == id)
+        .ok_or_else(|| {
+            crate::error::AppError::new(
+                ErrorKind::BadEndpoint,
+                "Ce serveur n’existe plus dans les réglages.",
+            )
+        })
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -681,4 +703,3 @@ pub struct CompletedResult {
     pub server_id: String,
     pub complete: bool,
 }
-

@@ -1,5 +1,7 @@
 # Native glass surfaces
 
+> Document historique (verre natif 0.1.x à 0.4, 14 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 The overlay window carries no Win32 region: Chromium paints the silhouette with per-pixel alpha and the frontend publishes up to six rounded rectangles in logical client pixels (the main glass is region zero). A hit tester polls the real cursor every 8 ms and toggles `WS_EX_TRANSPARENT | WS_EX_LAYERED` so the transparent gaps let clicks through. Since 2026-09-13 the window is also subclassed (`host::silence_frame`): `WM_NCACTIVATE` reaches `DefWindowProc` with lParam = -1 and the non-client paint requests are dropped, so Windows never paints a title band into the frameless surface when activation changes.
 
 Anchored placement clamps the frame (the glass footprint published with the geometry, or region zero) near the selection while preserving its chosen side. Bottom placement rests the window bottom-centre on the work area of the **cursor's** screen and follows the cursor: the hit tester reports the monitor under the cursor on change, `screen_changed` adopts its work area and scale, emits `work-area` to the frontend and repositions the window; an anchored glass never follows. Changing menu or pill bounds adjusts the host origin so the main text surface stays fixed. Manual dragging stores the main glass screen origin and survives later layout updates until the next capture or a screen change.

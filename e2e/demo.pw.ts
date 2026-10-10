@@ -4,14 +4,28 @@ import { test, expect, type Page } from '@playwright/test';
 // `/?window=setup&stage=demo`. It plays the app's real components; these tests watch what they
 // do, and shake the demo (skip, replay, keys, pause) at the worst moments: nothing may stay stuck.
 type Hook = { time: () => number; pause: () => void; play: () => void };
-const open = (page: Page, motion: 'full' | 'reduced' = 'full') => page.goto(`/?window=setup&stage=demo&lang=fr&theme=light&motion=${motion}`);
+const open = (page: Page, motion: 'full' | 'reduced' = 'full') =>
+  page.goto(`/?window=setup&stage=demo&lang=fr&theme=light&motion=${motion}`);
 // Waits until the demo's own clock reached `at` and holds that frame.
 async function holdAt(page: Page, at: number) {
-  await page.waitForFunction(time => { const demo = (window as unknown as { __demo?: Hook }).__demo; return !!demo && demo.time() >= time; }, at, { polling: 'raf', timeout: 30_000 });
+  await page.waitForFunction(
+    (time) => {
+      const demo = (window as unknown as { __demo?: Hook }).__demo;
+      return !!demo && demo.time() >= time;
+    },
+    at,
+    { polling: 'raf', timeout: 30_000 },
+  );
   await page.evaluate(() => (window as unknown as { __demo: Hook }).__demo.pause());
 }
 const resume = (page: Page) => page.evaluate(() => (window as unknown as { __demo: Hook }).__demo.play());
-const boxes = (page: Page, selector: string) => page.locator(selector).evaluateAll(elements => elements.map(element => { const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, width: box.width, height: box.height }; }));
+const boxes = (page: Page, selector: string) =>
+  page.locator(selector).evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, right: box.right, bottom: box.bottom, width: box.width, height: box.height };
+    }),
+  );
 
 test.describe('the demo', () => {
   test.setTimeout(60_000);
@@ -21,7 +35,15 @@ test.describe('the demo', () => {
     await expect(page.locator('.dm-root')).toBeVisible();
     await expect(page.locator('.dm-phase')).toHaveCount(7);
     const seen: Array<{ phase: string; caption: string; current: string }> = [];
-    for (const [name, number, text] of [['ready', '1', 'Tout est prêt'], ['select', '2', 'Sélectionnez du texte'], ['shortcut', '3', 'Appuyez sur le raccourci'], ['menu', '4', 'Choisissez une action'], ['work', '5', 'Votre modèle travaille'], ['result', '6', 'Le texte est remplacé'], ['undo', '7', 'Annuler reste']] as const) {
+    for (const [name, number, text] of [
+      ['ready', '1', 'Tout est prêt'],
+      ['select', '2', 'Sélectionnez du texte'],
+      ['shortcut', '3', 'Appuyez sur le raccourci'],
+      ['menu', '4', 'Choisissez une action'],
+      ['work', '5', 'Votre modèle travaille'],
+      ['result', '6', 'Le texte est remplacé'],
+      ['undo', '7', 'Annuler reste'],
+    ] as const) {
       await expect(page.locator('.dm-root')).toHaveAttribute('data-phase', name, { timeout: 15_000 });
       await expect(page.locator(`.dm-caption[data-phase="${name}"]`)).toContainText(text);
       await expect(page.locator(`.dm-caption[data-phase="${name}"] .dm-caption-n b`)).toHaveText(number);
@@ -36,7 +58,9 @@ test.describe('the demo', () => {
     await expect(page.locator('.dm-phase[data-state="done"]')).toHaveCount(7);
   });
 
-  test('selects in one diagonal drag: at each instant a real multi-line selection up to the pointer', async ({ page }) => {
+  test('selects in one diagonal drag: at each instant a real multi-line selection up to the pointer', async ({
+    page,
+  }) => {
     await open(page);
     // Before the press: no selection. The I-beam waits before the first character.
     await holdAt(page, 3400);
@@ -63,7 +87,7 @@ test.describe('the demo', () => {
         for (const band of bands.slice(0, -1)) expect(band.width).toBeGreaterThan(520);
         // Bands touch: one selection, not three stripes.
         for (let i = 1; i < bands.length; i++) expect(Math.abs(bands[i].y - bands[i - 1].bottom)).toBeLessThan(1.5);
-        expect(bands.every(band => Math.abs(band.x - bands[0].x) < 1.5)).toBe(true);
+        expect(bands.every((band) => Math.abs(band.x - bands[0].x) < 1.5)).toBe(true);
       }
       previous = { lines: bands.length, y: cursor.y };
       await resume(page);
@@ -74,7 +98,9 @@ test.describe('the demo', () => {
     await expect(page.locator('.dm-sel')).toHaveCount(3);
   });
 
-  test('plays the real components: the Îlot unfolds under the pointer, works, pastes, offers Undo', async ({ page }) => {
+  test('plays the real components: the Îlot unfolds under the pointer, works, pastes, offers Undo', async ({
+    page,
+  }) => {
     await open(page);
     // The shortcut's keys light one after the other, with the user's own chord.
     await holdAt(page, 6500);
@@ -100,7 +126,9 @@ test.describe('the demo', () => {
     await expect(page.locator('.halo[data-phase="work"]')).toHaveCount(1);
     await expect(page.locator('[data-ilot-shape]')).toHaveCount(1);
     // The paste: the text is replaced, the changed words take the app's ink, Undo and its ring.
-    await expect(page.locator('[data-ilot] [data-result-content="done"] .result-undo')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-ilot] [data-result-content="done"] .result-undo')).toBeVisible({
+      timeout: 10_000,
+    });
     await expect(page.locator('.dm-lit .halo-lit')).toHaveText(['convenu', 'chiffres', 'clairs']);
     await expect(page.locator('.halo[data-phase="marks"] .halo-wave')).toHaveCount(3);
     // The pointer rests on Undo: its countdown stands still, as under a real pointer.
@@ -122,7 +150,8 @@ test.describe('the demo', () => {
     await holdAt(page, 7700);
     // Keys the Îlot would take (its letters, Enter, Tab, digits): nothing is chosen, nothing opens.
     for (const key of ['f', 'Enter', 'Tab', '2', 't', 'ArrowDown', '/']) await page.keyboard.press(key);
-    await page.mouse.move(350, 400); await page.mouse.click(350, 400);
+    await page.mouse.move(350, 400);
+    await page.mouse.click(350, 400);
     await page.waitForTimeout(700);
     await expect(page.locator('[data-ilot][data-mode="compact"]')).toBeVisible();
     await expect(page.locator('[data-ilot] input')).toHaveCount(0);
@@ -148,7 +177,10 @@ test.describe('the demo', () => {
     await open(page);
     // Replay while the grid unfolds, then while the pill works, then right after the paste.
     for (const at of [8700, 10_300, 12_150]) {
-      await page.waitForFunction(time => (window as unknown as { __demo?: Hook }).__demo!.time() >= time, at, { polling: 'raf', timeout: 30_000 });
+      await page.waitForFunction((time) => (window as unknown as { __demo?: Hook }).__demo!.time() >= time, at, {
+        polling: 'raf',
+        timeout: 30_000,
+      });
       await page.getByRole('button', { name: 'Recommencer la démo' }).dblclick();
       await expect(page.locator('.dm-root')).toHaveAttribute('data-phase', 'ready');
       // Nothing of the previous run is left: no Îlot, no halo, no selection, no changed word.
@@ -163,11 +195,15 @@ test.describe('the demo', () => {
     await expect(page.locator('[data-ilot-shape]')).toHaveCount(1);
     // « Passer », clicked three times in a row in the middle of the menu.
     const navigations: string[] = [];
-    page.on('framenavigated', frame => { if (frame === page.mainFrame()) navigations.push(frame.url()); });
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) navigations.push(frame.url());
+    });
     const skip = page.getByRole('button', { name: 'Passer' });
-    await skip.evaluate(button => { for (let i = 0; i < 3; i++) (button as HTMLButtonElement).click(); });
+    await skip.evaluate((button) => {
+      for (let i = 0; i < 3; i++) (button as HTMLButtonElement).click();
+    });
     await expect(page).toHaveURL(/step=ready/);
-    expect(navigations.filter(url => url.includes('step=ready'))).toHaveLength(1);
+    expect(navigations.filter((url) => url.includes('step=ready'))).toHaveLength(1);
   });
 
   test('the strip unfolds on hover and on focus, and the demo waits while it is read', async ({ page }) => {
@@ -248,7 +284,10 @@ test.describe('the demo', () => {
     const bands = await boxes(page, '.dm-sel');
     const [mail] = await boxes(page, '.dm-mail-body');
     expect(bands).toHaveLength(3);
-    for (const band of bands) { expect(band.x).toBeGreaterThanOrEqual(mail.x); expect(band.right).toBeLessThanOrEqual(mail.right + 1); }
+    for (const band of bands) {
+      expect(band.x).toBeGreaterThanOrEqual(mail.x);
+      expect(band.right).toBeLessThanOrEqual(mail.right + 1);
+    }
     await expect(page.locator('.dm-mail-body')).toContainText('as agree.');
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });

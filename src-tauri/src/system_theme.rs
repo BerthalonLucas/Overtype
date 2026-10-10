@@ -17,7 +17,8 @@ mod imp {
         KEY_NOTIFY, REG_NOTIFY_CHANGE_LAST_SET, RRF_RT_REG_DWORD,
     };
 
-    const PERSONALIZE: PCWSTR = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
+    const PERSONALIZE: PCWSTR =
+        w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize");
 
     // None when the value is missing (older Windows, policies): the front keeps its media query.
     pub fn dark() -> Option<bool> {
@@ -44,7 +45,9 @@ mod imp {
             if RegOpenKeyExW(HKEY_CURRENT_USER, PERSONALIZE, None, KEY_NOTIFY, &mut key).is_err() {
                 return;
             }
-            while RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, None, false).is_ok() {
+            while RegNotifyChangeKeyValue(key, false, REG_NOTIFY_CHANGE_LAST_SET, None, false)
+                .is_ok()
+            {
                 on_change();
             }
             let _ = RegCloseKey(key);

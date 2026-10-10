@@ -19,7 +19,9 @@ export function resolveTheme(preference: Theme, prefersDark: boolean): ResolvedT
 }
 
 const systemDark = (value: unknown): boolean | null =>
-  typeof value === 'object' && value !== null && typeof (value as SystemTheme).dark === 'boolean' ? (value as SystemTheme).dark : null;
+  typeof value === 'object' && value !== null && typeof (value as SystemTheme).dark === 'boolean'
+    ? (value as SystemTheme).dark
+    : null;
 
 // The last mode Rust reported, shared by every call in this window: a return to « follow
 // Windows » starts from it instead of flashing the media query's answer.
@@ -30,9 +32,15 @@ let reported: boolean | null = null;
 // on 2026-09-24: tauri-runtime-wry creates the WebView with an explicit light theme), so
 // the Windows app mode comes from Rust when it answers. The media query remains the
 // answer where Rust has none: the browser preview, the e2e fixture, a missing value.
-export function applyTheme(preference: Theme, root: HTMLElement = document.documentElement, system?: SystemThemeSource): () => void {
+export function applyTheme(
+  preference: Theme,
+  root: HTMLElement = document.documentElement,
+  system?: SystemThemeSource,
+): () => void {
   const query = window.matchMedia?.('(prefers-color-scheme: dark)');
-  const update = () => { root.dataset.theme = resolveTheme(preference, reported ?? Boolean(query?.matches)); };
+  const update = () => {
+    root.dataset.theme = resolveTheme(preference, reported ?? Boolean(query?.matches));
+  };
   update();
   if (preference !== 'system') return () => undefined;
   let disposed = false;
@@ -40,17 +48,31 @@ export function applyTheme(preference: Theme, root: HTMLElement = document.docum
   let unlisten: (() => void) | undefined;
   query?.addEventListener('change', update);
   if (system) {
-    system.listen(payload => {
-      const dark = systemDark(payload);
-      if (disposed || dark === null) return;
-      heard = true; reported = dark; update();
-    }).then(stop => { if (disposed) stop(); else unlisten = stop; }, () => undefined);
-    system.current().then(value => {
-      const dark = systemDark(value);
-      // An event that arrived meanwhile is newer than this answer.
-      if (disposed || heard || dark === null) return;
-      reported = dark; update();
-    }, () => undefined);
+    system
+      .listen((payload) => {
+        const dark = systemDark(payload);
+        if (disposed || dark === null) return;
+        heard = true;
+        reported = dark;
+        update();
+      })
+      .then(
+        (stop) => {
+          if (disposed) stop();
+          else unlisten = stop;
+        },
+        () => undefined,
+      );
+    system.current().then(
+      (value) => {
+        const dark = systemDark(value);
+        // An event that arrived meanwhile is newer than this answer.
+        if (disposed || heard || dark === null) return;
+        reported = dark;
+        update();
+      },
+      () => undefined,
+    );
   }
   return () => {
     disposed = true;

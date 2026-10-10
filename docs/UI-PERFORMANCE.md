@@ -1,5 +1,7 @@
 # Profil de rendu
 
+> Document historique (profil de rendu 0.1.4, 9 septembre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 ## 0.1.4 — raffinement du matériau
 
 Même protocole Chromium 153.0.8010.12 et viewport 1280 × 800, exécuté le

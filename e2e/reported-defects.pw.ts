@@ -4,7 +4,9 @@ test('settings background covers the widened production document', async ({ page
   await page.setViewportSize({ width: 960, height: 450 });
   await page.goto('/lab-frame.html?scenario=settings&surface=production');
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
-  await page.screenshot({ path: `release/ui-evidence/settings-${process.env.FLOWTRANSLATE_EVIDENCE_STAGE ?? 'current'}.png` });
+  await page.screenshot({
+    path: `release/ui-evidence/settings-${process.env.FLOWTRANSLATE_EVIDENCE_STAGE ?? 'current'}.png`,
+  });
   // The scenario's dark theme: the matte window of 0.6 (src/components/tokens.css), edge to edge.
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(19, 18, 25)');
   const box = await page.locator('.ft-settings-window').boundingBox();
@@ -72,7 +74,7 @@ test('the 0.4 journey waits with a turning spinner in a pill of 60 × 28', async
   await expect(pill).toHaveCSS('transform', 'none');
   expect(await pill.boundingBox()).toMatchObject({ width: 60, height: 28 });
   expect(await pill.locator('svg').count()).toBe(1);
-  expect(await pill.locator('svg').evaluate(el => getComputedStyle(el).animationName)).toBe('wait-spin');
+  expect(await pill.locator('svg').evaluate((el) => getComputedStyle(el).animationName)).toBe('wait-spin');
   await expect(page.locator('.working-pill')).toHaveCount(0);
   await expect(page.locator('.loading-ring')).toHaveCount(0);
   await expect(page.locator('.translation-bubble')).toHaveCount(0);

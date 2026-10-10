@@ -37,7 +37,11 @@ fn labels(language: Language) -> Labels {
 }
 
 pub fn tooltip(language: Language, simulated: bool) -> &'static str {
-    if simulated { labels(language).simulated } else { "Overtype" }
+    if simulated {
+        labels(language).simulated
+    } else {
+        "Overtype"
+    }
 }
 
 // The ids « replay », « close », « settings » and « quit » are the ones the menu handler in
@@ -54,7 +58,9 @@ pub fn menu<R: Runtime>(app: &AppHandle<R>, language: Language) -> tauri::Result
 
 // After a language change: a new menu in the new language and the idle tooltip.
 pub fn apply<R: Runtime>(app: &AppHandle<R>, language: Language, simulated: bool) {
-    let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
     if let Ok(menu) = menu(app, language) {
         let _ = tray.set_menu(Some(menu));
     }
@@ -68,8 +74,17 @@ mod tests {
     #[test]
     fn every_label_exists_in_both_languages_and_differs() {
         let (en, fr) = (labels(Language::En), labels(Language::Fr));
-        assert_eq!((en.close, fr.close), ("Close the bubble", "Fermer la bulle"));
-        for (en, fr) in [(en.replay, fr.replay), (en.close, fr.close), (en.settings, fr.settings), (en.quit, fr.quit), (en.simulated, fr.simulated)] {
+        assert_eq!(
+            (en.close, fr.close),
+            ("Close the bubble", "Fermer la bulle")
+        );
+        for (en, fr) in [
+            (en.replay, fr.replay),
+            (en.close, fr.close),
+            (en.settings, fr.settings),
+            (en.quit, fr.quit),
+            (en.simulated, fr.simulated),
+        ] {
             assert!(!en.trim().is_empty() && !fr.trim().is_empty());
             assert_ne!(en, fr);
         }

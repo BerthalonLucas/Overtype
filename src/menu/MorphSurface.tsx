@@ -1,7 +1,12 @@
 import { useCallback, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'motion/react';
 import { animateSurface, surfaceRadius } from '../motion/surface';
-import { useContentPresence, useMotionPreset, useReducedMotionSetting, useSurfacePresence } from '../motion/MotionPreferences';
+import {
+  useContentPresence,
+  useMotionPreset,
+  useReducedMotionSetting,
+  useSurfacePresence,
+} from '../motion/MotionPreferences';
 
 // One glass object that changes shape (design-lab/src/Surface.jsx, plan §4.3): its content swaps
 // by `contentKey` (the old layer fades out on its own, the new one fades in) while the box springs
@@ -33,7 +38,16 @@ export type MorphSurfaceProps = {
   [data: `data-${string}`]: string | undefined;
 };
 
-export function MorphSurface({ contentKey, size, origin = 'top', originX = '50%', className = '', onShapeChange, children, ...data }: MorphSurfaceProps) {
+export function MorphSurface({
+  contentKey,
+  size,
+  origin = 'top',
+  originX = '50%',
+  className = '',
+  onShapeChange,
+  children,
+  ...data
+}: MorphSurfaceProps) {
   const presence = useSurfacePresence(origin === 'top' ? 'down' : 'up');
   const tokens = useMotionPreset();
   const reduced = useReducedMotionSetting();
@@ -43,20 +57,31 @@ export function MorphSurface({ contentKey, size, origin = 'top', originX = '50%'
   const running = useRef<ReturnType<typeof animateSurface> | null>(null);
   const latest = useRef({ tokens, reduced, onShapeChange });
   latest.current = { tokens, reduced, onShapeChange };
-  const fixedWidth = size?.width, fixedHeight = size?.height;
+  const fixedWidth = size?.width,
+    fixedHeight = size?.height;
 
   // Surface.jsx:65-98: the box follows the current layer's natural size (offset sizes ignore
   // the entrance scale), set at once the first time, then on the morph spring.
   const fit = useCallback(() => {
-    const box = shape.current, content = layer.current;
-    const target = fixedWidth && fixedHeight ? { width: fixedWidth, height: fixedHeight } : content ? { width: Math.ceil(content.offsetWidth), height: Math.ceil(content.offsetHeight) } : null;
+    const box = shape.current,
+      content = layer.current;
+    const target =
+      fixedWidth && fixedHeight
+        ? { width: fixedWidth, height: fixedHeight }
+        : content
+          ? { width: Math.ceil(content.offsetWidth), height: Math.ceil(content.offsetHeight) }
+          : null;
     if (!box || !target?.width || !target.height) return;
     const from = current.current;
     if (from && from.width === target.width && from.height === target.height) return;
     current.current = target;
     const report = latest.current.onShapeChange;
     if (!from) {
-      Object.assign(box.style, { width: `${target.width}px`, height: `${target.height}px`, borderRadius: `${surfaceRadius(target.height)}px` });
+      Object.assign(box.style, {
+        width: `${target.width}px`,
+        height: `${target.height}px`,
+        borderRadius: `${surfaceRadius(target.height)}px`,
+      });
       report?.({ from: null, to: target, phase: 'end' });
       return;
     }
@@ -81,19 +106,35 @@ export function MorphSurface({ contentKey, size, origin = 'top', originX = '50%'
     return () => observer.disconnect();
   }, [contentKey, fit, fixedWidth, fixedHeight]);
 
-  useLayoutEffect(() => () => { running.current?.stop(); }, []);
+  useLayoutEffect(
+    () => () => {
+      running.current?.stop();
+    },
+    [],
+  );
 
-  const register = useCallback((element: HTMLElement | null) => { if (element) layer.current = element; }, []);
+  const register = useCallback((element: HTMLElement | null) => {
+    if (element) layer.current = element;
+  }, []);
 
-  return <motion.div className={`ilot ${className}`.trim()} style={{ transformOrigin: `${originX} ${origin}` }} {...presence} {...data}>
-    <div ref={shape} className="ilot-shape" data-ilot-shape="">
-      <div className="shape-clip">
-        <AnimatePresence initial={false}>
-          <Layer key={contentKey} register={register}>{children}</Layer>
-        </AnimatePresence>
+  return (
+    <motion.div
+      className={`ilot ${className}`.trim()}
+      style={{ transformOrigin: `${originX} ${origin}` }}
+      {...presence}
+      {...data}
+    >
+      <div ref={shape} className="ilot-shape" data-ilot-shape="">
+        <div className="shape-clip">
+          <AnimatePresence initial={false}>
+            <Layer key={contentKey} register={register}>
+              {children}
+            </Layer>
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
-  </motion.div>;
+    </motion.div>
+  );
 }
 
 // One content layer. Leaving, it keeps its place while it fades, out of reach of the pointer,
@@ -101,7 +142,15 @@ export function MorphSurface({ contentKey, size, origin = 'top', originX = '50%'
 function Layer({ register, children }: { register: (element: HTMLElement | null) => void; children: ReactNode }) {
   const present = useIsPresent();
   const fade = useContentPresence();
-  return <motion.div ref={present ? register : undefined} className={present ? 'shape-layer' : 'shape-layer is-leaving'} aria-hidden={present ? undefined : true} inert={!present} {...fade}>
-    {children}
-  </motion.div>;
+  return (
+    <motion.div
+      ref={present ? register : undefined}
+      className={present ? 'shape-layer' : 'shape-layer is-leaving'}
+      aria-hidden={present ? undefined : true}
+      inert={!present}
+      {...fade}
+    >
+      {children}
+    </motion.div>
+  );
 }

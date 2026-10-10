@@ -4,7 +4,10 @@ import { diffTokens, tokenize, wordDiff, type DiffOp } from './diff';
 import { changedRanges, highlightModeFor, insertedRanges, type TextRange } from './highlight';
 
 // The lab's own diff (design-lab/src/diff.js), the reference the port must match exactly.
-const lab = new Function(`${labSource.replace(/export function/g, 'function')}\nreturn { tokenize, wordDiff };`)() as { tokenize: (text: string) => string[]; wordDiff: (a: string, b: string) => DiffOp[] };
+const lab = new Function(`${labSource.replace(/export function/g, 'function')}\nreturn { tokenize, wordDiff };`)() as {
+  tokenize: (text: string) => string[];
+  wordDiff: (a: string, b: string) => DiffOp[];
+};
 
 // Characters written by their code, to keep them visible here.
 const combining = `cafe${String.fromCharCode(0x301)}`;
@@ -21,10 +24,42 @@ function generator(seed: number) {
     return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
   };
   const int = (n: number) => Math.floor(next() * n);
-  const pick = <T,>(list: readonly T[]) => list[int(list.length)];
+  const pick = <T>(list: readonly T[]) => list[int(list.length)];
   return { next, int, pick };
 }
-const words = ['the', 'draft', 'notes', 'Claire', 'réunion', 'équipe', 'l’équipe', 'don’t', 'it\'s', 'e-mail', 'GPU', 'gpu', '10h', '10', 'h', '6,000', 'naïve', combining, 'Straße', '日本語', 'données', 'serveur', 'Monday', 'monday', 'a', 'I', 'i', 'has', 'read', 'will', 'follow'];
+const words = [
+  'the',
+  'draft',
+  'notes',
+  'Claire',
+  'réunion',
+  'équipe',
+  'l’équipe',
+  'don’t',
+  "it's",
+  'e-mail',
+  'GPU',
+  'gpu',
+  '10h',
+  '10',
+  'h',
+  '6,000',
+  'naïve',
+  combining,
+  'Straße',
+  '日本語',
+  'données',
+  'serveur',
+  'Monday',
+  'monday',
+  'a',
+  'I',
+  'i',
+  'has',
+  'read',
+  'will',
+  'follow',
+];
 const marks = [',', ';', '.', '!', '?', ':', '—', '«', '»', '(', ')', '🙂', '👍🏽', '"', '/'];
 const spaces = [' ', ' ', ' ', ' ', '  ', '\n', '\r\n', '\t', noBreak, ' \n '];
 
@@ -48,13 +83,23 @@ function edited(g: ReturnType<typeof generator>, a: string): string {
     else if (kind === 1) tokens.splice(at, 0, g.pick(words), ' ');
     else if (kind === 2 && tokens.length) tokens.splice(Math.min(at, tokens.length - 1), 1);
     else if (kind === 3) tokens.splice(at, 0, g.pick(marks));
-    else if (tokens.length > 2) { const i = g.int(tokens.length - 1); [tokens[i], tokens[i + 1]] = [tokens[i + 1], tokens[i]]; }
+    else if (tokens.length > 2) {
+      const i = g.int(tokens.length - 1);
+      [tokens[i], tokens[i + 1]] = [tokens[i + 1], tokens[i]];
+    }
   }
   return tokens.join('');
 }
 function pairs(count: number): Array<[string, string]> {
   const g = generator(20260924);
-  const list: Array<[string, string]> = [['', ''], ['', 'Hi'], ['Hi', ''], ['same text', 'same text'], ['a', 'b'], [' ', '\n']];
+  const list: Array<[string, string]> = [
+    ['', ''],
+    ['', 'Hi'],
+    ['Hi', ''],
+    ['same text', 'same text'],
+    ['a', 'b'],
+    [' ', '\n'],
+  ];
   while (list.length < count) {
     const a = randomText(g, g.int(40));
     list.push([a, g.next() < 0.12 ? randomText(g, g.int(40)) : edited(g, a)]);
@@ -68,17 +113,33 @@ function lcs(A: readonly string[], B: readonly string[]): number {
   let previous = new Array<number>(B.length + 1).fill(0);
   for (let i = 1; i <= A.length; i++) {
     const row = new Array<number>(B.length + 1).fill(0);
-    for (let j = 1; j <= B.length; j++) row[j] = A[i - 1] === B[j - 1] ? previous[j - 1] + 1 : Math.max(previous[j], row[j - 1]);
+    for (let j = 1; j <= B.length; j++)
+      row[j] = A[i - 1] === B[j - 1] ? previous[j - 1] + 1 : Math.max(previous[j], row[j - 1]);
     previous = row;
   }
   return previous[B.length];
 }
-const join = (ops: readonly DiffOp[], keep: 'del' | 'ins') => ops.filter(op => op.type === 'eq' || op.type === keep).map(op => op.text).join('');
+const join = (ops: readonly DiffOp[], keep: 'del' | 'ins') =>
+  ops
+    .filter((op) => op.type === 'eq' || op.type === keep)
+    .map((op) => op.text)
+    .join('');
 const visible = /\S/;
 
 describe('tokenize', () => {
   it('cuts words, whitespace runs and every other code point, and joins back to the text', () => {
-    expect(tokenize('l’équipe, don\'t — 10h👍🏽')).toEqual(['l’équipe', ',', ' ', 'don\'t', ' ', '—', ' ', '10h', '👍', '🏽']);
+    expect(tokenize("l’équipe, don't — 10h👍🏽")).toEqual([
+      'l’équipe',
+      ',',
+      ' ',
+      "don't",
+      ' ',
+      '—',
+      ' ',
+      '10h',
+      '👍',
+      '🏽',
+    ]);
     expect(tokenize(`${combining}\r\n\tok`)).toEqual([combining, '\r\n\t', 'ok']);
     expect(tokenize('')).toEqual([]);
     for (const [a, b] of cases) {
@@ -103,19 +164,23 @@ describe('wordDiff (port of design-lab/src/diff.js)', () => {
         expect(op.text).not.toBe('');
         if (i) expect(op.type).not.toBe(ops[i - 1].type);
       }
-      const kept = ops.filter(op => op.type === 'eq').reduce((sum, op) => sum + tokenize(op.text).length, 0);
+      const kept = ops.filter((op) => op.type === 'eq').reduce((sum, op) => sum + tokenize(op.text).length, 0);
       expect(kept).toBe(lcs(tokenize(a), tokenize(b)));
     }
   });
 
   it('diffs the lab’s first paragraph as the lab does', () => {
-    const ops = wordDiff('Hi Claire, thanks for you notes on the draft, I has read them all yesterday evening.', 'Hi Claire, thanks for your notes on the draft; I read them all yesterday evening.');
-    expect(ops.filter(op => op.type === 'ins').map(op => op.text)).toEqual(['your', ';']);
-    expect(ops.filter(op => op.type === 'del').map(op => op.text)).toEqual(['you', ',', ' has']);
+    const ops = wordDiff(
+      'Hi Claire, thanks for you notes on the draft, I has read them all yesterday evening.',
+      'Hi Claire, thanks for your notes on the draft; I read them all yesterday evening.',
+    );
+    expect(ops.filter((op) => op.type === 'ins').map((op) => op.text)).toEqual(['your', ';']);
+    expect(ops.filter((op) => op.type === 'del').map((op) => op.text)).toEqual(['you', ',', ' has']);
   });
 
   it('gives up past its table limit, and only then', () => {
-    const A = tokenize('one two three'), B = tokenize('four five six');
+    const A = tokenize('one two three'),
+      B = tokenize('four five six');
     expect(diffTokens(A, B, 5 * 6 - 1)).toBeNull();
     expect(diffTokens(A, B, 6 * 6)).toEqual(wordDiff('one two three', 'four five six'));
   });
@@ -157,27 +222,44 @@ describe('changed ranges', () => {
       }
       for (const token of resultTokens(ops)) {
         if (!visible.test(token.text)) continue;
-        const marked = ranges.filter(range => overlaps(range, token.start, token.end));
+        const marked = ranges.filter((range) => overlaps(range, token.start, token.end));
         if (token.kept) expect(marked).toEqual([]);
-        else expect(marked.some(range => range.start <= token.start && token.end <= range.end)).toBe(true);
+        else expect(marked.some((range) => range.start <= token.start && token.end <= range.end)).toBe(true);
       }
     }
   });
 
   it('marks the lab’s corrections word by word, joined across a space', () => {
-    const before = 'The appendix will follow on monday, we still waiting for the final numbers from finance and i dont want to send something wrong.';
-    const after = 'The appendix will follow on Monday; we are still waiting for the final numbers from finance, and I don’t want to send anything wrong.';
+    const before =
+      'The appendix will follow on monday, we still waiting for the final numbers from finance and i dont want to send something wrong.';
+    const after =
+      'The appendix will follow on Monday; we are still waiting for the final numbers from finance, and I don’t want to send anything wrong.';
     const { mode, ranges } = changedRanges(before, after, { actionId: 'correct' });
     expect(mode).toBe('words');
-    expect(ranges.map(range => after.slice(range.start, range.end))).toEqual(['Monday;', 'are', ',', 'I don’t', 'anything']);
+    expect(ranges.map((range) => after.slice(range.start, range.end))).toEqual([
+      'Monday;',
+      'are',
+      ',',
+      'I don’t',
+      'anything',
+    ]);
   });
 
   it('decides the mode from the action: words for Fix, Pro and Shorten, the block for the others', () => {
     expect(['correct', 'professionalize', 'shorten'].map(highlightModeFor)).toEqual(['words', 'words', 'words']);
-    expect(['translate', 'translate-fr', 'translate-en', 'email', 'instruction'].map(highlightModeFor)).toEqual(['block', 'block', 'block', 'block', 'block']);
+    expect(['translate', 'translate-fr', 'translate-en', 'email', 'instruction'].map(highlightModeFor)).toEqual([
+      'block',
+      'block',
+      'block',
+      'block',
+      'block',
+    ]);
     expect(highlightModeFor('my-own-action')).toBe('auto');
     const after = '\nBonjour Claire, merci pour tes remarques.\n';
-    expect(changedRanges('Hi Claire, thanks for your notes.', after, { actionId: 'translate' })).toEqual({ mode: 'block', ranges: [{ start: 1, end: after.length - 1 }] });
+    expect(changedRanges('Hi Claire, thanks for your notes.', after, { actionId: 'translate' })).toEqual({
+      mode: 'block',
+      ranges: [{ start: 1, end: after.length - 1 }],
+    });
   });
 
   it('marks nothing when the setting is off, when nothing changed, or when the result is blank', () => {
@@ -185,14 +267,21 @@ describe('changed ranges', () => {
     expect(changedRanges('same', 'same', { actionId: 'translate' })).toEqual({ mode: 'none', ranges: [] });
     expect(changedRanges('text', '  \n', { actionId: 'email' })).toEqual({ mode: 'none', ranges: [] });
     // Only a deletion: nothing inserted to mark.
-    expect(changedRanges('a very long text', 'a long text', { actionId: 'shorten' })).toEqual({ mode: 'none', ranges: [] });
+    expect(changedRanges('a very long text', 'a long text', { actionId: 'shorten' })).toEqual({
+      mode: 'none',
+      ranges: [],
+    });
   });
 
   it('decides a user action from the diff: words when most of the text is kept, else the block', () => {
     const before = 'Please send the report before Friday so we can review it.';
-    const light = changedRanges(before, 'Please send the final report before Friday so we can review it.', { actionId: 'formal' });
+    const light = changedRanges(before, 'Please send the final report before Friday so we can review it.', {
+      actionId: 'formal',
+    });
     expect(light.mode).toBe('words');
-    const rewritten = changedRanges(before, 'Kindly deliver your findings ahead of the weekly meeting.', { actionId: 'formal' });
+    const rewritten = changedRanges(before, 'Kindly deliver your findings ahead of the weekly meeting.', {
+      actionId: 'formal',
+    });
     expect(rewritten).toEqual({ mode: 'block', ranges: [{ start: 0, end: 57 }] });
   });
 
@@ -200,7 +289,13 @@ describe('changed ranges', () => {
     const before = Array.from({ length: 10 }, (_, i) => `w${i} x`).join(' ');
     const after = Array.from({ length: 10 }, (_, i) => `v${i} x`).join(' ');
     expect(changedRanges(before, after, { actionId: 'correct' }).ranges.length).toBe(10);
-    expect(changedRanges(before, after, { actionId: 'correct', maxRanges: 9 })).toEqual({ mode: 'block', ranges: [{ start: 0, end: after.length }] });
-    expect(changedRanges(before, after, { actionId: 'correct', maxCells: 100 })).toEqual({ mode: 'block', ranges: [{ start: 0, end: after.length }] });
+    expect(changedRanges(before, after, { actionId: 'correct', maxRanges: 9 })).toEqual({
+      mode: 'block',
+      ranges: [{ start: 0, end: after.length }],
+    });
+    expect(changedRanges(before, after, { actionId: 'correct', maxCells: 100 })).toEqual({
+      mode: 'block',
+      ranges: [{ start: 0, end: after.length }],
+    });
   });
 });

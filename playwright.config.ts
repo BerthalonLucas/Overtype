@@ -8,9 +8,16 @@ export default defineConfig({
   testMatch: ['**/*.pw.ts', '**/*.spec.mjs'],
   globalSetup: './e2e/warmup.ts',
   timeout: 20_000,
-  use: { baseURL, headless: true, screenshot: 'only-on-failure',
+  use: {
+    baseURL,
+    headless: true,
+    screenshot: 'only-on-failure',
+    trace: 'retain-on-failure',
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH, args: ['--no-sandbox', '--disable-dev-shm-usage'] }
+      ? {
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+          args: ['--no-sandbox', '--disable-dev-shm-usage'],
+        }
       : undefined,
   },
   webServer: {

@@ -17,5 +17,10 @@ export default defineConfig({
   // src-tauri/target: cargo locks the files it builds, and the watcher dies on them (EBUSY).
   server: { watch: { ignored: [...foreign, '**/src-tauri/**', '**/test-results/**'] } },
   // css.include: src/theme.test.ts reads the theme tokens as text (vitest empties CSS otherwise).
-  test: { environment: 'jsdom', globals: true, css: { include: [/theme\.css/] }, exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**', 'visual-tests/**', ...foreign] }
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    css: { include: [/theme\.css/] },
+    exclude: ['**/node_modules/**', '**/dist/**', 'e2e/**', 'visual-tests/**', ...foreign],
+  },
 });

@@ -1,11 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { caretAt, caretPoint, dragEnds, dragPoint, dragSelection, joined, selectionRects, stroke, touchedLines, type TextLine } from './selection';
+import {
+  caretAt,
+  caretPoint,
+  dragEnds,
+  dragPoint,
+  dragSelection,
+  joined,
+  selectionRects,
+  stroke,
+  touchedLines,
+  type TextLine,
+} from './selection';
 
 // Three lines of ten characters, 10 px a character, 24 px a line, starting at (100, 200); the last
 // line holds six characters only.
 function layout(): TextLine[] {
   const line = (index: number, count: number): TextLine => ({
-    top: 200 + index * 24, bottom: 224 + index * 24, start: index * 10, end: index * 10 + count,
+    top: 200 + index * 24,
+    bottom: 224 + index * 24,
+    start: index * 10,
+    end: index * 10 + count,
     xs: Array.from({ length: count + 1 }, (_, i) => 100 + i * 10),
   });
   return [line(0, 10), line(1, 10), line(2, 6)];
@@ -46,7 +60,10 @@ describe('a selection over several lines', () => {
     expect(selectionRects(lines, 7, 7)).toEqual([]);
   });
   it('knows the whole lines it touches', () => {
-    expect(touchedLines(lines, 3, 12)).toEqual([{ x: 100, y: 200, width: 100, height: 24 }, { x: 100, y: 224, width: 100, height: 24 }]);
+    expect(touchedLines(lines, 3, 12)).toEqual([
+      { x: 100, y: 200, width: 100, height: 24 },
+      { x: 100, y: 224, width: 100, height: 24 },
+    ]);
   });
 });
 
@@ -77,7 +94,8 @@ describe('the drag of the demo', () => {
   it('selects like Windows at each instant', () => {
     expect(dragSelection(lines, 0)!.rects).toEqual([]);
     // The selection only grows, and each picture of it is a real multi-line selection.
-    let focus = 0, sawPartialSecondLine = false;
+    let focus = 0,
+      sawPartialSecondLine = false;
     for (let step = 1; step <= 200; step++) {
       const at = dragSelection(lines, step / 200)!;
       expect(at.focus).toBeGreaterThanOrEqual(focus);
@@ -107,7 +125,11 @@ describe('lines read from glyph boxes', () => {
       { top: 226, bottom: 246, start: 2, end: 4, xs: [0, 10, 20] },
       { top: 250, bottom: 270, start: 4, end: 5, xs: [0, 10] },
     ];
-    expect(joined(glyphs).map(line => [line.top, line.bottom])).toEqual([[200, 224], [224, 248], [248, 272]]);
+    expect(joined(glyphs).map((line) => [line.top, line.bottom])).toEqual([
+      [200, 224],
+      [224, 248],
+      [248, 272],
+    ]);
     expect(joined(glyphs.slice(0, 1))).toEqual(glyphs.slice(0, 1));
     // The caret changes line half-way between two lines, not at the bottom of the glyphs.
     expect(caretAt(joined(glyphs), { x: 9, y: 223 })).toBe(1);
@@ -117,7 +139,8 @@ describe('lines read from glyph boxes', () => {
 
 describe('a stroke of the pointer', () => {
   it('starts and ends where asked, slow at both ends', () => {
-    const from = { x: 0, y: 0 }, to = { x: 100, y: 50 };
+    const from = { x: 0, y: 0 },
+      to = { x: 100, y: 50 };
     expect(stroke(from, to, 0, 0.2)).toEqual(from);
     expect(stroke(from, to, 1, 0.2)).toEqual(to);
     expect(stroke(from, to, 0.1).x).toBeLessThan(2);

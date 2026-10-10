@@ -1,5 +1,7 @@
 # Plan de construction 0.6.0 : le labo devient l'app
 
+> Document historique (plan exécuté de la 0.6.0, 1er octobre 2026) : ne décrit plus l’état actuel. État actuel : [README.md](../README.md) et [docs/BRIDGE.md](../docs/BRIDGE.md).
+
 Rédigé le 01/10/2026 par l'architecte (lecture seule sur le code). Branche `refonte-reglages`, un seul
 arbre de travail partagé par tous les agents. Référence visuelle et de comportement :
 `design-lab/reglages/` (README, puis `src/`). Spec d'origine : `docs/DESIGN-REGLAGES.md` (29/09), **dépassée

@@ -20,6 +20,15 @@ const outcomes = new Function(
 )() as Outcome[];
 const outcome = (id: string) => outcomes.find((item) => item.id === id)!;
 
+// ErrorKind::ALL as src-tauri/src/error.rs writes it, each variant by the snake_case word its
+// test's exhaustive match gives it (`kind_name`): the list Rust really sends, read from its source.
+const rustKinds = () => {
+  const start = errorRs.indexOf('impl ErrorKind {');
+  const variants = [...errorRs.slice(start, errorRs.indexOf('];', start)).matchAll(/Self::(\w+)/g)].map((m) => m[1]);
+  const names = new Map([...errorRs.matchAll(/ErrorKind::(\w+) => "([a-z0-9_]+)"/g)].map((m) => [m[1], m[2]]));
+  return variants.map((variant) => names.get(variant) ?? `?${variant}`);
+};
+
 // Words as a reader counts them: a number with its thousands separator is one.
 const wordCount = (text: string) =>
   text
@@ -55,6 +64,8 @@ describe('error codes', () => {
       'setup_open',
       'clipboard_unkeepable',
       'target_unverified',
+      'capture_gone',
+      'instruction_invalid',
     ]);
     const families = Object.fromEntries(errorCodes.map((kind) => [kind, errorFamily(kind)]));
     expect(families).toEqual({
@@ -82,16 +93,22 @@ describe('error codes', () => {
       nothing_recent: 'content',
       protected_window: 'content',
       setup_open: 'content',
+      capture_gone: 'content',
+      instruction_invalid: 'content',
       cancelled: 'silent',
     });
   });
 
   it('knows every code Rust sends, and no other', () => {
-    // src-tauri/src/error.rs lists each ErrorKind with its snake_case name in its own test: a code
-    // added on the native side fails here until the front gives it a family and its texts.
-    const rust = [...errorRs.matchAll(/\(ErrorKind::\w+, "([a-z_]+)"\)/g)].map((match) => match[1]);
-    expect(rust.length).toBeGreaterThan(0);
-    expect([...rust].sort()).toEqual([...errorCodes].sort());
+    // ErrorKind::ALL (src-tauri/src/error.rs), whose own test matches every variant exhaustively and
+    // counts ALL against it: a code added on the native side fails here until the front gives it a
+    // family and its texts.
+    const rust = rustKinds();
+    expect(rust.length).toBeGreaterThan(20);
+    expect(rust).toEqual([...errorCodes]);
+    for (const code of errorCodes)
+      for (const language of languages)
+        expect(translate(language, describeError(code).message).trim(), `${code} ${language}`).not.toBe('');
   });
 
   it('reads a code from the bridge, anything unknown being internal', () => {

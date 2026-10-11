@@ -11,6 +11,7 @@ type Fixture = {
   settings: (next: Partial<Settings>) => Promise<void>;
   focusField: (field: string) => Promise<void>;
   refuseShortcut: () => void;
+  refuseSave: (code: string, message: string) => void;
   shortcutStates: (states: Record<string, string>, emitNow?: boolean) => Promise<void> | undefined;
   current: () => Settings;
   suggestion: (value: string | null) => void;
@@ -472,7 +473,31 @@ test('the recorder lights the keys, warns when Ctrl+Alt+key is also AltGr here, 
   await expect(menu.getByRole('alert')).toHaveText(
     'Another app already uses this shortcut, or Windows refused it. Choose another one.',
   );
+  await expect(menu.getByRole('alert')).not.toContainText('déjà utilisé');
   await expect(menu.locator('kbd')).toHaveText(['Ctrl', 'Alt', 'E']);
+  await expect(page.locator('.st-save')).toHaveText('Saved');
+});
+
+test('a save Rust refuses is said by its code in the interface language, never in Rust’s French (ARCH-05)', async ({
+  page,
+}) => {
+  await openSettings(page);
+  await go(page, 'After replacing');
+  const check = page.locator('.ft-settings-main').getByRole('switch', { name: 'Check mark', exact: true });
+  const problem = page.locator('.st-save-error');
+  // The settings file could not be written: Rust's code, its English text; its French sentence never.
+  await call(page, (f) => f.refuseSave('storage_failed', 'Impossible d’enregistrer les paramètres.'));
+  await check.click();
+  await expect(problem).toContainText('The settings could not be written. Try again.');
+  await expect(problem).not.toContainText('Impossible');
+  // A code this window does not know: its generic text, still never Rust's sentence.
+  await call(page, (f) => f.refuseSave('teapot', 'Erreur inconnue.'));
+  await check.click();
+  await expect(problem).toContainText('Settings were not saved.');
+  await expect(problem).not.toContainText('Erreur');
+  // The next save goes through and the problem leaves.
+  await check.click();
+  await expect(problem).toHaveCount(0);
   await expect(page.locator('.st-save')).toHaveText('Saved');
 });
 

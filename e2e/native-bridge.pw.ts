@@ -751,7 +751,7 @@ test('IPC fixture: a paste that never reports back opens the glass after three s
   await expect(page.locator('.compact-feedback')).toContainText('did not answer');
 });
 
-test('IPC fixture: the manual « Remplacer » keeps the native refusal and disables another attempt', async ({
+test('IPC fixture: the manual « Remplacer » says the native refusal by its code and disables another attempt', async ({
   page,
 }) => {
   await openNativeFixture(page);
@@ -763,7 +763,8 @@ test('IPC fixture: the manual « Remplacer » keeps the native refusal and disab
   });
   await page.getByRole('button', { name: 'More options', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Replace', exact: true }).click();
-  await expect(page.locator('.compact-feedback')).toContainText('La fenêtre source a changé');
+  // target_changed in the interface language, never Rust's French message (ARCH-05).
+  await expect(page.locator('.compact-feedback')).toHaveText('Text changed — not replaced');
   await page.getByRole('button', { name: 'More options', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: 'Replace', exact: true })).toHaveCount(0);
   expect(

@@ -103,7 +103,7 @@ describe('bridge preview: servers and settings of 0.6', () => {
     expect(changed).toHaveLength(1);
     await expect(
       bridge.saveSettings({ ...settings, servers: [{ ...settings.servers[0], endpoint: 'ftp://x' }] }),
-    ).rejects.toBe('L’adresse du serveur est invalide.');
+    ).rejects.toEqual({ code: 'address', message: 'L’adresse du serveur est invalide.' });
     expect((await bridge.getSettings()).servers[0].endpoint).toBe('https://llm.exemple.com');
     // The setup's end marks it done and tells every listener.
     const fresh = await loaded('?window=setup');

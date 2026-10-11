@@ -598,7 +598,9 @@ test('Îlot: a click in the field keeps its focus, Escape still goes back, and t
   await expect(ilot).toHaveAttribute('data-shape', 'pill');
 });
 
-test('Îlot: a refused choice gives the menu back, and the next choice goes through', async ({ page }) => {
+test('Îlot: a refused choice gives the menu back, says why in the interface language, and the next choice goes through', async ({
+  page,
+}) => {
   await openIlot(page);
   await on(page, (f) => {
     f.refuseChoice();
@@ -606,7 +608,9 @@ test('Îlot: a refused choice gives the menu back, and the next choice goes thro
   });
   await settled(page);
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('alert')).toHaveText('L’action n’existe plus.');
+  // Rust's code (capture_gone) in English, never its French message (ARCH-05).
+  await expect(page.getByRole('alert')).toHaveText('Menu closed — select again');
+  await expect(page.getByRole('alert')).not.toContainText('capture');
   await expect(page.locator('[data-ilot]')).toHaveAttribute('data-shape', 'menu');
   expect(await translations(page, 'refused')).toHaveLength(0);
   await page.keyboard.press('Enter');

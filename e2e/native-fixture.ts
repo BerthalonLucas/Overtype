@@ -21,6 +21,8 @@ import type {
   PillTarget,
   ProbeStepEvent,
   Rect,
+  Refusal,
+  RefusalCode,
   Settings,
   ShortcutStatus,
   TranslationRequest,
@@ -36,6 +38,10 @@ import {
 } from '../src/bridge.mock';
 import { ilotReserve } from '../src/layout';
 import { resetFrom } from '../src/settings/reset';
+
+// Every command refuses as Rust does (ARCH-05): `{message, code}`, the French message for the
+// journal only, the code for the interface.
+const refusal = (code: RefusalCode, message: string): Refusal => ({ code, message });
 
 let settings: Settings = {
   defaultActionId,
@@ -95,12 +101,14 @@ let currentCapture = capture('first');
 let heldCopy = false;
 let failSettings = new URLSearchParams(location.search).has('settingsError');
 let refuseShortcut = false;
-// Rust's refusal of the next `replace_result`: `{message, code}` (Refusal) since the review of
-// da-ilot, the French message for the 0.4 glass, the code for the Îlot.
-let refuseReplace: { message: string; code: ErrorCode } | null = null;
-// Lot 9: what `undo_result` answers (Rust's UndoOutcome, or a rejection: its French string), at
-// once or once released.
-let undoAnswer: { outcome?: Partial<UndoOutcome>; reject?: string } = {};
+// Rust's refusal of the next `save_settings` (ARCH-05: its code, its French message), once.
+let refuseSave: Refusal | null = null;
+// Rust's refusal of the next `replace_result`: `{message, code}` (Refusal); the glass and the Îlot
+// read its code.
+let refuseReplace: Refusal | null = null;
+// Lot 9: what `undo_result` answers (Rust's UndoOutcome, or a rejection: a Refusal), at once or
+// once released.
+let undoAnswer: { outcome?: Partial<UndoOutcome>; reject?: Refusal } = {};
 let holdUndo = false;
 let releaseUndo: (() => void) | undefined;
 let resolveCopy: (() => void) | undefined;
@@ -206,7 +214,7 @@ const pillAfterPaste = (
 };
 // `result_pill` for the current request: from the new text's lines (`pastedLines`), else
 // estimated from the selection; relative to the window as it stands, `inside` within half a pixel
-// of it. A refusal is Rust's French string.
+// of it. A refusal is Rust's French message (rejected as an `internal` Refusal).
 const resultPill = (requestId: string, width: number, height: number): PillTarget | string => {
   if (![width, height].every((value) => Number.isFinite(value) && value > 0)) return 'Dimensions invalides.';
   if (requestId !== request?.id) return 'Ce résultat n’est plus actif.';
@@ -317,7 +325,7 @@ mockIPC(
     }
     if (command === 'get_settings') {
       if (failSettings) {
-        return Promise.reject('Synthetic settings failure');
+        return Promise.reject(refusal('internal', 'Synthetic settings failure'));
       }
       return settings;
     }
@@ -325,12 +333,17 @@ mockIPC(
     if (command === 'system_motion') return windowsMotion;
     if (command === 'save_settings') {
       const next = structuredClone(args?.settings as Settings);
+      if (refuseSave) {
+        const refused = refuseSave;
+        refuseSave = null;
+        return Promise.reject(refused);
+      }
       if (refuseShortcut && JSON.stringify(next.shortcutBindings) !== JSON.stringify(settings.shortcutBindings))
-        return Promise.reject('Le raccourci est déjà utilisé ou indisponible.');
+        return Promise.reject(refusal('shortcut_taken', 'Le raccourci est déjà utilisé ou indisponible.'));
       // As Rust (settings::sanitize, then validate): an address that does not read is refused;
       // what is saved is clean (the address normalised, no key for a server without one).
       if (next.servers.some((server) => server.endpoint.trim() !== '' && !normalizeEndpoint(server.endpoint).ok))
-        return Promise.reject('L’adresse du serveur est invalide.');
+        return Promise.reject(refusal('address', 'L’adresse du serveur est invalide.'));
       next.servers = next.servers.map((server) => {
         const endpoint = normalizeEndpoint(server.endpoint);
         return {
@@ -404,15 +417,23 @@ mockIPC(
         instruction?: string;
       };
       if (captureId !== currentCapture.id || !currentCapture.menu)
-        return Promise.reject('Cette capture n’attend pas de choix.');
+        return Promise.reject(refusal('capture_gone', 'Cette capture n’attend pas de choix.'));
+      // As Rust when the capture is no longer the one shown (its French message, its code).
       if (refuseChoice) {
         refuseChoice = false;
-        return Promise.reject('L’action n’existe plus.');
+        return Promise.reject(refusal('capture_gone', 'La capture n’est plus active.'));
       }
-      if (chosen.has(captureId)) return Promise.reject('Une action a déjà été choisie pour cette sélection.');
+      if (chosen.has(captureId))
+        return Promise.reject(refusal('capture_gone', 'Une action a déjà été choisie pour cette sélection.'));
       const action = settings.actions.find((item) => item.id === actionId);
-      if (instruction !== undefined ? actionId !== instructionActionId || instructionError(instruction) : !action)
-        return Promise.reject('L’action n’existe plus.');
+      if (instruction !== undefined && (actionId !== instructionActionId || instructionError(instruction)))
+        return Promise.reject(
+          refusal(
+            'instruction_invalid',
+            'La consigne libre doit contenir de 1 à 1 000 caractères, sans caractère nul.',
+          ),
+        );
+      if (instruction === undefined && !action) return Promise.reject(refusal('internal', 'L’action n’existe plus.'));
       chosen.add(captureId);
       const execution = {
         actionId,
@@ -435,7 +456,7 @@ mockIPC(
         : { altGr: false };
     // Lot 10's `open_settings({ field })` on an open Settings window: the event it will send.
     if (command === 'open_settings' && args?.field) return emit('settings-focus-field', { field: args.field });
-    if (command === 'start_drag') return Promise.reject('Synthetic drag failure');
+    if (command === 'start_drag') return Promise.reject(refusal('internal', 'Synthetic drag failure'));
     if (command === 'dismiss_overlay') return emit('overlay-dismiss-requested', { captureId: currentCapture.id });
     if (command === 'copy_result' && heldCopy)
       return new Promise<void>((resolve) => {
@@ -466,9 +487,9 @@ mockIPC(
     if (command === 'result_pill') {
       const { requestId, width, height } = args as { requestId: string; width: number; height: number };
       const next = pillAnswers.shift();
-      if (next === 'refuse') return Promise.reject('Ce résultat n’est plus actif.');
+      if (next === 'refuse') return Promise.reject(refusal('internal', 'Ce résultat n’est plus actif.'));
       const place = resultPill(requestId, width, height);
-      return typeof place === 'string' ? Promise.reject(place) : { ...place, ...next };
+      return typeof place === 'string' ? Promise.reject(refusal('internal', place)) : { ...place, ...next };
     }
     if (command === 'move_overlay') {
       const { captureId, dx, dy } = args as { captureId: string; dx: number; dy: number };
@@ -483,7 +504,7 @@ mockIPC(
       });
       if (refuseMove) {
         refuseMove = false;
-        return Promise.reject('Déplacement refusé.');
+        return Promise.reject(refusal('internal', 'Déplacement refusé.'));
       }
       // As Rust: a finite move within the work area, for the current anchored capture.
       if (
@@ -492,9 +513,9 @@ mockIPC(
         Math.abs(dx) > workArea.width ||
         Math.abs(dy) > workArea.height
       )
-        return Promise.reject('Déplacement invalide.');
-      if (captureId !== currentCapture.id) return Promise.reject('La capture n’est plus active.');
-      if (!currentCapture.anchor) return Promise.reject('Seule la fenêtre ancrée se déplace.');
+        return Promise.reject(refusal('internal', 'Déplacement invalide.'));
+      if (captureId !== currentCapture.id) return Promise.reject(refusal('internal', 'La capture n’est plus active.'));
+      if (!currentCapture.anchor) return Promise.reject(refusal('internal', 'Seule la fenêtre ancrée se déplace.'));
       moved = { x: moved.x + dx, y: moved.y + dy };
       return;
     }
@@ -519,6 +540,9 @@ Object.assign(window, {
     },
     refuseShortcut: () => {
       refuseShortcut = true;
+    },
+    refuseSave: (code: RefusalCode, message: string) => {
+      refuseSave = refusal(code, message);
     },
     refuseReplace: (
       message: string | null = 'La fenêtre source a changé; remplacement refusé.',
@@ -573,7 +597,7 @@ Object.assign(window, {
       undoAnswer = { outcome };
     },
     undoRejects: (message = 'Ce résultat n’est plus actif.') => {
-      undoAnswer = { reject: message };
+      undoAnswer = { reject: refusal('internal', message) };
     },
     holdUndo: () => {
       holdUndo = true;

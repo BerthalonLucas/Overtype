@@ -138,7 +138,7 @@ pub async fn check_update(app: AppHandle) -> UpdateStatus {
 pub async fn install_update(
     window: tauri::WebviewWindow,
     app: AppHandle,
-) -> Result<UpdateStatus, String> {
+) -> Result<UpdateStatus, crate::error::Refusal> {
     crate::acl::only(&window, &crate::acl::SETTINGS)?;
     let update = app
         .state::<Updates>()
@@ -200,7 +200,8 @@ pub async fn install_update(
             Err(format!(
                 "La mise à jour a échoué ({}).",
                 status.available.unwrap_or_default()
-            ))
+            )
+            .into())
         }
     }
 }

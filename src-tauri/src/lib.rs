@@ -11,7 +11,7 @@ mod demo_menu;
 mod diagnostics;
 mod error;
 mod ground;
-use error::{AppError, ErrorKind, Refusal};
+use error::{AppError, ErrorKind, Refusal, SettingsRefusal};
 mod halo;
 mod history;
 mod host;
@@ -502,7 +502,8 @@ impl Inner {
         capture_id: &str,
         action_id: &str,
         instruction: Option<&str>,
-    ) -> Result<ExecutionInfo, String> {
+    ) -> Result<ExecutionInfo, Refusal> {
+        let gone = |message: &str| Refusal::new(ErrorKind::CaptureGone, message);
         if !self.visible
             || self.pending_dismiss.is_some()
             || self
@@ -510,18 +511,21 @@ impl Inner {
                 .as_ref()
                 .is_none_or(|capture| capture.public.id != capture_id)
         {
-            return Err("La capture n’est plus active.".into());
+            return Err(gone("La capture n’est plus active."));
         }
         let menu = self
             .menu
             .as_mut()
             .filter(|menu| menu.capture_id == capture_id)
-            .ok_or("Cette capture n’attend pas de choix.")?;
+            .ok_or_else(|| gone("Cette capture n’attend pas de choix."))?;
         if menu.chosen {
-            return Err("Une action a déjà été choisie pour cette sélection.".into());
+            return Err(gone("Une action a déjà été choisie pour cette sélection."));
         }
         if menu.invalidated {
-            return Err("La sélection a changé; le menu est fermé.".into());
+            return Err(Refusal::new(
+                ErrorKind::TargetChanged,
+                "La sélection a changé; le menu est fermé.",
+            ));
         }
         let execution = Execution::chosen(&menu.settings, action_id, instruction)?;
         menu.chosen = true;
@@ -784,7 +788,7 @@ fn without_keys(mut settings: Settings) -> Settings {
 fn get_settings(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Settings, String> {
+) -> Result<Settings, Refusal> {
     let settings = state
         .inner
         .lock()
@@ -858,18 +862,19 @@ fn emit_shortcut_statuses(app: &AppHandle) {
 fn shortcut_status(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Vec<ShortcutStatus>, String> {
+) -> Result<Vec<ShortcutStatus>, Refusal> {
     acl::only(&window, &KEYED)?;
-    current_shortcut_statuses(&state)
+    Ok(current_shortcut_statuses(&state)?)
 }
 
-fn register_shortcut(app: &AppHandle, value: &str) -> Result<(), String> {
-    register_shortcut_state(app, value).map_err(|(_, message)| message)
+fn register_shortcut(app: &AppHandle, value: &str) -> Result<(), Refusal> {
+    register_shortcut_state(app, value).map_err(|(_, refusal)| refusal)
 }
-/// Registers a chord; on a refusal, why (for the status) and the French message of 0.4.
-fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingState, String)> {
+/// Registers a chord; on a refusal, why (for the status) and the refusal (`shortcut_taken`, or
+/// the chord's own code when it does not read).
+fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingState, Refusal)> {
     let shortcut =
-        actions::parse_shortcut(value).map_err(|message| (BindingState::Failed, message))?;
+        actions::parse_shortcut(value).map_err(|refusal| (BindingState::Failed, refusal))?;
     let shortcut_id = shortcut.id();
     app.global_shortcut()
         .on_shortcut(shortcut, move |app, _, event| {
@@ -896,7 +901,10 @@ fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingS
         .map_err(|error| {
             (
                 refusal_state(&error.to_string()),
-                "Le raccourci est déjà utilisé ou indisponible.".into(),
+                Refusal::new(
+                    SettingsRefusal::ShortcutTaken,
+                    "Le raccourci est déjà utilisé ou indisponible.",
+                ),
             )
         })
 }
@@ -909,7 +917,7 @@ fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: Settings,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &KEYED)?;
     store_settings(app, state, settings)
 }
@@ -918,7 +926,7 @@ fn store_settings(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: Settings,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
     apply_settings(&app, &state, settings)
 }
@@ -929,7 +937,7 @@ fn change_settings(
     app: &AppHandle,
     state: &AppState,
     change: impl FnOnce(&mut Settings) -> bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
     let mut settings = state
         .inner
@@ -944,7 +952,7 @@ fn change_settings(
 }
 /// Saves `settings` (the save lock is held by the caller): validated, its shortcuts registered,
 /// written, then told to every window.
-fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Result<(), String> {
+fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Result<(), Refusal> {
     let app = app.clone();
     let old = state
         .inner
@@ -1004,7 +1012,12 @@ fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Resu
             } else {
                 app.autolaunch().disable()
             })
-            .map_err(|_| "Démarrage automatique indisponible.".to_string())?;
+            .map_err(|_| {
+                Refusal::new(
+                    SettingsRefusal::AutostartUnavailable,
+                    "Démarrage automatique indisponible.",
+                )
+            })?;
         }
         state.settings_store.save(&settings)
     })();
@@ -1078,7 +1091,7 @@ fn reset_settings(
     window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Settings, String> {
+) -> Result<Settings, Refusal> {
     acl::only(&window, &acl::SETTINGS)?;
     let current = state
         .inner
@@ -1124,7 +1137,7 @@ fn suggest_shortcut(
     window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, Refusal> {
     acl::only(&window, &KEYED)?;
     let used = state
         .inner
@@ -1431,12 +1444,11 @@ fn replay_last(app: &AppHandle) -> Result<(), String> {
 // Test hook, honoured only under the WebView2 probe (`FLOWTRANSLATE_CDP_URL`, as for
 // `override_cursor`): no page calls it, and no window should start a capture by IPC.
 #[tauri::command(async)]
-fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, String> {
+fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, Refusal> {
     if std::env::var_os("FLOWTRANSLATE_CDP_URL").is_none() {
         return Err("Indisponible hors test.".into());
     }
-    capture_with_binding(app, &state, None)
-        .map_err(String::from)?
+    capture_with_binding(app, &state, None)?
         .ok_or_else(|| "Sélectionnez un texte dans une autre application.".into())
 }
 /// What a shortcut opens: one action at once, or (a `menu` binding) the Îlot's
@@ -1975,7 +1987,7 @@ fn frontend_ready(
     app: AppHandle,
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Option<Capture>, String> {
+) -> Result<Option<Capture>, Refusal> {
     let (pending, reloaded) = state.inner.lock().map_err(|_| lock_error())?.page_ready();
     // Review of da-ilot (front n°2): the overlay page loaded again (F5, Ctrl+R, a crash) while
     // a capture was on screen; the new page knows nothing of it, so it closes as a dismissal
@@ -1996,7 +2008,7 @@ fn translate(
     app: AppHandle,
     state: State<'_, AppState>,
     request: TranslationRequest,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     if request.text.is_empty() || request.text.chars().count() > capture::MAX_CHARS {
         return Err("La traduction accepte de 1 à 200 000 caractères.".into());
@@ -2031,9 +2043,7 @@ fn translate(
             return Err("Le serveur ne correspond pas à la capture.".into());
         }
         // The servers frozen at the capture: a change of settings never alters a running one.
-        let profile = find_server(&run.servers, &request.server_id)
-            .map_err(String::from)?
-            .clone();
+        let profile = find_server(&run.servers, &request.server_id)?.clone();
         actions::validate_template(&run.action.prompt_template)?;
         let instruction = run.action.prompt_template.clone();
         let execution_info = run.info.clone();
@@ -2298,7 +2308,7 @@ fn cancel_translation(
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     let mut i = state.inner.lock().map_err(|_| lock_error())?;
     let working = i.current(&request_id);
@@ -2547,7 +2557,7 @@ fn result_pill(
     request_id: String,
     width: f64,
     height: f64,
-) -> Result<PillTarget, String> {
+) -> Result<PillTarget, Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
         return Err("Dimensions invalides.".into());
@@ -2617,7 +2627,7 @@ async fn move_overlay(
     capture_id: String,
     dx: f64,
     dy: f64,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     let size = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;
@@ -2657,9 +2667,9 @@ async fn move_overlay(
     };
     let (placed_tx, placed_rx) = tokio::sync::oneshot::channel();
     position(&app, &state, size.0, size.1, Some(placed_tx))?;
-    placed_rx
+    Ok(placed_rx
         .await
-        .map_err(|_| "Placement interrompu.".to_string())?
+        .map_err(|_| "Placement interrompu.".to_string())??)
 }
 
 /// Marks the changed words of the replacement (lot 9) in the halo: `ranges` are UTF-16
@@ -2676,7 +2686,7 @@ async fn highlight_changes(
     state: State<'_, AppState>,
     request_id: String,
     ranges: Vec<TextRange>,
-) -> Result<HighlightResult, String> {
+) -> Result<HighlightResult, Refusal> {
     acl::only(&caller, &acl::OVERLAY)?;
     if ranges.len() > 64 {
         return Err("Trop de plages.".into());
@@ -2752,7 +2762,7 @@ async fn highlight_changes(
         }
     })
     .await
-    .map_err(|_| "Surlignage interrompu.".to_string())
+    .map_err(|_| Refusal::internal("Surlignage interrompu."))
 }
 
 /// Undo withdrawn (lot 9): `undo-state` tells the frontend why. The marks are not Undo's: they
@@ -2803,7 +2813,7 @@ async fn undo_result(
     window: tauri::WebviewWindow,
     app: AppHandle,
     request_id: String,
-) -> Result<UndoOutcome, String> {
+) -> Result<UndoOutcome, Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
@@ -2903,7 +2913,7 @@ fn copy_result(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     let r = result_for(&state, &request_id)?;
     // Our own write must not count as a fresh copy for the next shortcut.
@@ -2921,7 +2931,7 @@ async fn replace_result(
     state: State<'_, AppState>,
     request_id: String,
 ) -> Result<(), Refusal> {
-    acl::only(&window, &acl::OVERLAY).map_err(AppError::internal)?;
+    acl::only(&window, &acl::OVERLAY)?;
     let r = result_for(&state, &request_id)
         .map_err(|message| AppError::new(ErrorKind::PasteBlocked, message))?;
     // UI Automation uses an MTA worker, never the WebView's STA UI thread.
@@ -3243,7 +3253,7 @@ fn complete_overlay_dismiss(
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     let generation = {
         let i = state.inner.lock().map_err(|_| lock_error())?;
@@ -3255,16 +3265,16 @@ fn complete_overlay_dismiss(
         }
         *generation
     };
-    schedule_finish_dismiss(app, capture_id, generation)
+    Ok(schedule_finish_dismiss(app, capture_id, generation)?)
 }
 #[tauri::command(async)]
 fn dismiss_overlay(
     window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
-    dismiss(&app, &state)
+    Ok(dismiss(&app, &state)?)
 }
 // The Windows app mode for the « follow Windows » theme (see system_theme.rs); null when unknown.
 #[tauri::command]
@@ -3341,8 +3351,8 @@ fn open_settings(
     app: AppHandle,
     field: Option<String>,
     page: Option<String>,
-) -> Result<(), String> {
-    show_settings(&app, field, page)
+) -> Result<(), Refusal> {
+    Ok(show_settings(&app, field, page)?)
 }
 
 /// One of our windows comes in front (the Settings, the setup): whatever bubble is on screen
@@ -3515,8 +3525,8 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
 /// Creates or shows the setup window. `replay`: « Revoir l'accueil », which does not put
 /// `setupDone` back to false.
 #[tauri::command]
-async fn open_setup(app: AppHandle, replay: Option<bool>) -> Result<(), String> {
-    show_setup(&app, replay.unwrap_or(false))
+async fn open_setup(app: AppHandle, replay: Option<bool>) -> Result<(), Refusal> {
+    Ok(show_setup(&app, replay.unwrap_or(false))?)
 }
 /// The end of the setup: `setupDone` is saved (every window is told), the setup closes, and
 /// the Settings open when asked.
@@ -3525,9 +3535,9 @@ async fn finish_setup(
     app: AppHandle,
     window: tauri::WebviewWindow,
     open_settings: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if window.label() != "setup" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     mark_setup_done(&app)?;
     if open_settings {
@@ -3538,7 +3548,7 @@ async fn finish_setup(
 }
 /// `setupDone` becomes true on the settings as they are now, under the save lock (the setup
 /// page may be saving an answer at the same moment: neither write loses the other).
-fn mark_setup_done(app: &AppHandle) -> Result<(), String> {
+fn mark_setup_done(app: &AppHandle) -> Result<(), Refusal> {
     change_settings(app, &app.state::<AppState>(), |settings| {
         !std::mem::replace(&mut settings.setup_done, true)
     })
@@ -3547,9 +3557,9 @@ fn mark_setup_done(app: &AppHandle) -> Result<(), String> {
 /// however its window is closed (its cross used to bring the whole setup back at the next
 /// launch, the server already saved).
 #[tauri::command]
-async fn complete_setup(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+async fn complete_setup(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), Refusal> {
     if window.label() != "setup" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     mark_setup_done(&app)
 }
@@ -3579,10 +3589,10 @@ fn end_demo(app: &AppHandle, done: bool) {
     }
 }
 #[tauri::command]
-async fn open_demo(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+async fn open_demo(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), Refusal> {
     use std::sync::atomic::Ordering;
     if window.label() != "setup" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     // Asked twice (a double click, Enter held): one demo.
     if DEMO_PLAYING.swap(true, Ordering::AcqRel) {
@@ -3646,9 +3656,9 @@ async fn close_demo(
     app: AppHandle,
     window: tauri::WebviewWindow,
     done: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if !matches!(window.label(), "demo" | "setup") {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     end_demo(&app, done);
     if let Some(demo) = app.get_webview_window("demo") {
@@ -3657,16 +3667,16 @@ async fn close_demo(
     Ok(())
 }
 #[tauri::command]
-fn drag_settings(window: tauri::WebviewWindow) -> Result<(), String> {
+fn drag_settings(window: tauri::WebviewWindow) -> Result<(), Refusal> {
     if window.label() != "settings" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     window
         .start_dragging()
         .map_err(|_| "Déplacement indisponible.".into())
 }
 #[tauri::command]
-fn quit_app(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), String> {
+fn quit_app(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), Refusal> {
     acl::only(&window, &acl::SETTINGS)?;
     app.exit(0);
     Ok(())
@@ -3674,18 +3684,20 @@ fn quit_app(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), String> 
 /// Probe only (see `host::override_cursor`): screen point the hit tester reads instead
 /// of the real cursor; both `None` restore the real cursor.
 #[tauri::command]
-fn override_cursor(x: Option<i32>, y: Option<i32>) -> Result<(), String> {
-    host::override_cursor(x.zip(y))
+fn override_cursor(x: Option<i32>, y: Option<i32>) -> Result<(), Refusal> {
+    Ok(host::override_cursor(x.zip(y))?)
 }
 /// Activates the visible overlay so the WebView receives the keyboard (the Îlot menu,
 /// lot 3). True when the overlay really holds the foreground afterwards; false leaves
 /// the menu to the hook's keyboard fallback (`menu-key`).
 #[tauri::command]
-async fn focus_overlay(window: tauri::WebviewWindow, app: AppHandle) -> Result<bool, String> {
+async fn focus_overlay(window: tauri::WebviewWindow, app: AppHandle) -> Result<bool, Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
-    tauri::async_runtime::spawn_blocking(move || focus_overlay_now(&app))
-        .await
-        .map_err(|_| "Activation interrompue.".to_string())?
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || focus_overlay_now(&app))
+            .await
+            .map_err(|_| "Activation interrompue.".to_string())??,
+    )
 }
 /// Off the main thread: the frontend asks as soon as the menu capture arrives, and the
 /// window only shows once its first geometry is placed (or 300 ms later) on the main
@@ -3815,7 +3827,7 @@ fn choose_action(
     capture_id: String,
     action_id: String,
     instruction: Option<String>,
-) -> Result<ExecutionInfo, String> {
+) -> Result<ExecutionInfo, Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     let (info, source, process) = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;
@@ -3855,7 +3867,7 @@ fn choose_action(
 fn shortcut_conflict(
     window: tauri::WebviewWindow,
     shortcut: String,
-) -> Result<ShortcutConflict, String> {
+) -> Result<ShortcutConflict, Refusal> {
     acl::only(&window, &KEYED)?;
     let character = altgr_types(&actions::parse_shortcut(&shortcut)?);
     Ok(ShortcutConflict {
@@ -3884,7 +3896,7 @@ async fn resize_overlay(
     presentation: Option<Presentation>,
     regions: Option<Vec<SurfaceRegion>>,
     frame: Option<SurfaceRegion>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
         return Err("Dimensions invalides.".into());
@@ -3940,9 +3952,9 @@ async fn resize_overlay(
     }
     let (placed_tx, placed_rx) = tokio::sync::oneshot::channel();
     position(&app, &state, width, height, Some(placed_tx))?;
-    placed_rx
+    Ok(placed_rx
         .await
-        .map_err(|_| "Placement interrompu.".to_string())?
+        .map_err(|_| "Placement interrompu.".to_string())??)
 }
 
 /// A window never larger than the work area it will rest on (logical against physical).
@@ -3976,7 +3988,7 @@ fn overlay_dimming(
     app: AppHandle,
     state: State<'_, AppState>,
     dimming: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::OVERLAY)?;
     if dimming {
         host::close_escape_scope();
@@ -4070,7 +4082,7 @@ fn start_drag(
     state: State<'_, AppState>,
     client_x: f64,
     client_y: f64,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if window.label() != "overlay" {
         return Err("Cette fenêtre ne peut pas être déplacée.".into());
     }
@@ -4095,7 +4107,7 @@ fn start_drag(
             if let Ok(mut i) = state.inner.lock() {
                 i.dragging = false;
             }
-            return Err(error);
+            return Err(error.into());
         }
     };
     {
@@ -4185,11 +4197,11 @@ fn status_in(message: &str) -> Option<u16> {
         .ok()
         .filter(|status| (100..600).contains(status))
 }
-fn connection_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn connection_window(window: &tauri::WebviewWindow) -> Result<(), Refusal> {
     if KEYED.contains(&window.label()) {
         Ok(())
     } else {
-        Err("Fenêtre inattendue.".into())
+        Err(acl::refused())
     }
 }
 /// What a window may send to a check: a run id of its own making (letters, digits, `-`, `_`,
@@ -4279,7 +4291,7 @@ async fn probe_connection(
     endpoint: String,
     api_key: String,
     no_key: bool,
-) -> Result<probe::ProbeResult, String> {
+) -> Result<probe::ProbeResult, Refusal> {
     connection_window(&window)?;
     checked_input(&run, &endpoint, &api_key)?;
     let cancel = begin_probe(
@@ -4334,7 +4346,7 @@ fn cancel_probe(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     run: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     connection_window(&window)?;
     cancel_run(&mut *state.probes.lock().map_err(|_| lock_error())?, &run);
     Ok(())
@@ -4352,7 +4364,7 @@ async fn try_model(
     api_key: String,
     no_key: bool,
     model: String,
-) -> Result<probe::TryResult, String> {
+) -> Result<probe::TryResult, Refusal> {
     connection_window(&window)?;
     checked_input(&run, &endpoint, &api_key)?;
     if model.len() > 800 {
@@ -4399,7 +4411,7 @@ async fn try_model(
 fn get_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Vec<diagnostics::DiagEntry>, String> {
+) -> Result<Vec<diagnostics::DiagEntry>, Refusal> {
     connection_window(&window)?;
     Ok(state.diagnostics.list())
 }
@@ -4409,7 +4421,7 @@ fn get_diagnostics(
 fn clear_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     connection_window(&window)?;
     state.diagnostics.clear();
     Ok(())
@@ -4451,7 +4463,7 @@ fn open_stores(
 fn settings_recovery(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Option<SettingsRecovery>, String> {
+) -> Result<Option<SettingsRecovery>, Refusal> {
     acl::only(&window, &acl::SETUP)?;
     Ok(state.settings_recovery.clone())
 }
@@ -4461,9 +4473,9 @@ fn settings_recovery(
 fn get_history(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Vec<HistoryEntry>, String> {
+) -> Result<Vec<HistoryEntry>, Refusal> {
     acl::only(&window, &acl::SETTINGS)?;
-    state.history.list()
+    Ok(state.history.list()?)
 }
 // Off the main thread (`async`, NATIVE-005): the history on disk.
 #[tauri::command(async)]
@@ -4471,9 +4483,9 @@ fn delete_history(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     id: Option<String>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     acl::only(&window, &acl::SETTINGS)?;
-    state.history.delete(id.as_deref())
+    Ok(state.history.delete(id.as_deref())?)
 }
 
 fn position(
@@ -5180,13 +5192,13 @@ pub fn run() {
                 });
             }
             for shortcut in shortcuts {
-                if let Err((refusal, message)) = register_shortcut_state(app.handle(), &shortcut) {
+                if let Err((refusal, error)) = register_shortcut_state(app.handle(), &shortcut) {
                     if let Ok(key) = actions::parse_shortcut(&shortcut) {
                         if let Ok(mut refused) = app.state::<AppState>().refused_shortcuts.lock() {
                             refused.insert(key.id(), refusal);
                         }
                     }
-                    capture_error(app.handle(), &AppError::internal(message), false);
+                    capture_error(app.handle(), &AppError::internal(error.message), false);
                     // The first run opens its setup below, which records the shortcut itself.
                     if setup_done {
                         let _ = open_settings(app.handle().clone(), None, None);
@@ -5912,7 +5924,14 @@ mod tests {
         menu_capture(&mut i, "menu");
         // The settings changing after the capture do not change what the menu runs.
         i.settings.actions.retain(|a| a.id != "correct");
-        assert!(i.choose("other", "correct", None).is_err(), "stale capture");
+        // Refused with its code (the Îlot says it in the interface language).
+        let code = |refused: Result<ExecutionInfo, Refusal>| refused.unwrap_err().code;
+        let gone = error::RefusalCode::from(ErrorKind::CaptureGone);
+        assert_eq!(
+            code(i.choose("other", "correct", None)),
+            gone,
+            "stale capture"
+        );
         assert!(i.choose("menu", "missing", None).is_err());
         assert!(
             !i.menu.as_ref().unwrap().chosen,
@@ -5928,19 +5947,21 @@ mod tests {
             Some(&info)
         );
         assert_eq!(i.execution.as_ref().unwrap().info, info);
-        assert!(
-            i.choose("menu", "correct", None).is_err(),
+        assert_eq!(
+            code(i.choose("menu", "correct", None)),
+            gone,
             "once per capture"
         );
         // A free instruction: its reserved id, frozen in Rust (the frontend never resends it).
         menu_capture(&mut i, "free");
-        assert!(i
-            .choose(
+        assert_eq!(
+            code(i.choose(
                 "free",
                 actions::INSTRUCTION_ACTION_ID,
                 Some(&"x".repeat(1001))
-            )
-            .is_err());
+            )),
+            ErrorKind::InstructionInvalid.into()
+        );
         let info = i
             .choose("free", actions::INSTRUCTION_ACTION_ID, Some("Plus poli"))
             .unwrap();
@@ -5955,10 +5976,10 @@ mod tests {
         // A dismissed or direct capture has nothing to choose.
         menu_capture(&mut i, "closing");
         i.pending_dismiss = Some(("closing".into(), 1));
-        assert!(i.choose("closing", "correct", None).is_err());
+        assert_eq!(code(i.choose("closing", "correct", None)), gone);
         i.pending_dismiss = None;
         i.menu = None;
-        assert!(i.choose("closing", "correct", None).is_err());
+        assert_eq!(code(i.choose("closing", "correct", None)), gone);
     }
     #[test]
     fn a_key_typed_during_a_menu_capture_waits_for_its_id_and_is_dropped_without_one() {
@@ -6182,7 +6203,10 @@ mod tests {
         let mut i = Inner::new(Settings::default());
         menu_capture(&mut i, "menu");
         i.menu.as_mut().unwrap().invalidated = true;
-        assert!(i.choose("menu", "correct", None).is_err());
+        assert_eq!(
+            i.choose("menu", "correct", None).unwrap_err().code,
+            ErrorKind::TargetChanged.into()
+        );
         assert!(!i.menu.as_ref().unwrap().chosen);
     }
     #[test]

@@ -11,17 +11,24 @@ pub(crate) const SETTINGS: [&str; 1] = ["settings"];
 /// The first-run setup.
 pub(crate) const SETUP: [&str; 1] = ["setup"];
 
+use crate::error::{Refusal, SettingsRefusal};
+
 /// Refuses a call from any window but `labels`, as the existing guards do.
-pub(crate) fn only(window: &tauri::WebviewWindow, labels: &[&str]) -> Result<(), String> {
+pub(crate) fn only(window: &tauri::WebviewWindow, labels: &[&str]) -> Result<(), Refusal> {
     allowed(window.label(), labels)
 }
 
-fn allowed(label: &str, labels: &[&str]) -> Result<(), String> {
+fn allowed(label: &str, labels: &[&str]) -> Result<(), Refusal> {
     if labels.contains(&label) {
         Ok(())
     } else {
-        Err("Fenêtre inattendue.".into())
+        Err(refused())
     }
+}
+
+/// A window calling what it may not: `window_refused`, beside the French message of 0.4.
+pub(crate) fn refused() -> Refusal {
+    Refusal::new(SettingsRefusal::WindowRefused, "Fenêtre inattendue.")
 }
 
 #[cfg(test)]
@@ -261,9 +268,11 @@ mod tests {
 
     #[test]
     fn the_guard_names_its_refusal() {
+        let refusal = allowed("halo", &OVERLAY).unwrap_err();
+        assert_eq!(refusal.message, "Fenêtre inattendue.");
         assert_eq!(
-            allowed("halo", &OVERLAY),
-            Err("Fenêtre inattendue.".to_string())
+            serde_json::to_value(&refusal).unwrap()["code"],
+            serde_json::json!("window_refused")
         );
         assert!(allowed("overlay", &OVERLAY).is_ok());
         assert!(allowed("setup", &SETTINGS).is_err());

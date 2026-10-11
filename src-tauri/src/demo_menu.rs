@@ -23,7 +23,7 @@ pub(crate) fn demo_menu_capture(
     app: AppHandle,
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Capture, String> {
+) -> Result<Capture, crate::error::Refusal> {
     let settings = state
         .inner
         .lock()
@@ -33,8 +33,7 @@ pub(crate) fn demo_menu_capture(
     let probe = std::env::var_os("FLOWTRANSLATE_CDP_URL").is_some();
     allowed(state.demo, probe, window.label())?;
     let flight = crate::Flight::begin().ok_or("Une capture est déjà en cours.")?;
-    capture_opening(&app, &state, Opening::Menu(Box::new(settings)), 0, &flight)
-        .map_err(String::from)?
+    capture_opening(&app, &state, Opening::Menu(Box::new(settings)), 0, &flight)?
         .ok_or_else(|| "Capture de démonstration indisponible.".into())
 }
 

@@ -53,6 +53,8 @@ describe('error codes', () => {
       'read_only',
       'protected_window',
       'setup_open',
+      'clipboard_unkeepable',
+      'target_unverified',
     ]);
     const families = Object.fromEntries(errorCodes.map((kind) => [kind, errorFamily(kind)]));
     expect(families).toEqual({
@@ -71,6 +73,8 @@ describe('error codes', () => {
       not_editable: 'paste',
       keys_held: 'paste',
       read_only: 'paste',
+      clipboard_unkeepable: 'paste',
+      target_unverified: 'paste',
       too_long: 'content',
       no_selection: 'content',
       protected_field: 'content',
@@ -127,15 +131,35 @@ describe('error codes', () => {
     for (const code of errorCodes) {
       const { action, actionLabel, message } = describeError(code, { source: 'capture' });
       expect([action, actionLabel], code).toEqual([null, null]);
-      // The request's words, but for the source window changing during the capture: nothing
-      // was tried, so « not replaced » would mislead.
+      // The request's words, but for the source window changing during the capture and for a
+      // clipboard that could not be kept (the copy was never sent): nothing was tried, so « not
+      // replaced » would mislead.
       expect(message, code).toBe(
-        code === 'target_changed' ? 'result.notice.target_changed' : describeError(code).message,
+        code === 'target_changed' || code === 'clipboard_unkeepable'
+          ? `result.notice.${code}`
+          : describeError(code).message,
       );
     }
     expect(
       languages.map((language) => translate(language, describeError('target_changed', { source: 'capture' }).message)),
     ).toEqual(['Window changed — try again', 'Fenêtre changée, réessayez']);
+    // NATIVE-004 (lot C): why, and what to do; nothing was lost.
+    expect(
+      languages.map((language) =>
+        translate(language, describeError('clipboard_unkeepable', { source: 'capture' }).message),
+      ),
+    ).toEqual(['Can’t save clipboard — copy, then retry', 'Presse-papiers non sauvegardable : copiez, puis relancez']);
+    expect(languages.map((language) => translate(language, describeError('clipboard_unkeepable').message))).toEqual([
+      'Can’t save clipboard — not replaced',
+      'Presse-papiers non sauvegardable, rien remplacé',
+    ]);
+    expect(describeError('clipboard_unkeepable').action).toEqual({ type: 'copy' });
+    // NATIVE-001 (lot C): UI Automation no longer answers at the paste: Copy result.
+    expect(languages.map((language) => translate(language, describeError('target_unverified').message))).toEqual([
+      'Can’t check selection — not replaced',
+      'Sélection invérifiable, rien remplacé',
+    ]);
+    expect(describeError('target_unverified').action).toEqual({ type: 'copy' });
   });
 
   it('says why an Undo could not be done in its own words, with no button: nothing else is pasted', () => {

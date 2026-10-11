@@ -658,6 +658,12 @@ pub struct TargetIdentity {
     pub selection_len: usize,
     pub editable: bool,
     pub check: TargetCheck,
+    /// QA-03-A: a UIA target in a Chromium app (Edge, Chrome, Electron), whose UI
+    /// Automation may read a selection that runs into the next element of a contenteditable.
+    /// The paste then copies the selection first and goes on only when the copy gives the
+    /// captured text (`capture::paste`). No property tells an `<input>` apart from a rich
+    /// editable there (measured 11/10 on Edge 155): every Chromium UIA target is marked.
+    pub copy_witness: bool,
 }
 
 /// How the text of a target is checked again before a paste (review of da-ilot, n°1): through

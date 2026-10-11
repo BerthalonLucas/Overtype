@@ -106,6 +106,16 @@ const dictionary = {
     en: 'Administrator window — can’t be read',
     fr: 'Fenêtre administrateur, lecture impossible',
   },
+  // Lot C (NATIVE-001): UI Automation no longer answers for the selection; nothing was replaced.
+  'result.error.target_unverified': {
+    en: 'Can’t check selection — not replaced',
+    fr: 'Sélection invérifiable, rien remplacé',
+  },
+  // Lot C (NATIVE-004): the clipboard cannot be kept whole; nothing was written over it.
+  'result.error.clipboard_unkeepable': {
+    en: 'Can’t save clipboard — not replaced',
+    fr: 'Presse-papiers non sauvegardable, rien remplacé',
+  },
   'result.error.too_long': {
     en: 'Selection too long (max 200,000 characters)',
     fr: 'Sélection trop longue (200 000 caractères max)',
@@ -121,6 +131,11 @@ const dictionary = {
   // A capture Rust refused (capture-notice), where the request's words would mislead: the source
   // window changed during the capture, nothing was tried (src/result/errors.ts, source 'capture').
   'result.notice.target_changed': { en: 'Window changed — try again', fr: 'Fenêtre changée, réessayez' },
+  // The synthetic copy was never sent (lot C, NATIVE-004): the user copies, then presses again.
+  'result.notice.clipboard_unkeepable': {
+    en: 'Can’t save clipboard — copy, then retry',
+    fr: 'Presse-papiers non sauvegardable : copiez, puis relancez',
+  },
   'init.connection': { en: 'The connection to {app} is unavailable.', fr: 'La connexion à {app} est indisponible.' },
   'init.close': { en: 'Closing failed. Try again.', fr: 'La fermeture a échoué. Réessayez.' },
   'init.restart': {

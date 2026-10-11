@@ -155,6 +155,7 @@ impl Bench {
                     "origin": stored.public.origin,
                     "replaceable": replaceable,
                     "route": route,
+                    "witness": stored.target.as_ref().is_some_and(|t| t.copy_witness),
                     "selectedLength": text.chars().count(),
                     "matches": text == expected,
                     "matchesTrimmed": text.trim() == expected.trim(),
@@ -282,18 +283,24 @@ impl Bench {
         answer
     }
 
-    /// The same cut on the paste chord of the captured target (the paste already releases).
+    /// The same cut on the paste chord of the captured target (the paste already releases):
+    /// the control copy a copy target or a Chromium target makes first goes through whole.
     fn paste_partial(&mut self, command: &Value) -> Value {
         let Some(target) = self.target.take() else {
             return json!({"ok": false, "message": "no target"});
         };
-        host::faults::cut_next_chord(command["taken"].as_u64().unwrap_or(1) as usize);
+        let control_copies = usize::from(target.check == TargetCheck::Copy || target.copy_witness);
+        host::faults::cut_chord_after(
+            control_copies,
+            command["taken"].as_u64().unwrap_or(1) as usize,
+        );
         let outcome = capture::paste(
             &target,
             text_arg(command, "value"),
             true,
             capture::Ticket::current(),
         );
+        host::faults::clear_cut();
         std::thread::sleep(Duration::from_millis(150));
         let mut answer = match outcome {
             Ok(delivery) => json!({"ok": true, "confirmed": delivery.confirmed}),

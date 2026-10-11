@@ -1727,15 +1727,32 @@ fn send_chord(inputs: &[INPUT]) -> u32 {
 pub(crate) mod faults {
     use std::cell::Cell;
     thread_local! {
-        static INPUT_BUDGET: Cell<Option<usize>> = const { Cell::new(None) };
+        /// (whole chords still let through, inputs the cut one keeps)
+        static INPUT_BUDGET: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
     }
     /// The next chord of this thread is cut after `taken` inputs, as when SendInput stops
     /// part-way (UIPI, a desktop switch): the rest of that batch never leaves.
     pub fn cut_next_chord(taken: usize) {
-        INPUT_BUDGET.with(|b| b.set(Some(taken)));
+        cut_chord_after(0, taken);
+    }
+    /// The same cut on the chord that follows `skip` whole ones (the paste chord after the
+    /// control copy of a paste).
+    pub fn cut_chord_after(skip: usize, taken: usize) {
+        INPUT_BUDGET.with(|b| b.set(Some((skip, taken))));
+    }
+    /// A cut no chord used (the paste stopped before its chord) never reaches a later one.
+    pub fn clear_cut() {
+        INPUT_BUDGET.with(Cell::take);
     }
     pub(super) fn take_input_budget() -> Option<usize> {
-        INPUT_BUDGET.with(Cell::take)
+        INPUT_BUDGET.with(|b| match b.take() {
+            Some((0, taken)) => Some(taken),
+            Some((skip, taken)) => {
+                b.set(Some((skip - 1, taken)));
+                None
+            }
+            None => None,
+        })
     }
 }
 

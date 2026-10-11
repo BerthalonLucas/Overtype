@@ -23,8 +23,6 @@ import { fileURLToPath } from 'node:url';
 // (attendu) » sans faire échouer le banc. Un correctif qui en fait passer un donne « XPASS » et un
 // code 1 : retirer alors sa ligne ici.
 const EXPECTED_FAIL = {
-  // La capture UIA d'une sélection aux bornes d'un élément déborde sur le texte qui suit.
-  'contenteditable-bornes-element': 'QA-03-A',
   // Dans un contenteditable riche, le texte collé n'est pas retrouvé : Annuler n'est pas proposé.
   'annulation-ctrl-z-contenteditable': 'QA-03-B',
 };
@@ -222,21 +220,42 @@ for (const [id, name, fieldId, options] of [
     const clip = await driver({ op: 'clipboard-state', text: SEED });
     details.clipboard = clip;
     assert.ok(clip.textMatches && clip.benchFormat, 'presse-papiers riche rendu entier (texte et format privé)');
-    return `${details.capture.route}, ${result.confirmed ? 'relu' : 'supposé'}, presse-papiers rendu`;
+    return `${details.capture.route}${details.capture.witness ? ' + copie témoin' : ''}, ${result.confirmed ? 'relu' : 'supposé'}, presse-papiers rendu`;
   });
 }
 
-scenario('contenteditable-bornes-element', 'contenteditable riche, sélection aux bornes de l’élément (selectNodeContents)', async details => {
+// QA-03-A : dans un contenteditable de Chromium, UI Automation peut lire une sélection aux bornes
+// de son élément avec le texte de l'élément suivant. Invariant d'intégrité : une capture exacte est
+// remplacée normalement ; une capture qui déborde n'est jamais collée (la copie témoin faite juste
+// avant le collage donne la vraie sélection), et le champ reste tel quel.
+scenario('contenteditable-bornes-element', 'contenteditable riche, sélection aux bornes de l’élément (selectNodeContents) : la sélection réelle ou rien', async details => {
   const locator = field('rich');
+  await seed();
   await prepare(locator, { rich: true, elementBounds: true });
   const before = await content(locator);
   const captured = await capture(details);
-  const result = captured.ok && captured.replaceable ? await replace(details) : null;
+  need(captured.ok, `capture : ${captured.kind} ${captured.reason ?? ''}`);
+  need(captured.replaceable, 'capture remplaçable');
+  const wanted = [...SELECTED].length;
+  const overflow = !captured.matches;
+  const result = await replace(details);
   const after = await content(locator);
   details.after = after;
-  if (captured.ok) assert.ok(captured.matches, `la capture est exactement la sélection (${captured.selectedLength} caractères lus pour ${[...SELECTED].length} sélectionnés ; collage ${result?.ok ? 'fait' : 'non fait'}, texte devenu « ${after} »)`);
-  assert.ok([before, before.replace(SELECTED, VALUE)].includes(after), 'rien d’autre que la sélection n’est remplacé');
-  return captured.ok ? `${captured.route}, capture exacte` : `capture refusée (${captured.kind})`;
+  if (overflow) {
+    assert.equal(result.ok, false, `capture débordante (${captured.selectedLength} caractères lus pour ${wanted} sélectionnés) : remplacement refusé (obtenu : ok, ${result.confirmed ? 'relu' : 'supposé'} ; texte devenu « ${after} »)`);
+    assert.equal(result.kind, 'target_changed', `refus « cible changée » (obtenu : ${result.kind} ${result.reason ?? ''})`);
+    assert.equal(after, before, 'texte inchangé');
+  } else {
+    assert.equal(result.ok, true, `capture exacte : collage ${result.kind} ${result.reason ?? ''}`);
+    assert.equal(after, before.replace(SELECTED, VALUE), 'sélection remplacée, rien d’autre');
+  }
+  const clip = await driver({ op: 'clipboard-state', text: SEED });
+  details.clipboard = clip;
+  assert.ok(clip.textMatches && clip.benchFormat, 'presse-papiers riche rendu entier (texte et format privé)');
+  const witness = captured.witness ? 'copie témoin' : 'sans copie témoin';
+  return overflow
+    ? `capture débordante (${captured.selectedLength} caractères lus pour ${wanted}), ${witness} : remplacement refusé (${result.kind}, ${result.reason}), texte inchangé, presse-papiers rendu`
+    : `capture exacte, ${witness} : remplacée (${result.confirmed ? 'relu' : 'supposé'}), presse-papiers rendu`;
 });
 
 for (const [id, name, rich] of [['annulation-ctrl-z-input', '<input>', false], ['annulation-ctrl-z-contenteditable', 'contenteditable riche', true]]) {

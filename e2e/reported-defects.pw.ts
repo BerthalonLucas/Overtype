@@ -47,8 +47,8 @@ test('a glass the pointer visited dims within four seconds of its departure and 
   await expect(frame.locator('.glass-overlay')).toHaveCount(0, { timeout: 4000 });
 });
 
-// UI-023 (loading): a pill alone, no ring in a big glass. In the Îlot, the app's default, the
-// working pill of lot 8: 44 × 28, its Perle after 250 ms.
+// UI-023 (loading): a pill alone, no ring in a big glass: the working pill of lot 8, 44 × 28, its
+// Perle after 250 ms.
 test('waiting shows the working pill alone, 44 × 28, its Perle after 250 ms', async ({ page }) => {
   await page.goto('/lab.html?issue=loading');
   const frame = page.frameLocator('iframe');
@@ -59,25 +59,8 @@ test('waiting shows the working pill alone, 44 × 28, its Perle after 250 ms', a
   expect(await pill.boundingBox()).toMatchObject({ width: 44, height: 28 });
   await expect(pill).toHaveAttribute('data-orb', 'shown');
   await expect(pill.locator('.ldr.perle')).toHaveCount(1);
-  await expect(frame.locator('.wait-pill')).toHaveCount(0);
   await expect(frame.locator('.loading-ring')).toHaveCount(0);
   await expect(frame.locator('.translation-bubble')).toHaveCount(0);
-});
-
-// The 0.4 journey, asked for (ui=v4) in the same frame: shadcn's spinner in a pill of 60 × 28.
-test('the 0.4 journey waits with a turning spinner in a pill of 60 × 28', async ({ page }) => {
-  await page.setViewportSize({ width: 960, height: 450 });
-  await page.goto('/lab-frame.html?scenario=pending&surface=production&ui=v4');
-  await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'streaming');
-  const pill = page.locator('.wait-pill');
-  // The pill enters on the spring (glide and scale are paint only): measured at rest.
-  await expect(pill).toHaveCSS('transform', 'none');
-  expect(await pill.boundingBox()).toMatchObject({ width: 60, height: 28 });
-  expect(await pill.locator('svg').count()).toBe(1);
-  expect(await pill.locator('svg').evaluate((el) => getComputedStyle(el).animationName)).toBe('wait-spin');
-  await expect(page.locator('.working-pill')).toHaveCount(0);
-  await expect(page.locator('.loading-ring')).toHaveCount(0);
-  await expect(page.locator('.translation-bubble')).toHaveCount(0);
 });
 
 test('native-only defects do not present a web simulation as a reproduction', async ({ page }) => {

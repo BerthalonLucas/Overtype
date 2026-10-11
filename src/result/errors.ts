@@ -33,7 +33,7 @@ import { errorCodes, type ErrorCode, type ProfileField, type SettingsField } fro
  *                               not read back; its own words, ✕ only.
  *   ErrorAction                 { type: 'settings', field } | { type: 'retry' } | { type: 'copy' }.
  *
- * Only codes decide. Rust's French words travel beside them for the 0.4 journey and are never
+ * Only codes decide. Rust's French words travel beside them for the glass and are never
  * read here: each situation the Îlot tells apart has its own code (settings_open and
  * nothing_recent for the notices, the Refusal of replace_result; docs/BRIDGE.md « error codes »).
  */
@@ -60,9 +60,17 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //                    browser used to end on the check): the result exists, Copy result: paste.
 //   protected_window 0.6: the window in front runs as administrator, Windows lets us neither
 //                    read it nor send it a key: content, ✕ only (a capture notice).
+//   target_unverified  lot C (NATIVE-001): UI Automation no longer answers for the selection at
+//                    the paste (no element, no id, a selection it cannot read): nothing proves it
+//                    is still there, nothing was replaced: paste, Copy result.
+//   clipboard_unkeepable  lot C (NATIVE-004): the clipboard cannot be kept whole, so nothing was
+//                    written over it: paste (Copy result is the user's own choice); as a capture
+//                    notice, its own words: copy the text yourself, then try again.
 //   too_long, no_selection, protected_field, settings_open, setup_open, nothing_recent: nothing
 //                    was read or sent: content, ✕ only (the last three are capture notices, no
 //                    button at all; setup_open, 0.6: the same press over the first-run setup).
+//   capture_gone, instruction_invalid  ARCH-05: a choice of the Îlot refused (the menu closed, the
+//                    free instruction empty or too long): nothing was sent: content, ✕ only.
 //   cancelled        the user's own Escape: silent.
 const table: Record<ErrorCode, Entry> = {
   unreachable: { family: 'config', field: 'endpoint' },
@@ -80,6 +88,8 @@ const table: Record<ErrorCode, Entry> = {
   not_editable: { family: 'paste' },
   read_only: { family: 'paste' },
   keys_held: { family: 'paste' },
+  clipboard_unkeepable: { family: 'paste' },
+  target_unverified: { family: 'paste' },
   too_long: { family: 'content' },
   no_selection: { family: 'content' },
   protected_field: { family: 'content' },
@@ -87,14 +97,17 @@ const table: Record<ErrorCode, Entry> = {
   settings_open: { family: 'content' },
   setup_open: { family: 'content' },
   nothing_recent: { family: 'content' },
+  capture_gone: { family: 'content' },
+  instruction_invalid: { family: 'content' },
   cancelled: { family: 'silent' },
 };
 
 export function errorCodeOf(value: unknown): ErrorCode {
   return (errorCodes as readonly unknown[]).includes(value) ? (value as ErrorCode) : 'internal';
 }
-// A command refused with its code (`replace_result` since the review of da-ilot: `{message, code}`).
-// The message is Rust's French sentence for the 0.4 journey: never read here.
+// A command refused with its code (every command since ARCH-05: `{message, code}`). The message
+// is Rust's French sentence for the journal: never read here. A code of the Settings' list
+// (src/settings/messages.ts) reads as 'internal' here.
 export function refusalCode(reason: unknown): ErrorCode {
   return errorCodeOf(typeof reason === 'object' && reason !== null ? (reason as { code?: unknown }).code : undefined);
 }
@@ -117,8 +130,12 @@ export type ErrorDescription = {
 };
 
 // What a capture says in its own words (source 'capture'): target_changed there is the source
-// window changing during the capture (capture.rs), before anything was pasted.
-const captureMessage: Partial<Record<ErrorCode, MessageKey>> = { target_changed: 'result.notice.target_changed' };
+// window changing during the capture (capture.rs), before anything was pasted;
+// clipboard_unkeepable, the synthetic copy that was never sent (copy yourself, then try again).
+const captureMessage: Partial<Record<ErrorCode, MessageKey>> = {
+  target_changed: 'result.notice.target_changed',
+  clipboard_unkeepable: 'result.notice.clipboard_unkeepable',
+};
 // Why an Undo was refused, in its own words (the request's would say « not replaced »): the text,
 // the caret, the field or the window changed, or Undo was already withdrawn; keys still held; the
 // source could not be brought back or the chord was blocked; anything else (the command refused:

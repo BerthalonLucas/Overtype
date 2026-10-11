@@ -2,7 +2,7 @@
    over the content (the content pads itself with --ft-titlebar-h), Windows 11 caption buttons.
    Ported from design-lab/reglages/src/stage/stage.css. */
 .ft-appmark { --s: 16px; display: inline-grid; place-items: center; width: var(--s); height: var(--s); border-radius: calc(var(--s) * .28); background: #16181d; box-shadow: inset 0 0 0 .5px rgb(255 255 255 / .12); flex: none; }
-.ft-appmark i { display: block; width: calc(var(--s) * .5); height: calc(var(--s) * .5); border-radius: 50%; background: conic-gradient(#BC82F3, #8D9FFF, #FF6778, #FFBA71, #BC82F3); box-shadow: 0 0 calc(var(--s) * .3) rgb(188 130 243 / .6); }
+.ft-appmark i { display: block; width: calc(var(--s) * .5); height: calc(var(--s) * .5); border-radius: 50%; background: conic-gradient(var(--brand-stops)); box-shadow: 0 0 calc(var(--s) * .3) rgb(188 130 243 / .6); }
 
 .ft-titlebar { position: absolute; left: 0; right: 0; top: 0; z-index: 30; height: var(--ft-titlebar-h, 32px); display: flex; align-items: center; justify-content: space-between; pointer-events: none; }
 .ft-titlebar-drag { position: absolute; left: 0; right: 0; top: 0; z-index: 29; height: var(--ft-titlebar-h, 32px); }

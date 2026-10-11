@@ -2,11 +2,7 @@ import { test, expect } from '@playwright/test';
 import { menu as menuLayout } from '../src/layout';
 
 // The browser preview starts in the Îlot, as the app does: a direct capture waits in the working
-// pill of lot 8. `&ui=v4` asks for the 0.4 journey and its spinner pill.
-const journeys = [
-  { name: 'Îlot', query: '', pill: '.working-pill' },
-  { name: '0.4', query: '&ui=v4', pill: '.wait-pill' },
-] as const;
+// pill of lot 8.
 
 for (const reducedMotion of ['no-preference', 'reduce'] as const) {
   test(`preview backgrounds and copy feedback preserve the capture and pill bounds (${reducedMotion})`, async ({
@@ -129,45 +125,6 @@ test('the working pill waits while the engine streams; a long result then lands 
   await expect(page.locator('.glass-overlay')).toHaveAttribute('data-placement', 'bottom');
   await expect(page.locator('.translation-bubble')).toHaveCount(0);
   await expect(pill.locator('.ldr.perle')).toHaveCount(1);
-  await expect(page.locator('.wait-pill')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-  await expect(pill).toHaveCount(0);
-  await expect(page.locator('.glass-overlay')).toHaveAttribute('data-form', 'reader');
-  await expect(page.locator('.glass-overlay')).toHaveAttribute('data-placement', 'bottom');
-  await expect(page.locator('.glass-overlay')).toHaveAttribute('data-moving', 'false');
-  await expect(page.locator('.translation-copy')).toHaveAttribute('aria-busy', 'false');
-  await expect(page.locator('.translation-bubble')).toHaveAttribute('data-reveal', 'true');
-  expect(await page.locator('.translation-bubble').evaluate((el) => getComputedStyle(el).animationName)).toBe(
-    'band-in',
-  );
-  expect(((await page.locator('.translation-text .reveal').textContent()) ?? '').length).toBeGreaterThan(200);
-});
-
-// The 0.4 journey, asked for (uiVersion « v4 »): its spinner pill.
-test('the spinner turns while the engine streams; a long result then lands whole as a reader band', async ({
-  page,
-}) => {
-  await page.goto('/?window=overlay&demo=1&scenario=long&ui=v4');
-  const pill = page.locator('.wait-pill');
-  await expect(pill).toHaveAttribute('aria-label', 'Translating');
-  // The pill enters on the spring (glide and scale are paint only): measured at rest.
-  await expect(pill).toHaveCSS('transform', 'none');
-  expect(await pill.boundingBox()).toMatchObject({ width: 60, height: 28 });
-  await expect(page.locator('.glass-overlay')).toHaveAttribute('data-form', 'pending');
-  // A long source waits at the bottom from the start (UI-025): the band is born there.
-  await expect(page.locator('.glass-overlay')).toHaveAttribute('data-placement', 'bottom');
-  await expect(page.locator('.translation-bubble')).toHaveCount(0);
-  expect(await pill.locator('svg').count()).toBe(1);
-  expect(
-    await pill
-      .locator('svg')
-      .evaluate((el) => [
-        getComputedStyle(el).animationName,
-        getComputedStyle(el).animationDuration,
-        getComputedStyle(el).animationTimingFunction,
-        Number(el.getAttribute('width')),
-      ]),
-  ).toEqual(['wait-spin', '1s', 'linear', 16]);
   await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
   await expect(pill).toHaveCount(0);
   await expect(page.locator('.glass-overlay')).toHaveAttribute('data-form', 'reader');
@@ -312,37 +269,32 @@ test('halo fits its native viewport without overflow, transparent and never unde
 
 // « Suivre Windows » (the default) with Windows reducing animations: data-motion follows the
 // media, the waiting pill's loop rests and the reveal keeps only a short fade, nothing moving.
-// The Îlot's orb (lot 8) and, asked for, the 0.4 spinner.
-for (const { name, query, pill } of journeys)
-  test(`reduced motion ${name === 'Îlot' ? 'stills the orb' : 'freezes the spinner'} and keeps only a short fade for the reveal`, async ({
-    page,
-  }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-    await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
-    await expect(page.locator(pill)).toHaveCount(1);
-    expect(
-      await page
-        .locator(name === 'Îlot' ? `${pill} .ldr` : `${pill} svg`)
-        .evaluate((el) => getComputedStyle(el).animationPlayState),
-    ).toBe('paused');
-    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-    const reveals = await page.evaluate(() =>
-      ['.translation-bubble', '.translation-text .reveal'].map((selector) => {
-        const el = document.querySelector(selector);
-        if (!el) return 'missing';
-        const style = getComputedStyle(el);
-        return {
-          name: style.animationName,
-          duration: parseFloat(style.animationDuration),
-          delay: style.animationDelay,
-          transform: style.transform,
-        };
-      }),
-    );
-    for (const reveal of reveals) expect(reveal).toMatchObject({ name: 'text-in', delay: '0s', transform: 'none' });
-    for (const reveal of reveals) expect((reveal as { duration: number }).duration).toBeLessThanOrEqual(0.15);
-  });
+// The Îlot's orb (lot 8).
+test('reduced motion stills the orb and keeps only a short fade for the reveal', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/?window=overlay&demo=1&scenario=long');
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+  await expect(page.locator('.working-pill')).toHaveCount(1);
+  expect(await page.locator('.working-pill .ldr').evaluate((el) => getComputedStyle(el).animationPlayState)).toBe(
+    'paused',
+  );
+  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
+  const reveals = await page.evaluate(() =>
+    ['.translation-bubble', '.translation-text .reveal'].map((selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return 'missing';
+      const style = getComputedStyle(el);
+      return {
+        name: style.animationName,
+        duration: parseFloat(style.animationDuration),
+        delay: style.animationDelay,
+        transform: style.transform,
+      };
+    }),
+  );
+  for (const reveal of reveals) expect(reveal).toMatchObject({ name: 'text-in', delay: '0s', transform: 'none' });
+  for (const reveal of reveals) expect((reveal as { duration: number }).duration).toBeLessThanOrEqual(0.15);
+});
 
 test('comparison shows source without replacing the translated result', async ({ page }) => {
   await page.goto('/?window=overlay&demo=1');
@@ -567,17 +519,16 @@ test('a short result opens beside the selection from the pill row and never beco
   await expect(page.getByRole('button', { name: 'Collapse' })).toHaveCount(0);
 });
 
-for (const { name, query, pill } of journeys)
-  test(`a result past the ceiling lands whole and keeps the view at the top (${name})`, async ({ page }) => {
-    await page.goto(`/?window=overlay&demo=1&scenario=very-long${query}`);
-    const content = page.locator('.translation-copy');
-    await expect(page.locator(pill)).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 15000 });
-    await expect(content).toHaveAttribute('data-capped', 'true');
-    expect(await content.evaluate((el) => el.scrollTop)).toBe(0);
-    await expect(page.locator(pill)).toHaveCount(0);
-  });
+test('a result past the ceiling lands whole and keeps the view at the top', async ({ page }) => {
+  await page.goto('/?window=overlay&demo=1&scenario=very-long');
+  const content = page.locator('.translation-copy');
+  await expect(page.locator('.working-pill')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 15000 });
+  await expect(content).toHaveAttribute('data-capped', 'true');
+  expect(await content.evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(page.locator('.working-pill')).toHaveCount(0);
+});
 
 test('browser settings save automatically, identify simulated checks and close back to preview', async ({ page }) => {
   await page.goto('/?window=settings&demo=1');
@@ -610,7 +561,7 @@ test('browser settings save automatically, identify simulated checks and close b
 
 // FE-04 (audit Elio): the glass's live region stayed on « Translation complete » during a copy.
 test('the live status says the copy over the completion, then the completion again', async ({ page }) => {
-  await page.goto('/?window=overlay&demo=1&background=light&ui=v4');
+  await page.goto('/?window=overlay&demo=1&background=light');
   const copy = page.getByRole('button', { name: 'Copy translation', exact: true });
   await expect(copy).toBeEnabled();
   const status = page.locator('.glass-overlay .sr-only[role="status"]');

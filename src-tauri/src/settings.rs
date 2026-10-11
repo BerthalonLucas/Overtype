@@ -1,6 +1,7 @@
 use crate::actions::{self, ActionDefinition, ShortcutBinding};
 use crate::{
     crypto,
+    error::{Refusal, SettingsRefusal},
     types::{Server, Settings, FIRST_SERVER_ID},
 };
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -48,8 +49,8 @@ struct PersistedSettings {
     text_size: crate::types::TextSize,
     #[serde(default)]
     auto_close: crate::types::AutoClose,
-    #[serde(default)]
-    ui_version: crate::types::UiVersion,
+    // `uiVersion` (`v4` or `ilot`) chose the interface until 10/10/2026; only the Îlot is left.
+    // The key of an older file is ignored on load (unknown keys are) and never written again.
     #[serde(default)]
     language: crate::types::Language,
     #[serde(default)]
@@ -364,7 +365,6 @@ impl SettingsStore {
             autostart: raw.autostart,
             text_size: raw.text_size,
             auto_close: raw.auto_close,
-            ui_version: raw.ui_version,
             language: raw.language,
             theme: raw.theme,
             motion: raw.motion,
@@ -394,7 +394,7 @@ impl SettingsStore {
         if actions::localize_defaults(&mut settings.actions, settings.language) {
             migrated = true;
         }
-        validate(&settings).map_err(LoadError::Unreadable)?;
+        validate(&settings).map_err(|refusal| LoadError::Unreadable(refusal.message))?;
         if from_0_5 {
             // The file as 0.5 wrote it stays beside the new one, once: a way back.
             let backup = self.backup_path();
@@ -410,8 +410,9 @@ impl SettingsStore {
         Ok(settings)
     }
 
-    pub fn save(&self, settings: &Settings) -> Result<(), String> {
+    pub fn save(&self, settings: &Settings) -> Result<(), Refusal> {
         validate(settings)?;
+        let storage = |message: String| Refusal::new(SettingsRefusal::StorageFailed, message);
         let mut servers = Vec::new();
         for server in &settings.servers {
             servers.push(PersistedServer {
@@ -420,7 +421,8 @@ impl SettingsStore {
                 endpoint: server.endpoint.clone(),
                 model: server.model.clone(),
                 no_key: server.no_key,
-                api_key_dpapi: encrypt_key(if server.no_key { "" } else { &server.api_key })?,
+                api_key_dpapi: encrypt_key(if server.no_key { "" } else { &server.api_key })
+                    .map_err(storage)?,
             });
         }
         let raw = PersistedSettings {
@@ -434,7 +436,6 @@ impl SettingsStore {
             autostart: settings.autostart,
             text_size: settings.text_size,
             auto_close: settings.auto_close,
-            ui_version: settings.ui_version,
             language: settings.language,
             theme: settings.theme,
             motion: settings.motion,
@@ -452,15 +453,15 @@ impl SettingsStore {
             changed_words_style: settings.changed_words_style,
         };
         let bytes = serde_json::to_vec_pretty(&raw)
-            .map_err(|_| "Impossible de préparer les paramètres.".to_string())?;
+            .map_err(|_| storage("Impossible de préparer les paramètres.".into()))?;
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent)
-                .map_err(|_| "Impossible de créer le dossier de données.".to_string())?;
+                .map_err(|_| storage("Impossible de créer le dossier de données.".into()))?;
         }
         let tmp = self.path.with_extension("json.tmp");
         fs::write(&tmp, bytes)
-            .map_err(|_| "Impossible d’enregistrer les paramètres.".to_string())?;
-        replace_file(&tmp, &self.path)
+            .map_err(|_| storage("Impossible d’enregistrer les paramètres.".into()))?;
+        replace_file(&tmp, &self.path).map_err(storage)
     }
 }
 
@@ -560,16 +561,25 @@ pub fn sanitize(settings: &mut Settings) {
 
 pub const MAX_SERVERS: usize = 8;
 
-pub fn validate(settings: &Settings) -> Result<(), String> {
+pub fn validate(settings: &Settings) -> Result<(), Refusal> {
     actions::validate(settings)?;
     if !(2..=20).contains(&settings.after_replace.undo_seconds) {
-        return Err("La durée d’annulation doit être comprise entre 2 et 20 secondes.".into());
+        return Err(Refusal::new(
+            SettingsRefusal::UndoSeconds,
+            "La durée d’annulation doit être comprise entre 2 et 20 secondes.",
+        ));
     }
     if !(5..=120).contains(&settings.after_replace.changed_words_seconds) {
-        return Err("La durée des mots changés doit être comprise entre 5 et 120 secondes.".into());
+        return Err(Refusal::new(
+            SettingsRefusal::WordsSeconds,
+            "La durée des mots changés doit être comprise entre 5 et 120 secondes.",
+        ));
     }
     if settings.servers.is_empty() || settings.servers.len() > MAX_SERVERS {
-        return Err(format!("Il faut de 1 à {MAX_SERVERS} serveurs."));
+        return Err(Refusal::new(
+            SettingsRefusal::Servers,
+            format!("Il faut de 1 à {MAX_SERVERS} serveurs."),
+        ));
     }
     for (index, server) in settings.servers.iter().enumerate() {
         let id_ok = (1..=32).contains(&server.id.len())
@@ -582,18 +592,30 @@ pub fn validate(settings: &Settings) -> Result<(), String> {
                 .iter()
                 .any(|other| other.id == server.id)
         {
-            return Err("L’identifiant d’un serveur est invalide.".into());
+            return Err(Refusal::new(
+                SettingsRefusal::Servers,
+                "L’identifiant d’un serveur est invalide.",
+            ));
         }
         validate_endpoint(&server.endpoint)?;
         // An empty model is allowed: the server is not set up yet (the action then says so).
         if server.model.len() > 200 || server.model.chars().any(char::is_control) {
-            return Err("Le modèle d’un serveur est invalide.".into());
+            return Err(Refusal::new(
+                SettingsRefusal::ServerModel,
+                "Le modèle d’un serveur est invalide.",
+            ));
         }
         if server.name.chars().count() > 80 || server.name.chars().any(char::is_control) {
-            return Err("Le nom d’un serveur est invalide.".into());
+            return Err(Refusal::new(
+                SettingsRefusal::ServerName,
+                "Le nom d’un serveur est invalide.",
+            ));
         }
         if server.api_key.len() > 4096 || server.api_key.chars().any(char::is_control) {
-            return Err("La clé d’un serveur est invalide.".into());
+            return Err(Refusal::new(
+                SettingsRefusal::ServerKey,
+                "La clé d’un serveur est invalide.",
+            ));
         }
     }
     if !settings
@@ -601,7 +623,10 @@ pub fn validate(settings: &Settings) -> Result<(), String> {
         .iter()
         .any(|server| server.id == settings.default_server_id)
     {
-        return Err("Le serveur par défaut n’existe pas.".into());
+        return Err(Refusal::new(
+            SettingsRefusal::Servers,
+            "Le serveur par défaut n’existe pas.",
+        ));
     }
     Ok(())
 }
@@ -738,19 +763,24 @@ pub fn normalize_endpoint(input: &str) -> Result<Endpoint, EndpointReason> {
 
 /// A saved address: empty (nothing set up yet) or one that reads. `http://` is accepted for
 /// any host since 0.6 (Lucas, 30/09): the interface warns « Connexion non chiffrée ».
-pub fn validate_endpoint(value: &str) -> Result<(), String> {
+pub fn validate_endpoint(value: &str) -> Result<(), Refusal> {
     if value.trim().is_empty() {
         return Ok(());
     }
     match normalize_endpoint(value) {
         Ok(_) => Ok(()),
-        Err(EndpointReason::Credentials) => {
-            Err("L’adresse du serveur ne doit pas contenir d’identifiants.".into())
-        }
-        Err(EndpointReason::Scheme) => {
-            Err("L’adresse du serveur doit commencer par https:// ou http://.".into())
-        }
-        Err(_) => Err("L’adresse du serveur est invalide.".into()),
+        Err(EndpointReason::Credentials) => Err(Refusal::new(
+            SettingsRefusal::AddressCredentials,
+            "L’adresse du serveur ne doit pas contenir d’identifiants.",
+        )),
+        Err(EndpointReason::Scheme) => Err(Refusal::new(
+            SettingsRefusal::AddressScheme,
+            "L’adresse du serveur doit commencer par https:// ou http://.",
+        )),
+        Err(_) => Err(Refusal::new(
+            SettingsRefusal::Address,
+            "L’adresse du serveur est invalide.",
+        )),
     }
 }
 
@@ -1431,11 +1461,6 @@ mod tests {
             }
         );
         assert_eq!(migrated.default_action_id, "correct");
-        assert_eq!(
-            migrated.ui_version,
-            crate::types::UiVersion::Ilot,
-            "0.5.0 opens the Îlot, its menu binding included"
-        );
         assert!(migrated.history_enabled && migrated.autostart);
         assert_eq!(
             (migrated.text_size, migrated.auto_close),
@@ -1526,7 +1551,7 @@ mod tests {
     }
     #[test]
     fn restoring_the_defaults_keeps_only_what_sets_this_device_up() {
-        use crate::types::{Language, TextSize, Theme, UiVersion};
+        use crate::types::{Language, TextSize, Theme};
         let mut current = Settings::default();
         current.actions.push(ActionDefinition {
             id: "custom".into(),
@@ -1542,14 +1567,8 @@ mod tests {
         (
             current.text_size,
             current.theme,
-            current.ui_version,
             current.changed_words_style,
-        ) = (
-            TextSize::Large,
-            Theme::Dark,
-            UiVersion::V4,
-            ChangedWordsStyle::Eclat,
-        );
+        ) = (TextSize::Large, Theme::Dark, ChangedWordsStyle::Eclat);
         (
             current.history_enabled,
             current.autostart,
@@ -1684,9 +1703,16 @@ mod tests {
         // Since 0.6 http:// is accepted for any host (the interface warns), and a path prefix too.
         assert!(validate_endpoint("http://translate.example.test").is_ok());
         assert!(validate_endpoint("https://translate.example.test/openai").is_ok());
-        assert!(validate_endpoint("https://user:secret@example.test").is_err());
-        assert!(validate_endpoint("file:///tmp/socket").is_err());
-        assert!(validate_endpoint("https://").is_err());
+        let code = |value: &str| validate_endpoint(value).unwrap_err().code;
+        assert_eq!(
+            code("https://user:secret@example.test"),
+            SettingsRefusal::AddressCredentials.into()
+        );
+        assert_eq!(
+            code("file:///tmp/socket"),
+            SettingsRefusal::AddressScheme.into()
+        );
+        assert_eq!(code("https://"), SettingsRefusal::Address.into());
     }
     #[test]
     fn the_servers_are_validated_and_what_is_saved_is_clean() {
@@ -1796,7 +1822,6 @@ mod tests {
         value.changed_words_style = ChangedWordsStyle::Eclat;
         value.text_size = crate::types::TextSize::Large;
         value.auto_close = crate::types::AutoClose::Never;
-        value.ui_version = crate::types::UiVersion::Ilot;
         store.save(&value).unwrap();
         let loaded = store.load().unwrap();
         assert_eq!(loaded, value);
@@ -1827,27 +1852,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]
-    fn a_0_4_settings_file_without_the_ui_switch_opens_the_ilot_and_v4_stays_reachable() {
-        let root = temp_root("settings-test");
+    fn a_file_that_still_asks_for_v4_loads_as_the_ilot_and_loses_the_switch_at_the_next_save() {
+        // The hidden `uiVersion` switch is gone (Lucas, 10/10/2026): a file that still
+        // carries it, `v4` included, loads as it is, nothing set aside, and the key is dropped.
+        let root = temp_root("settings-v4");
         let store = SettingsStore::new(&root);
-        store.save(&Settings::default()).unwrap();
+        let saved = Settings {
+            setup_done: true,
+            ..Settings::default()
+        };
+        store.save(&saved).unwrap();
         let path = root.join("settings.json");
         let mut raw: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        raw.as_object_mut().unwrap().remove("uiVersion");
-        std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
-        assert_eq!(
-            store.load().unwrap().ui_version,
-            crate::types::UiVersion::Ilot
-        );
         raw.as_object_mut()
             .unwrap()
             .insert("uiVersion".into(), "v4".into());
         std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
+        let (loaded, set_aside) = store.load_or_recover().unwrap();
+        assert_eq!((&loaded, set_aside), (&saved, None));
+        assert!(path.exists() && !store.backup_path().exists());
+        let menu = &loaded.shortcut_bindings[0];
         assert_eq!(
-            store.load().unwrap().ui_version,
-            crate::types::UiVersion::V4
+            (menu.kind, menu.enabled),
+            (actions::BindingKind::Menu, true),
+            "the menu shortcut opens the Îlot"
         );
+        store.save(&loaded).unwrap();
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(written.get("uiVersion").is_none());
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]

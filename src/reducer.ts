@@ -11,7 +11,7 @@ export type TranslationState = {
   phase: 'idle' | 'streaming' | 'complete' | 'error' | 'cancelled';
   error: string | null;
   // Lot 10: the code of the last failure, a stream error or a delivery fallback (null: none, or
-  // none sent). The v4 journey reads `error`; the Îlot reads this (src/menu/outcome.ts).
+  // none sent). The glass reads `error`; the Îlot reads this (src/menu/outcome.ts).
   code: ErrorCode | null;
   replacementValid: boolean;
   invalidated: boolean;

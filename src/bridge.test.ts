@@ -39,25 +39,7 @@ describe('bridge preview', () => {
     expect(settings.shortcutBindings.map((binding) => [binding.kind, binding.shortcut])).toEqual([
       ['menu', 'Ctrl+Alt+Space'],
     ]);
-    // The Îlot, as Rust's UiVersion::Ilot.
-    expect(settings.uiVersion).toBe('ilot');
     expect(settings.servers.map((server) => server.id)).toContain(settings.defaultServerId);
-  });
-  it('asks for the 0.4 journey with ?ui=v4 only', async () => {
-    const at = location.href;
-    const loaded = async (search: string) => {
-      history.replaceState(null, '', `/${search}`);
-      vi.resetModules();
-      return (await (await import('./bridge')).bridge.getSettings()).uiVersion;
-    };
-    try {
-      expect(await loaded('?ui=v4')).toBe('v4');
-      expect(await loaded('?ui=v5')).toBe('ilot');
-      expect(await loaded('')).toBe('ilot');
-    } finally {
-      history.replaceState(null, '', at);
-      vi.resetModules();
-    }
   });
 });
 
@@ -121,7 +103,7 @@ describe('bridge preview: servers and settings of 0.6', () => {
     expect(changed).toHaveLength(1);
     await expect(
       bridge.saveSettings({ ...settings, servers: [{ ...settings.servers[0], endpoint: 'ftp://x' }] }),
-    ).rejects.toBe('L’adresse du serveur est invalide.');
+    ).rejects.toEqual({ code: 'address', message: 'L’adresse du serveur est invalide.' });
     expect((await bridge.getSettings()).servers[0].endpoint).toBe('https://llm.exemple.com');
     // The setup's end marks it done and tells every listener.
     const fresh = await loaded('?window=setup');
@@ -171,8 +153,6 @@ describe('the simulated connection of the preview', () => {
     if (name === 'probe-step') steps.push(payload as ProbeStepEvent);
     else journal.push(payload as DiagEntry);
   };
-  const servers = (id: string) =>
-    id === 's1' ? { endpoint: 'https://llm.exemple.com', apiKey: key, noKey: false } : undefined;
   const probe = (run: string, endpoint = 'https://llm.exemple.com/v1', apiKey = key, noKey = false) =>
     connectionCommand('probe_connection', { run, endpoint, apiKey, noKey }, emit) as Promise<ProbeResult>;
   const attempt = (run: string, model: string, apiKey = key) =>

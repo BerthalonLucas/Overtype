@@ -1,3 +1,4 @@
+mod acl;
 mod actions;
 mod backdrop;
 mod brand;
@@ -10,7 +11,7 @@ mod demo_menu;
 mod diagnostics;
 mod error;
 mod ground;
-use error::{AppError, ErrorKind, Refusal};
+use error::{AppError, ErrorKind, Refusal, SettingsRefusal};
 mod halo;
 mod history;
 mod host;
@@ -20,6 +21,10 @@ mod menu_memory;
 mod pasted;
 mod placement;
 mod probe;
+// The real replacement bench's native driver (scripts/test-replacement-windows.mjs): test
+// builds only, its one test ignored by default.
+#[cfg(test)]
+mod replacement_tests;
 mod selection_lines;
 mod settings;
 mod system_motion;
@@ -98,6 +103,9 @@ enum Repeat {
 struct Inner {
     settings: Settings,
     capture: Option<StoredCapture>,
+    /// The right of the capture's session to paste and undo (NATIVE-006), taken when it is
+    /// stored: the emergency exit revokes it without the lock, a paste in flight reads it again.
+    delivery: capture::Ticket,
     menu: Option<MenuSession>,
     menu_press: Option<MenuPress>,
     pending_capture: Option<Capture>,
@@ -300,6 +308,7 @@ impl Inner {
         Self {
             settings,
             capture: None,
+            delivery: capture::Ticket::current(),
             menu: None,
             menu_press: None,
             pending_capture: None,
@@ -395,13 +404,11 @@ impl Inner {
         {
             return Some(Watched::Delivering);
         }
-        Some(
-            if self.settings.ui_version == UiVersion::Ilot && capture.public.menu.is_some() {
-                Watched::Pill
-            } else {
-                Watched::Reading
-            },
-        )
+        Some(if capture.public.menu.is_some() {
+            Watched::Pill
+        } else {
+            Watched::Reading
+        })
     }
     /// The state that outlived its limit at `now`, and for how long it has been silent.
     /// `near`: how long ago the pointer last rested on the bubble (the user is reading it, or
@@ -495,7 +502,8 @@ impl Inner {
         capture_id: &str,
         action_id: &str,
         instruction: Option<&str>,
-    ) -> Result<ExecutionInfo, String> {
+    ) -> Result<ExecutionInfo, Refusal> {
+        let gone = |message: &str| Refusal::new(ErrorKind::CaptureGone, message);
         if !self.visible
             || self.pending_dismiss.is_some()
             || self
@@ -503,18 +511,21 @@ impl Inner {
                 .as_ref()
                 .is_none_or(|capture| capture.public.id != capture_id)
         {
-            return Err("La capture n’est plus active.".into());
+            return Err(gone("La capture n’est plus active."));
         }
         let menu = self
             .menu
             .as_mut()
             .filter(|menu| menu.capture_id == capture_id)
-            .ok_or("Cette capture n’attend pas de choix.")?;
+            .ok_or_else(|| gone("Cette capture n’attend pas de choix."))?;
         if menu.chosen {
-            return Err("Une action a déjà été choisie pour cette sélection.".into());
+            return Err(gone("Une action a déjà été choisie pour cette sélection."));
         }
         if menu.invalidated {
-            return Err("La sélection a changé; le menu est fermé.".into());
+            return Err(Refusal::new(
+                ErrorKind::TargetChanged,
+                "La sélection a changé; le menu est fermé.",
+            ));
         }
         let execution = Execution::chosen(&menu.settings, action_id, instruction)?;
         menu.chosen = true;
@@ -638,11 +649,9 @@ impl Inner {
     }
     /// The watcher found the target of `capture_id` changed: nothing can be replaced any more.
     /// A menu still waiting closes (review n°6: nothing left to act on; a choice in flight is
-    /// refused). Under the Îlot the window keeps its place, anchor and side (the working pill,
-    /// then the error pill, stay where the user looks; review of da-ilot 3e678ff); under v4 the
-    /// glass loses its anchor and docks at the bottom, as in 0.4.
+    /// refused). Otherwise the window keeps its place, anchor and side (the working pill, then
+    /// the error pill, stay where the user looks; review of da-ilot 3e678ff).
     fn invalidate(&mut self, capture_id: &str) -> Invalidated {
-        let ilot = self.settings.ui_version == UiVersion::Ilot;
         let Some(capture) = self
             .capture
             .as_mut()
@@ -663,12 +672,7 @@ impl Inner {
             menu.invalidated = true;
             return Invalidated::CloseMenu;
         }
-        if ilot {
-            return Invalidated::Stay;
-        }
-        capture.public.anchor = None;
-        self.side = None;
-        Invalidated::Redock
+        Invalidated::Stay
     }
     /// `replace_result` under the state lock: the completed result's target, spent once (the
     /// capture can no longer be replaced afterwards: `spent`, the frontend is told). Refused
@@ -779,11 +783,12 @@ fn without_keys(mut settings: Settings) -> Settings {
     }
     settings
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn get_settings(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Settings, String> {
+) -> Result<Settings, Refusal> {
     let settings = state
         .inner
         .lock()
@@ -852,18 +857,24 @@ fn emit_shortcut_statuses(app: &AppHandle) {
 }
 /// The state of every binding: the settings window asks at load and follows the
 /// `shortcut-status` event (startup refusals, saves).
-#[tauri::command]
-fn shortcut_status(state: State<'_, AppState>) -> Result<Vec<ShortcutStatus>, String> {
-    current_shortcut_statuses(&state)
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
+fn shortcut_status(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Vec<ShortcutStatus>, Refusal> {
+    acl::only(&window, &KEYED)?;
+    Ok(current_shortcut_statuses(&state)?)
 }
 
-fn register_shortcut(app: &AppHandle, value: &str) -> Result<(), String> {
-    register_shortcut_state(app, value).map_err(|(_, message)| message)
+fn register_shortcut(app: &AppHandle, value: &str) -> Result<(), Refusal> {
+    register_shortcut_state(app, value).map_err(|(_, refusal)| refusal)
 }
-/// Registers a chord; on a refusal, why (for the status) and the French message of 0.4.
-fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingState, String)> {
+/// Registers a chord; on a refusal, why (for the status) and the refusal (`shortcut_taken`, or
+/// the chord's own code when it does not read).
+fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingState, Refusal)> {
     let shortcut =
-        actions::parse_shortcut(value).map_err(|message| (BindingState::Failed, message))?;
+        actions::parse_shortcut(value).map_err(|refusal| (BindingState::Failed, refusal))?;
     let shortcut_id = shortcut.id();
     app.global_shortcut()
         .on_shortcut(shortcut, move |app, _, event| {
@@ -890,16 +901,32 @@ fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingS
         .map_err(|error| {
             (
                 refusal_state(&error.to_string()),
-                "Le raccourci est déjà utilisé ou indisponible.".into(),
+                Refusal::new(
+                    SettingsRefusal::ShortcutTaken,
+                    "Le raccourci est déjà utilisé ou indisponible.",
+                ),
             )
         })
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the save lock, the state lock and the disk. Each
+// window queues its saves, so their order holds. The keyed windows only (NATIVE-011): every
+// other one gets the settings without their API keys, and saving that copy would wipe them.
+#[tauri::command(async)]
 fn save_settings(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     settings: Settings,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &KEYED)?;
+    store_settings(app, state, settings)
+}
+/// A whole copy of the settings saved, under the save lock (save_settings, reset_settings).
+fn store_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: Settings,
+) -> Result<(), Refusal> {
     let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
     apply_settings(&app, &state, settings)
 }
@@ -910,7 +937,7 @@ fn change_settings(
     app: &AppHandle,
     state: &AppState,
     change: impl FnOnce(&mut Settings) -> bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     let _save_guard = state.settings_lock.lock().map_err(|_| lock_error())?;
     let mut settings = state
         .inner
@@ -925,7 +952,7 @@ fn change_settings(
 }
 /// Saves `settings` (the save lock is held by the caller): validated, its shortcuts registered,
 /// written, then told to every window.
-fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Result<(), String> {
+fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Result<(), Refusal> {
     let app = app.clone();
     let old = state
         .inner
@@ -985,7 +1012,12 @@ fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Resu
             } else {
                 app.autolaunch().disable()
             })
-            .map_err(|_| "Démarrage automatique indisponible.".to_string())?;
+            .map_err(|_| {
+                Refusal::new(
+                    SettingsRefusal::AutostartUnavailable,
+                    "Démarrage automatique indisponible.",
+                )
+            })?;
         }
         state.settings_store.save(&settings)
     })();
@@ -1053,12 +1085,14 @@ fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Resu
 /// application starts over too. When Windows refuses the default menu chord, the menu keeps the
 /// one it had (settings::keep_menu_chord) and everything else is restored. Answers what is now
 /// saved, the keys to the windows that edit the connection only.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): a save (see `save_settings`).
+#[tauri::command(async)]
 fn reset_settings(
     window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<Settings, String> {
+) -> Result<Settings, Refusal> {
+    acl::only(&window, &acl::SETTINGS)?;
     let current = state
         .inner
         .lock()
@@ -1066,11 +1100,11 @@ fn reset_settings(
         .settings
         .clone();
     let fresh = settings::reset(&current);
-    match save_settings(app.clone(), state, fresh.clone()) {
+    match store_settings(app.clone(), state, fresh.clone()) {
         Ok(()) => {}
         Err(error) => {
             let kept = settings::keep_menu_chord(&fresh, &current).ok_or(error)?;
-            save_settings(app.clone(), app.state::<AppState>(), kept)?;
+            store_settings(app.clone(), app.state::<AppState>(), kept)?;
         }
     };
     // What is now saved (the save cleans it: the default actions in the interface's language).
@@ -1097,8 +1131,14 @@ fn reset_settings(
 /// that Windows gives now (taken, then let go at once). None when Windows gives none of them.
 /// Never Ctrl+Shift+Space: Word types a non-breaking space with it, which French needs.
 const MENU_ALTERNATIVES: [&str; 3] = ["Ctrl+Alt+Shift+Space", "Alt+Shift+Space", "Ctrl+Alt+Home"];
-#[tauri::command]
-fn suggest_shortcut(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
+fn suggest_shortcut(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, Refusal> {
+    acl::only(&window, &KEYED)?;
     let used = state
         .inner
         .lock()
@@ -1168,12 +1208,9 @@ fn store_capture(
         i.notice_generation = i.notice_generation.wrapping_add(1);
         i.side = None;
         // The menu shows its selection at three levels while it waits (Lucas, 25/09).
-        menu_scene = if is_menu {
-            halo_scene(&i.settings, &captured)
-        } else {
-            None
-        };
+        menu_scene = if is_menu { halo_scene(&captured) } else { None };
         i.capture = Some(captured);
+        i.delivery = capture::Ticket::current();
         i.menu = menu;
         i.execution = execution;
         i.visible = true;
@@ -1403,13 +1440,18 @@ fn replay_last(app: &AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
-#[tauri::command]
-fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, String> {
-    capture_with_binding(app, &state, None)
-        .map_err(String::from)?
+// Off the main thread (`async`, NATIVE-005): a whole capture (UI Automation, a synthetic copy).
+// Test hook, honoured only under the WebView2 probe (`FLOWTRANSLATE_CDP_URL`, as for
+// `override_cursor`): no page calls it, and no window should start a capture by IPC.
+#[tauri::command(async)]
+fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, Refusal> {
+    if std::env::var_os("FLOWTRANSLATE_CDP_URL").is_none() {
+        return Err("Indisponible hors test.".into());
+    }
+    capture_with_binding(app, &state, None)?
         .ok_or_else(|| "Sélectionnez un texte dans une autre application.".into())
 }
-/// What a shortcut opens: one action at once, or (a `menu` binding under the Îlot) the
+/// What a shortcut opens: one action at once, or (a `menu` binding) the Îlot's
 /// menu beside the selection, with the settings of the moment frozen for the choice.
 enum Opening {
     Direct(Box<Execution>),
@@ -1515,8 +1557,7 @@ fn capture_with_binding(
         // Nothing is ever queued: the shortcut spammed opens one bubble and runs one request.
         let menu = binding
             .as_ref()
-            .is_some_and(|binding| binding.kind == BindingKind::Menu)
-            && i.settings.ui_version == UiVersion::Ilot;
+            .is_some_and(|binding| binding.kind == BindingKind::Menu);
         let repeat = binding
             .as_ref()
             .filter(|_| menu)
@@ -1813,10 +1854,8 @@ enum Invalidated {
     Stale,
     /// A menu still waiting: it closes.
     CloseMenu,
-    /// Under the Îlot: `target-invalidated`, the window stays where it is.
+    /// `target-invalidated`, the window stays where it is.
     Stay,
-    /// Under v4: `target-invalidated`, then the glass docks at the bottom.
-    Redock,
 }
 /// What the scope becomes when a menu press opened it and got no capture: the scope of what
 /// is still shown, never a menu scope left open over nothing (the hook would keep the keys).
@@ -1942,12 +1981,13 @@ fn capture_opening(
     }
     result.map(Some)
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn frontend_ready(
     app: AppHandle,
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Option<Capture>, String> {
+) -> Result<Option<Capture>, Refusal> {
     let (pending, reloaded) = state.inner.lock().map_err(|_| lock_error())?.page_ready();
     // Review of da-ilot (front n°2): the overlay page loaded again (F5, Ctrl+R, a crash) while
     // a capture was on screen; the new page knows nothing of it, so it closes as a dismissal
@@ -1959,12 +1999,17 @@ fn frontend_ready(
     Ok(pending)
 }
 
+// Kept on the main thread although it takes the state lock (NATIVE-005): the page sends it
+// without waiting, and a relaunch right after must start after it (two `async` starts may run in
+// either order, and the older one would then cancel the newer).
 #[tauri::command]
 fn translate(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request: TranslationRequest,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     if request.text.is_empty() || request.text.chars().count() > capture::MAX_CHARS {
         return Err("La traduction accepte de 1 à 200 000 caractères.".into());
     }
@@ -1998,13 +2043,11 @@ fn translate(
             return Err("Le serveur ne correspond pas à la capture.".into());
         }
         // The servers frozen at the capture: a change of settings never alters a running one.
-        let profile = find_server(&run.servers, &request.server_id)
-            .map_err(String::from)?
-            .clone();
+        let profile = find_server(&run.servers, &request.server_id)?.clone();
         actions::validate_template(&run.action.prompt_template)?;
         let instruction = run.action.prompt_template.clone();
         let execution_info = run.info.clone();
-        let halo_scene = halo_scene(&i.settings, captured);
+        let halo_scene = halo_scene(captured);
         let captured_replaceable = captured.public.can_replace
             && !captured.invalidated
             && run.info.output_mode == OutputMode::Replace;
@@ -2244,15 +2287,12 @@ fn translate(
     Ok(())
 }
 /// What the halo shows of a selection while the menu waits and while an action works (lot 6,
-/// « mise en valeur »): under the Îlot only, for a UIA selection that still has its anchor (the
-/// watcher removes it once the selection moved): its exact text, its whole lines, its text box
-/// and the ground under it, as the capture read them.
-fn halo_scene(settings: &Settings, captured: &StoredCapture) -> Option<halo::Scene> {
+/// « mise en valeur »): for a UIA selection that still has its anchor (the watcher removes it
+/// once the selection moved): its exact text, its whole lines, its text box and the ground
+/// under it, as the capture read them.
+fn halo_scene(captured: &StoredCapture) -> Option<halo::Scene> {
     let capture = &captured.public;
-    (settings.ui_version == UiVersion::Ilot
-        && capture.anchor.is_some()
-        && !capture.selection_rects.is_empty())
-    .then(|| halo::Scene {
+    (capture.anchor.is_some() && !capture.selection_rects.is_empty()).then(|| halo::Scene {
         lines: capture.selection_rects.clone(),
         full: captured.levels.full_lines.clone(),
         text_box: captured.levels.text_box,
@@ -2264,10 +2304,12 @@ fn halo_scene(settings: &Settings, captured: &StoredCapture) -> Option<halo::Sce
 // (Escape, ✕, a click on the working pill) never waits on the main thread for the state lock.
 #[tauri::command(async)]
 fn cancel_translation(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     let mut i = state.inner.lock().map_err(|_| lock_error())?;
     let working = i.current(&request_id);
     i.cancel(Some(&request_id));
@@ -2341,11 +2383,11 @@ fn schedule_auto_delivery(app: &AppHandle) {
                     Ok(target)
                 }
             })
-            .and_then(|target| capture::paste(target, &result.translated_text, true));
-        // Under the Îlot (lot 9): the pasted text is found at once, still under the lock (no
-        // new capture in between), for the pill's place, the marks and Undo.
+            .and_then(|target| capture::paste(target, &result.translated_text, true, i.delivery));
+        // Lot 9: the pasted text is found at once, still under the lock (no new capture in
+        // between), for the pill's place, the marks and Undo.
         let applied = match (&outcome, &target) {
-            (Ok(_), Some(target)) if i.settings.ui_version == UiVersion::Ilot => {
+            (Ok(_), Some(target)) => {
                 let located = locate_pasted(&result.translated_text, target.native_window);
                 let old = i
                     .capture
@@ -2506,14 +2548,17 @@ fn last_line(lines: &[Rect]) -> Option<Rect> {
 /// pill's size, logical. The answer is relative to the overlay window as it stands, logical;
 /// `inside` false means the pill would leave the window: `move_overlay` first. Estimated from
 /// the old selection when the pasted text could not be found.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock, released before the window is read.
+#[tauri::command(async)]
 fn result_pill(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
     width: f64,
     height: f64,
-) -> Result<PillTarget, String> {
+) -> Result<PillTarget, Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
         return Err("Dimensions invalides.".into());
     }
@@ -2576,12 +2621,14 @@ fn result_pill(
 /// pill would leave the window. Kept by every later placement of this capture.
 #[tauri::command]
 async fn move_overlay(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
     dx: f64,
     dy: f64,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     let size = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;
         if !dx.is_finite()
@@ -2620,9 +2667,9 @@ async fn move_overlay(
     };
     let (placed_tx, placed_rx) = tokio::sync::oneshot::channel();
     position(&app, &state, size.0, size.1, Some(placed_tx))?;
-    placed_rx
+    Ok(placed_rx
         .await
-        .map_err(|_| "Placement interrompu.".to_string())?
+        .map_err(|_| "Placement interrompu.".to_string())??)
 }
 
 /// Marks the changed words of the replacement (lot 9) in the halo: `ranges` are UTF-16
@@ -2634,11 +2681,13 @@ async fn move_overlay(
 /// Answers how many ranges were found and how many lines are drawn (0: nothing shown).
 #[tauri::command]
 async fn highlight_changes(
+    caller: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
     ranges: Vec<TextRange>,
-) -> Result<HighlightResult, String> {
+) -> Result<HighlightResult, Refusal> {
+    acl::only(&caller, &acl::OVERLAY)?;
     if ranges.len() > 64 {
         return Err("Trop de plages.".into());
     }
@@ -2713,7 +2762,7 @@ async fn highlight_changes(
         }
     })
     .await
-    .map_err(|_| "Surlignage interrompu.".to_string())
+    .map_err(|_| Refusal::internal("Surlignage interrompu."))
 }
 
 /// Undo withdrawn (lot 9): `undo-state` tells the frontend why. The marks are not Undo's: they
@@ -2760,7 +2809,12 @@ fn lose_undo(app: &AppHandle, request: Option<&str>, reason: UndoLoss, forget_te
 /// again, the keys must be up, and they are checked once more. Refused: nothing was sent.
 /// Failed: sent, and the original did not come back. The clipboard is kept as for any paste.
 #[tauri::command]
-async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, String> {
+async fn undo_result(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    request_id: String,
+) -> Result<UndoOutcome, Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let refused = |kind: ErrorKind, message: &str| UndoOutcome {
@@ -2776,6 +2830,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             return Err("Ce résultat n’est plus actif.".into());
         }
         let strategy = i.settings.undo_strategy;
+        let delivery = i.delivery;
         let Some(applied) = i.applied.as_mut().filter(|a| a.request_id == request_id) else {
             return Err("Ce résultat n’est plus actif.".into());
         };
@@ -2810,7 +2865,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             original: &applied.original,
             pasted: &applied.pasted,
         };
-        let undone = pasted::undo(&target, strategy, true);
+        let undone = pasted::undo(&target, strategy, true, delivery);
         i.touch();
         drop(i);
         let outcome = match undone {
@@ -2852,8 +2907,14 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
     .await
     .map_err(|_| "L’annulation a été interrompue.".to_string())?
 }
-#[tauri::command]
-fn copy_result(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
+// Off the main thread (`async`, NATIVE-005): the state lock and the clipboard.
+#[tauri::command(async)]
+fn copy_result(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    request_id: String,
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     let r = result_for(&state, &request_id)?;
     // Our own write must not count as a fresh copy for the next shortcut.
     host::suppress_clipboard_tracking(std::time::Duration::from_millis(1_500));
@@ -2865,10 +2926,12 @@ fn copy_result(state: State<'_, AppState>, request_id: String) -> Result<(), Str
 /// back to the front first (the click was on our window). One attempt per result.
 #[tauri::command]
 async fn replace_result(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
 ) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     let r = result_for(&state, &request_id)
         .map_err(|message| AppError::new(ErrorKind::PasteBlocked, message))?;
     // UI Automation uses an MTA worker, never the WebView's STA UI thread.
@@ -2893,7 +2956,9 @@ async fn replace_result(
             );
         }
         // Held through the paste, as for the automatic one: nothing commits in between.
-        let pasted = target.and_then(|target| capture::paste(&target, &r.translated_text, true));
+        let ticket = i.delivery;
+        let pasted =
+            target.and_then(|target| capture::paste(&target, &r.translated_text, true, ticket));
         i.touch();
         drop(i);
         match &pasted {
@@ -3019,6 +3084,9 @@ fn force_close(app: &AppHandle, why: &'static str) {
         host::hide_handle(overlay);
     };
     silence();
+    // NATIVE-006: before the lock is asked for. A paste that holds it sends no Ctrl+V after this
+    // (it reads its session's ticket again right before the chord).
+    capture::revoke_deliveries();
     halo::hide(app);
     backdrop::hide(app, "overlay");
     let handle = app.clone();
@@ -3181,10 +3249,12 @@ fn watch_overlay(app: AppHandle) {
 
 #[tauri::command(async)]
 fn complete_overlay_dismiss(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     let generation = {
         let i = state.inner.lock().map_err(|_| lock_error())?;
         let Some((pending_id, generation)) = i.pending_dismiss.as_ref() else {
@@ -3195,11 +3265,16 @@ fn complete_overlay_dismiss(
         }
         *generation
     };
-    schedule_finish_dismiss(app, capture_id, generation)
+    Ok(schedule_finish_dismiss(app, capture_id, generation)?)
 }
 #[tauri::command(async)]
-fn dismiss_overlay(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    dismiss(&app, &state)
+fn dismiss_overlay(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
+    Ok(dismiss(&app, &state)?)
 }
 // The Windows app mode for the « follow Windows » theme (see system_theme.rs); null when unknown.
 #[tauri::command]
@@ -3270,13 +3345,14 @@ fn show_settings(
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn open_settings(
     app: AppHandle,
     field: Option<String>,
     page: Option<String>,
-) -> Result<(), String> {
-    show_settings(&app, field, page)
+) -> Result<(), Refusal> {
+    Ok(show_settings(&app, field, page)?)
 }
 
 /// One of our windows comes in front (the Settings, the setup): whatever bubble is on screen
@@ -3449,8 +3525,8 @@ fn show_setup(app: &AppHandle, replay: bool) -> Result<(), String> {
 /// Creates or shows the setup window. `replay`: « Revoir l'accueil », which does not put
 /// `setupDone` back to false.
 #[tauri::command]
-async fn open_setup(app: AppHandle, replay: Option<bool>) -> Result<(), String> {
-    show_setup(&app, replay.unwrap_or(false))
+async fn open_setup(app: AppHandle, replay: Option<bool>) -> Result<(), Refusal> {
+    Ok(show_setup(&app, replay.unwrap_or(false))?)
 }
 /// The end of the setup: `setupDone` is saved (every window is told), the setup closes, and
 /// the Settings open when asked.
@@ -3459,9 +3535,9 @@ async fn finish_setup(
     app: AppHandle,
     window: tauri::WebviewWindow,
     open_settings: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if window.label() != "setup" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     mark_setup_done(&app)?;
     if open_settings {
@@ -3472,7 +3548,7 @@ async fn finish_setup(
 }
 /// `setupDone` becomes true on the settings as they are now, under the save lock (the setup
 /// page may be saving an answer at the same moment: neither write loses the other).
-fn mark_setup_done(app: &AppHandle) -> Result<(), String> {
+fn mark_setup_done(app: &AppHandle) -> Result<(), Refusal> {
     change_settings(app, &app.state::<AppState>(), |settings| {
         !std::mem::replace(&mut settings.setup_done, true)
     })
@@ -3481,9 +3557,9 @@ fn mark_setup_done(app: &AppHandle) -> Result<(), String> {
 /// however its window is closed (its cross used to bring the whole setup back at the next
 /// launch, the server already saved).
 #[tauri::command]
-async fn complete_setup(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+async fn complete_setup(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), Refusal> {
     if window.label() != "setup" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     mark_setup_done(&app)
 }
@@ -3513,10 +3589,10 @@ fn end_demo(app: &AppHandle, done: bool) {
     }
 }
 #[tauri::command]
-async fn open_demo(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), String> {
+async fn open_demo(app: AppHandle, window: tauri::WebviewWindow) -> Result<(), Refusal> {
     use std::sync::atomic::Ordering;
     if window.label() != "setup" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     // Asked twice (a double click, Enter held): one demo.
     if DEMO_PLAYING.swap(true, Ordering::AcqRel) {
@@ -3580,9 +3656,9 @@ async fn close_demo(
     app: AppHandle,
     window: tauri::WebviewWindow,
     done: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if !matches!(window.label(), "demo" | "setup") {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     end_demo(&app, done);
     if let Some(demo) = app.get_webview_window("demo") {
@@ -3591,32 +3667,37 @@ async fn close_demo(
     Ok(())
 }
 #[tauri::command]
-fn drag_settings(window: tauri::WebviewWindow) -> Result<(), String> {
+fn drag_settings(window: tauri::WebviewWindow) -> Result<(), Refusal> {
     if window.label() != "settings" {
-        return Err("Fenêtre inattendue.".into());
+        return Err(acl::refused());
     }
     window
         .start_dragging()
         .map_err(|_| "Déplacement indisponible.".into())
 }
 #[tauri::command]
-fn quit_app(app: AppHandle) {
+fn quit_app(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), Refusal> {
+    acl::only(&window, &acl::SETTINGS)?;
     app.exit(0);
+    Ok(())
 }
 /// Probe only (see `host::override_cursor`): screen point the hit tester reads instead
 /// of the real cursor; both `None` restore the real cursor.
 #[tauri::command]
-fn override_cursor(x: Option<i32>, y: Option<i32>) -> Result<(), String> {
-    host::override_cursor(x.zip(y))
+fn override_cursor(x: Option<i32>, y: Option<i32>) -> Result<(), Refusal> {
+    Ok(host::override_cursor(x.zip(y))?)
 }
 /// Activates the visible overlay so the WebView receives the keyboard (the Îlot menu,
 /// lot 3). True when the overlay really holds the foreground afterwards; false leaves
 /// the menu to the hook's keyboard fallback (`menu-key`).
 #[tauri::command]
-async fn focus_overlay(app: AppHandle) -> Result<bool, String> {
-    tauri::async_runtime::spawn_blocking(move || focus_overlay_now(&app))
-        .await
-        .map_err(|_| "Activation interrompue.".to_string())?
+async fn focus_overlay(window: tauri::WebviewWindow, app: AppHandle) -> Result<bool, Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
+    Ok(
+        tauri::async_runtime::spawn_blocking(move || focus_overlay_now(&app))
+            .await
+            .map_err(|_| "Activation interrompue.".to_string())??,
+    )
 }
 /// Off the main thread: the frontend asks as soon as the menu capture arrives, and the
 /// window only shows once its first geometry is placed (or 300 ms later) on the main
@@ -3736,14 +3817,18 @@ fn remembered_process(
 ) -> Option<String> {
     process.filter(|_| !instruction && !simulated)
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock (released before the window is
+// read) and the menu memory on disk. The page waits for its answer before `translate`.
+#[tauri::command(async)]
 fn choose_action(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
     action_id: String,
     instruction: Option<String>,
-) -> Result<ExecutionInfo, String> {
+) -> Result<ExecutionInfo, Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     let (info, source, process) = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;
         let info = i.choose(&capture_id, &action_id, instruction.as_deref())?;
@@ -3779,7 +3864,11 @@ fn choose_action(
 /// window's), and the character that chord types there (lot 4, for the recorder of the
 /// settings window). A plain space typed by Ctrl+Space is not a conflict.
 #[tauri::command]
-fn shortcut_conflict(shortcut: String) -> Result<ShortcutConflict, String> {
+fn shortcut_conflict(
+    window: tauri::WebviewWindow,
+    shortcut: String,
+) -> Result<ShortcutConflict, Refusal> {
+    acl::only(&window, &KEYED)?;
     let character = altgr_types(&actions::parse_shortcut(&shortcut)?);
     Ok(ShortcutConflict {
         alt_gr: character.is_some(),
@@ -3798,6 +3887,7 @@ fn altgr_types(shortcut: &Shortcut) -> Option<char> {
 #[allow(clippy::too_many_arguments)] // Signature inherited as is: reshaping it is out of this change's scope.
 #[tauri::command]
 async fn resize_overlay(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     width: f64,
@@ -3806,7 +3896,8 @@ async fn resize_overlay(
     presentation: Option<Presentation>,
     regions: Option<Vec<SurfaceRegion>>,
     frame: Option<SurfaceRegion>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
         return Err("Dimensions invalides.".into());
     }
@@ -3861,9 +3952,9 @@ async fn resize_overlay(
     }
     let (placed_tx, placed_rx) = tokio::sync::oneshot::channel();
     position(&app, &state, width, height, Some(placed_tx))?;
-    placed_rx
+    Ok(placed_rx
         .await
-        .map_err(|_| "Placement interrompu.".to_string())?
+        .map_err(|_| "Placement interrompu.".to_string())??)
 }
 
 /// A window never larger than the work area it will rest on (logical against physical).
@@ -3888,12 +3979,17 @@ fn validate_frame(frame: &SurfaceRegion, width: f64, height: f64) -> Result<(), 
 
 /// The reading budget is spent: the frontend dims the glass before it leaves. While it
 /// dims, Escape is the user's again (no scope); an approach re-arms it through `position`.
+// On the main thread on purpose (NATIVE-005 left it there): the page sends it without waiting,
+// and only the main thread keeps two of them in order (a `false` overtaking a later `true` would
+// leave Escape armed while the glass dims). Its lock is brief.
 #[tauri::command]
 fn overlay_dimming(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     dimming: bool,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY)?;
     if dimming {
         host::close_escape_scope();
         return Ok(());
@@ -3977,14 +4073,16 @@ fn validate_regions(regions: &[SurfaceRegion], width: f64, height: f64) -> Resul
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock is never held while the window is
+// read or moved.
+#[tauri::command(async)]
 fn start_drag(
     app: AppHandle,
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     client_x: f64,
     client_y: f64,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     if window.label() != "overlay" {
         return Err("Cette fenêtre ne peut pas être déplacée.".into());
     }
@@ -4009,7 +4107,7 @@ fn start_drag(
             if let Ok(mut i) = state.inner.lock() {
                 i.dragging = false;
             }
-            return Err(error);
+            return Err(error.into());
         }
     };
     {
@@ -4099,11 +4197,11 @@ fn status_in(message: &str) -> Option<u16> {
         .ok()
         .filter(|status| (100..600).contains(status))
 }
-fn connection_window(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn connection_window(window: &tauri::WebviewWindow) -> Result<(), Refusal> {
     if KEYED.contains(&window.label()) {
         Ok(())
     } else {
-        Err("Fenêtre inattendue.".into())
+        Err(acl::refused())
     }
 }
 /// What a window may send to a check: a run id of its own making (letters, digits, `-`, `_`,
@@ -4193,7 +4291,7 @@ async fn probe_connection(
     endpoint: String,
     api_key: String,
     no_key: bool,
-) -> Result<probe::ProbeResult, String> {
+) -> Result<probe::ProbeResult, Refusal> {
     connection_window(&window)?;
     checked_input(&run, &endpoint, &api_key)?;
     let cancel = begin_probe(
@@ -4248,7 +4346,7 @@ fn cancel_probe(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
     run: String,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     connection_window(&window)?;
     cancel_run(&mut *state.probes.lock().map_err(|_| lock_error())?, &run);
     Ok(())
@@ -4266,7 +4364,7 @@ async fn try_model(
     api_key: String,
     no_key: bool,
     model: String,
-) -> Result<probe::TryResult, String> {
+) -> Result<probe::TryResult, Refusal> {
     connection_window(&window)?;
     checked_input(&run, &endpoint, &api_key)?;
     if model.len() > 800 {
@@ -4308,20 +4406,22 @@ async fn try_model(
     Ok(result)
 }
 /// The journal: the 500 last entries, the oldest first. Never a text, never a whole key.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the journal's lock, which a write to disk may hold.
+#[tauri::command(async)]
 fn get_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<Vec<diagnostics::DiagEntry>, String> {
+) -> Result<Vec<diagnostics::DiagEntry>, Refusal> {
     connection_window(&window)?;
     Ok(state.diagnostics.list())
 }
 /// Empties the journal, in memory and on disk.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the journal on disk.
+#[tauri::command(async)]
 fn clear_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), Refusal> {
     connection_window(&window)?;
     state.diagnostics.clear();
     Ok(())
@@ -4360,16 +4460,32 @@ fn open_stores(
     Ok((store, settings, recovery, history))
 }
 #[tauri::command]
-fn settings_recovery(state: State<'_, AppState>) -> Option<SettingsRecovery> {
-    state.settings_recovery.clone()
+fn settings_recovery(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Option<SettingsRecovery>, Refusal> {
+    acl::only(&window, &acl::SETUP)?;
+    Ok(state.settings_recovery.clone())
 }
-#[tauri::command]
-fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
-    state.history.list()
+// Off the main thread (`async`, NATIVE-005): the history on disk (SQLite, DPAPI). The Settings
+// window only (NATIVE-011): the history is decrypted here.
+#[tauri::command(async)]
+fn get_history(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Vec<HistoryEntry>, Refusal> {
+    acl::only(&window, &acl::SETTINGS)?;
+    Ok(state.history.list()?)
 }
-#[tauri::command]
-fn delete_history(state: State<'_, AppState>, id: Option<String>) -> Result<(), String> {
-    state.history.delete(id.as_deref())
+// Off the main thread (`async`, NATIVE-005): the history on disk.
+#[tauri::command(async)]
+fn delete_history(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    id: Option<String>,
+) -> Result<(), Refusal> {
+    acl::only(&window, &acl::SETTINGS)?;
+    Ok(state.history.delete(id.as_deref())?)
 }
 
 fn position(
@@ -4764,13 +4880,7 @@ fn watch_context(app: AppHandle) {
                         a.located.clone(),
                     )
                 });
-                (
-                    i.source_window,
-                    i.source_rect,
-                    i.capture.clone(),
-                    i.size,
-                    applied,
-                )
+                (i.source_window, i.source_rect, i.capture.clone(), applied)
             };
             let fg = host::foreground();
             // By the handles kept at startup: a window getter would wait for the main thread,
@@ -4803,7 +4913,7 @@ fn watch_context(app: AppHandle) {
             // move must not leave it over other text for long.
             // After a paste under the Îlot (lot 9) too: the pill and the marks stand on the
             // new text.
-            let period = if halo::visible() || snapshot.4.is_some() {
+            let period = if halo::visible() || snapshot.3.is_some() {
                 3
             } else {
                 12
@@ -4811,7 +4921,7 @@ fn watch_context(app: AppHandle) {
             if (!ticks.is_multiple_of(period) && suspected.is_none()) || state.demo {
                 continue;
             }
-            if let Some((request_id, window, window_rect, located)) = snapshot.4 {
+            if let Some((request_id, window, window_rect, located)) = snapshot.3 {
                 // The caret after the pasted text is normal and keeps the pill; the window
                 // moving, another application in front, or the text scrolling or reflowing
                 // (its rectangles changed) hide pill and marks. The text no longer before the
@@ -4849,7 +4959,7 @@ fn watch_context(app: AppHandle) {
             // A capture without anchor (a copy, a selection without drawable rectangle) has no
             // place to lose; its target is still checked while the source is in front (review n°1).
             let anchored = captured.public.anchor.is_some();
-            // Once invalidated, a capture is not checked again (under the Îlot it keeps its anchor).
+            // Once invalidated, a capture is not checked again (it keeps its anchor).
             if captured.invalidated || (!anchored && captured.target.is_none()) {
                 suspected = None;
                 continue;
@@ -4896,28 +5006,23 @@ fn watch_context(app: AppHandle) {
                     .detail(why),
                 );
             }
-            let redock = match outcome {
+            match outcome {
                 Invalidated::Stale => continue,
                 Invalidated::CloseMenu => {
                     let _ = dismiss(&app, &state);
                     continue;
                 }
-                Invalidated::Stay => false,
-                Invalidated::Redock => true,
-            };
+                Invalidated::Stay => {}
+            }
             let _ = app.emit_to(
                 "overlay",
                 "target-invalidated",
                 TargetInvalidated {
                     capture_id: id,
-                    anchor_lost: redock && anchored,
                     message: "La sélection a changé. Utilisez Copier.".into(),
                     code: ErrorKind::TargetChanged,
                 },
             );
-            if redock {
-                let _ = position(&app, &state, snapshot.3 .0, snapshot.3 .1, None);
-            }
         }
     });
 }
@@ -5087,13 +5192,13 @@ pub fn run() {
                 });
             }
             for shortcut in shortcuts {
-                if let Err((refusal, message)) = register_shortcut_state(app.handle(), &shortcut) {
+                if let Err((refusal, error)) = register_shortcut_state(app.handle(), &shortcut) {
                     if let Ok(key) = actions::parse_shortcut(&shortcut) {
                         if let Ok(mut refused) = app.state::<AppState>().refused_shortcuts.lock() {
                             refused.insert(key.id(), refusal);
                         }
                     }
-                    capture_error(app.handle(), &AppError::internal(message), false);
+                    capture_error(app.handle(), &AppError::internal(error.message), false);
                     // The first run opens its setup below, which records the shortcut itself.
                     if setup_done {
                         let _ = open_settings(app.handle().clone(), None, None);
@@ -5154,7 +5259,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn_blocking(move || {
                     let state = handle.state::<AppState>();
-                    let _ = capture_text(handle.clone(), state);
+                    let _ = capture_with_binding(handle.clone(), &state, None);
                 });
             }
             let settings_asked = args.iter().any(|a| a == "--settings");
@@ -5287,6 +5392,7 @@ mod tests {
     fn cancel_revokes_automatic_delivery_even_after_inference_finishes() {
         let settings = Settings::default();
         let mut binding = settings.shortcut_bindings[0].clone();
+        binding.kind = BindingKind::Action;
         binding.output_mode = OutputMode::Replace;
         let mut i = Inner::new(settings.clone());
         let mut run = Execution::snapshot(&settings, Some(&binding)).unwrap();
@@ -5818,7 +5924,14 @@ mod tests {
         menu_capture(&mut i, "menu");
         // The settings changing after the capture do not change what the menu runs.
         i.settings.actions.retain(|a| a.id != "correct");
-        assert!(i.choose("other", "correct", None).is_err(), "stale capture");
+        // Refused with its code (the Îlot says it in the interface language).
+        let code = |refused: Result<ExecutionInfo, Refusal>| refused.unwrap_err().code;
+        let gone = error::RefusalCode::from(ErrorKind::CaptureGone);
+        assert_eq!(
+            code(i.choose("other", "correct", None)),
+            gone,
+            "stale capture"
+        );
         assert!(i.choose("menu", "missing", None).is_err());
         assert!(
             !i.menu.as_ref().unwrap().chosen,
@@ -5834,19 +5947,21 @@ mod tests {
             Some(&info)
         );
         assert_eq!(i.execution.as_ref().unwrap().info, info);
-        assert!(
-            i.choose("menu", "correct", None).is_err(),
+        assert_eq!(
+            code(i.choose("menu", "correct", None)),
+            gone,
             "once per capture"
         );
         // A free instruction: its reserved id, frozen in Rust (the frontend never resends it).
         menu_capture(&mut i, "free");
-        assert!(i
-            .choose(
+        assert_eq!(
+            code(i.choose(
                 "free",
                 actions::INSTRUCTION_ACTION_ID,
                 Some(&"x".repeat(1001))
-            )
-            .is_err());
+            )),
+            ErrorKind::InstructionInvalid.into()
+        );
         let info = i
             .choose("free", actions::INSTRUCTION_ACTION_ID, Some("Plus poli"))
             .unwrap();
@@ -5861,10 +5976,10 @@ mod tests {
         // A dismissed or direct capture has nothing to choose.
         menu_capture(&mut i, "closing");
         i.pending_dismiss = Some(("closing".into(), 1));
-        assert!(i.choose("closing", "correct", None).is_err());
+        assert_eq!(code(i.choose("closing", "correct", None)), gone);
         i.pending_dismiss = None;
         i.menu = None;
-        assert!(i.choose("closing", "correct", None).is_err());
+        assert_eq!(code(i.choose("closing", "correct", None)), gone);
     }
     #[test]
     fn a_key_typed_during_a_menu_capture_waits_for_its_id_and_is_dropped_without_one() {
@@ -5945,6 +6060,7 @@ mod tests {
             selection_len: 5,
             editable: true,
             check: types::TargetCheck::Uia,
+            copy_witness: false,
         };
         let ready = || {
             let mut i = Inner::new(Settings::default());
@@ -5990,26 +6106,19 @@ mod tests {
         );
     }
     #[test]
-    fn an_invalidated_capture_keeps_its_place_under_the_ilot_and_docks_under_v4() {
+    fn an_invalidated_capture_keeps_its_place() {
         let anchor = Rect {
             x: 10.,
             y: 20.,
             width: 30.,
             height: 16.,
         };
-        let chosen = |ui: UiVersion| {
-            let mut i = Inner::new(Settings {
-                ui_version: ui,
-                ..Settings::default()
-            });
-            menu_capture(&mut i, "c");
-            i.capture.as_mut().unwrap().public.anchor = Some(anchor);
-            i.side = Some(PlacementSide::Below);
-            i.choose("c", "correct", None).unwrap();
-            i
-        };
-        // The working pill under the Îlot: it stays where it is, anchor and side kept.
-        let mut i = chosen(UiVersion::Ilot);
+        let mut i = Inner::new(Settings::default());
+        menu_capture(&mut i, "c");
+        i.capture.as_mut().unwrap().public.anchor = Some(anchor);
+        i.side = Some(PlacementSide::Below);
+        i.choose("c", "correct", None).unwrap();
+        // The working pill: it stays where it is, anchor and side kept.
         assert_eq!(i.invalidate("c"), Invalidated::Stay);
         let c = i.capture.as_ref().unwrap();
         assert_eq!(
@@ -6023,13 +6132,6 @@ mod tests {
         );
         assert_eq!(i.side, Some(PlacementSide::Below));
         assert_eq!(i.invalidate("c"), Invalidated::Stale, "checked once");
-        // Under v4 the glass loses its anchor and docks at the bottom, as in 0.4.
-        let mut i = chosen(UiVersion::V4);
-        assert_eq!(i.invalidate("c"), Invalidated::Redock);
-        assert_eq!(
-            (i.capture.as_ref().unwrap().public.anchor, i.side),
-            (None, None)
-        );
         // A menu still waiting closes; another capture is stale.
         let mut i = Inner::new(Settings::default());
         menu_capture(&mut i, "m");
@@ -6101,7 +6203,10 @@ mod tests {
         let mut i = Inner::new(Settings::default());
         menu_capture(&mut i, "menu");
         i.menu.as_mut().unwrap().invalidated = true;
-        assert!(i.choose("menu", "correct", None).is_err());
+        assert_eq!(
+            i.choose("menu", "correct", None).unwrap_err().code,
+            ErrorKind::TargetChanged.into()
+        );
         assert!(!i.menu.as_ref().unwrap().chosen);
     }
     #[test]
@@ -6476,7 +6581,7 @@ mod tests {
         assert!(!i.current("new"));
     }
     #[test]
-    fn the_halo_shows_only_an_anchored_uia_selection_under_the_ilot_at_its_three_levels() {
+    fn the_halo_shows_only_an_anchored_uia_selection_at_its_three_levels() {
         let line = Rect {
             x: 10.,
             y: 20.,
@@ -6519,17 +6624,7 @@ mod tests {
             invalidated: false,
             levels: levels.clone(),
         };
-        let mut settings = Settings {
-            ui_version: UiVersion::V4,
-            ..Settings::default()
-        };
-        assert_eq!(
-            halo_scene(&settings, &stored(capture.clone())),
-            None,
-            "the 0.4 journey has no halo"
-        );
-        settings.ui_version = UiVersion::Ilot;
-        let scene = halo_scene(&settings, &stored(capture.clone())).expect("a scene");
+        let scene = halo_scene(&stored(capture.clone())).expect("a scene");
         assert_eq!(
             (scene.lines, scene.full, scene.text_box, scene.ground),
             (
@@ -6551,7 +6646,7 @@ mod tests {
             invalidated: false,
             levels: HaloLevels::default(),
         };
-        let scene = halo_scene(&settings, &bare).expect("a scene");
+        let scene = halo_scene(&bare).expect("a scene");
         assert_eq!(
             (scene.lines, scene.full.len(), scene.text_box, scene.ground),
             (vec![line], 0, None, None)
@@ -6561,7 +6656,7 @@ mod tests {
             ..capture.clone()
         };
         assert_eq!(
-            halo_scene(&settings, &stored(moved)),
+            halo_scene(&stored(moved)),
             None,
             "an invalidated selection is not shown"
         );
@@ -6573,7 +6668,7 @@ mod tests {
             ..capture
         };
         assert_eq!(
-            halo_scene(&settings, &stored(copied)),
+            halo_scene(&stored(copied)),
             None,
             "the copy paths have no rectangles"
         );

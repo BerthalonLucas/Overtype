@@ -1,4 +1,4 @@
-// Each entry opens in the Îlot journey, the app's default, unless it asks for the 0.4 one (`ui`).
+// Each entry opens in the app's one interface, the Îlot.
 export const scenarios = [
   {
     id: 'short',
@@ -14,14 +14,12 @@ export const scenarios = [
     expected:
       'Bande centrée en bas, moitié de la largeur de la zone (450 px ici), 22/33, hauteur au plus 45 % de l’écran puis défilement ; Copier · Épingler · ⋯ · Fermer ; aucun « Agrandir ».',
   },
-  // The 0.4 journey, asked for (`ui`): the Îlot's wait is the working pill of the entries below.
   {
     id: 'pending',
-    label: 'Attente du moteur (0.4)',
+    label: 'Attente du moteur',
     issue: 'UI-023',
-    ui: 'v4',
     expected:
-      '0.4 (réglage caché uiVersion « v4 ») : pilule seule de 60 × 28 avec le spinner de shadcn (LoaderCircle 18 px, un tour par seconde), trait de progression après 1,5 s ; annulation possible ; le texte arrive d’un bloc. Dans l’Îlot, l’attente est la pilule de travail (entrées « Pilule de travail »).',
+      'Pilule de travail seule (44 × 28) avec l’indicateur choisi, la Perle par défaut (entrées « Pilule de travail ») ; annulation possible ; le texte arrive d’un bloc.',
   },
   {
     id: 'partial',
@@ -90,7 +88,7 @@ export function scenarioFrom(value: string | null) {
 }
 
 // The Îlot (lot 7), apart from the list above: visual-tests/ keeps a reference image of each entry
-// of `scenarios`, in the 0.4 journey or the Îlot's. Theme, preset (smooth / bouncy) and motion are
+// of `scenarios`. Theme, preset (smooth / bouncy) and motion are
 // parameters of the frame.
 export const ilotScenarios = [
   {

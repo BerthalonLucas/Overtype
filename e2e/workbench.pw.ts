@@ -18,26 +18,21 @@ test('workbench replays the real translation and keeps a reproducible URL', asyn
   const inner = await frame.locator('html').evaluate(() => window.innerWidth);
   await expect(frame.locator('.translation-bubble')).toHaveCSS('width', `${Math.round(inner / 2)}px`);
   await expect(frame.locator('.translation-copy')).toHaveAttribute('data-scroll-edge', 'top');
-  // Every state opens in the Îlot, the app's default; the 0.4 wait asks the frame for its journey.
-  await expect(page.locator('iframe')).not.toHaveAttribute('src', /ui=/);
-  await page.getByRole('button', { name: 'Attente du moteur (0.4)' }).click();
+  // The engine's wait: the working pill.
+  await page.getByRole('button', { name: 'Attente du moteur' }).click();
   await expect(page).toHaveURL(/scenario=pending/);
-  await expect(page.locator('iframe')).toHaveAttribute('src', /[?&]ui=v4(&|$)/);
-  await expect(frame.locator('.wait-pill')).toBeVisible();
-  await expect(frame.locator('.working-pill')).toHaveCount(0);
+  await expect(frame.locator('.working-pill')).toBeVisible();
 });
 
-// The wait in each journey: the Îlot's working pill (the frame's default, as the app's) and,
-// asked for (ui=v4), the 0.4 spinner pill. A partial answer is the same glass in both.
+// The wait: the working pill. A partial answer: the glass.
 const cases = [
-  { scenario: 'pending', journey: ' (Îlot)', query: '', pill: '.working-pill' },
-  { scenario: 'pending', journey: ' (0.4)', query: '&ui=v4', pill: '.wait-pill' },
-  { scenario: 'partial', journey: '', query: '', pill: '' },
+  { scenario: 'pending', pill: '.working-pill' },
+  { scenario: 'partial', pill: '' },
 ] as const;
 
-for (const { scenario, journey, query, pill } of cases) {
-  test(`${scenario} is inspectable, cannot be copied and can be dismissed${journey}`, async ({ page }) => {
-    await page.goto(`/lab-frame.html?scenario=${scenario}&motion=reduce${query}`);
+for (const { scenario, pill } of cases) {
+  test(`${scenario} is inspectable, cannot be copied and can be dismissed`, async ({ page }) => {
+    await page.goto(`/lab-frame.html?scenario=${scenario}&motion=reduce`);
     await expect(page.locator('[data-lab-phase]')).toHaveAttribute(
       'data-lab-phase',
       scenario === 'pending' ? 'streaming' : 'error',

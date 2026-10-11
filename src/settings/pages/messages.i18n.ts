@@ -147,6 +147,38 @@ export const settingsPagesMessages = {
     fr: 'Le nom d’une action doit contenir de 1 à 60 caractères.',
   },
   'refusal.actions': { en: 'Keep between 1 and 24 actions.', fr: 'Configurez entre 1 et 24 actions.' },
+  // ARCH-05: the other refusals of a save (src/settings/messages.ts).
+  'refusal.actionId': {
+    en: 'An action’s identifier is invalid or repeated.',
+    fr: 'L’identifiant d’une action est invalide ou répété.',
+  },
+  'refusal.shortName': {
+    en: 'An action’s short name must hold 1 to 16 characters.',
+    fr: 'Le nom court d’une action doit contenir de 1 à 16 caractères.',
+  },
+  'refusal.actionIcon': { en: 'An action’s icon is invalid.', fr: 'L’icône d’une action est invalide.' },
+  'refusal.gridAction': {
+    en: 'The menu shows an action that is missing or repeated.',
+    fr: 'Le menu montre une action absente ou répétée.',
+  },
+  'refusal.defaultAction': { en: 'The default action no longer exists.', fr: 'L’action par défaut n’existe plus.' },
+  'refusal.shortcuts': { en: 'Keep between 1 and 12 shortcuts.', fr: 'Configurez entre 1 et 12 raccourcis.' },
+  'refusal.shortcutId': {
+    en: 'A shortcut’s identifier is invalid or repeated.',
+    fr: 'L’identifiant d’un raccourci est invalide ou répété.',
+  },
+  'refusal.shortcutAction': {
+    en: 'A shortcut runs an action that no longer exists.',
+    fr: 'Un raccourci lance une action qui n’existe plus.',
+  },
+  'refusal.storage': {
+    en: 'The settings could not be written. Try again.',
+    fr: 'Les réglages n’ont pas pu être écrits. Réessayez.',
+  },
+  'refusal.window': {
+    en: 'This window cannot change the settings.',
+    fr: 'Cette fenêtre ne peut pas modifier les réglages.',
+  },
   'page.actions.fillFirst': { en: 'Name the new action first.', fr: 'Nommez d’abord la nouvelle action.' },
   'page.after.sampleBye': { en: 'Have a nice day,', fr: 'Bonne journée,' },
   'page.actions.sampleHello': { en: 'Hi Julie,', fr: 'Bonjour Julie,' },
@@ -217,7 +249,6 @@ export const settingsPagesMessages = {
     en: 'The menu overshoots a little, then comes back.',
     fr: 'Le menu dépasse un peu, puis revient.',
   },
-  'page.appearance.miniAction': { en: 'Fix', fr: 'Corriger' },
   'page.appearance.sample': {
     en: 'Could you send me the signed quote before Friday?',
     fr: 'Could you send me the signed quote before Friday?',

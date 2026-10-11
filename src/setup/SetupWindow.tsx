@@ -12,7 +12,8 @@ import { DiagnosticsPanel, type DiagnosticsLanding } from '../connection/Diagnos
 import { Demo } from '../demo/Demo';
 import { Wallpaper } from '../demo/Wallpaper';
 import { withLanguage } from '../actionDefaults';
-import { t as tNow, useT, type MessageKey } from '../i18n';
+import { useT, type MessageKey } from '../i18n';
+import { describeProblem } from '../settings/messages';
 import { shortcutKeys } from '../settings/ShortcutRecorder';
 import { useRegistrations } from '../settings/registrations';
 import type { DemoEnded, Language, ProbeProblem, SettingsRecovery, Theme } from '../types';
@@ -145,7 +146,7 @@ function Setup({ initial }: { initial: string | null }) {
   const t = useT();
   const tx = useTx();
   const reduced = useReduced();
-  const store = useSetupSettings(useCallback(() => tNow('setup.notSaved'), []));
+  const store = useSetupSettings();
   const { settings } = store;
   const registrations = useRegistrations();
   const [step, setStep] = useState<SetupStep>(() => (!bridge.native && isSetupStep(initial) ? initial : 'welcome'));
@@ -668,7 +669,7 @@ function Setup({ initial }: { initial: string | null }) {
                     </span>
                   ) : store.saveError ? (
                     <>
-                      {t('setup.notSaved')}{' '}
+                      {describeProblem(store.saveError, t)}{' '}
                       <button type="button" className="ft-linklike" onClick={store.retry}>
                         {t('common.retry')}
                       </button>

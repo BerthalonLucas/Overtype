@@ -133,9 +133,13 @@ pub async fn check_update(app: AppHandle) -> UpdateStatus {
 }
 
 /// Downloads the waiting version, checks its signature, then hands over to its installer: on
-/// success the app quits here and never answers.
+/// success the app quits here and never answers. The Settings window only (NATIVE-011).
 #[tauri::command]
-pub async fn install_update(app: AppHandle) -> Result<UpdateStatus, String> {
+pub async fn install_update(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+) -> Result<UpdateStatus, crate::error::Refusal> {
+    crate::acl::only(&window, &crate::acl::SETTINGS)?;
     let update = app
         .state::<Updates>()
         .pending
@@ -196,7 +200,8 @@ pub async fn install_update(app: AppHandle) -> Result<UpdateStatus, String> {
             Err(format!(
                 "La mise à jour a échoué ({}).",
                 status.available.unwrap_or_default()
-            ))
+            )
+            .into())
         }
     }
 }

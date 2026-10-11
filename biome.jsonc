@@ -28,7 +28,7 @@
       // Rules of the recommended preset still broken in the code: warn, not error, until fixed.
       // The number is the count of occurrences when the rule was set to warn.
       "correctness": {
-        "useExhaustiveDependencies": "warn", // 27 occurrences (the 25 intentional cases carry a biome-ignore with their reason)
+        "useExhaustiveDependencies": "warn", // 25 occurrences (the 24 intentional cases carry a biome-ignore with their reason)
         "noUnsafeOptionalChaining": "warn" // 2 occurrences
       },
       "suspicious": {

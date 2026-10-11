@@ -29,30 +29,26 @@ async function transformsDuring(page: Page, selector: string, ms: number) {
   );
 }
 
-// The loop of the waiting pill: the Îlot's orb (lot 8, the Perle breathing in 2.4 s), the preview's
-// default as the app's; asked for (`&ui=v4`), the 0.4 spinner turning once a second.
-const loops = [
-  { name: 'Îlot', query: '', loop: '.working-pill .ldr', period: '2.4s' },
-  { name: '0.4', query: '&ui=v4', loop: '.wait-pill svg', period: '1s' },
-] as const;
+// The loop of the waiting pill: the Îlot's orb (lot 8, the Perle breathing in 2.4 s).
+const loop = '.working-pill .ldr';
+const period = '2.4s';
 
-for (const { name, query, loop, period } of loops)
-  test(`« suivre Windows » follows prefers-reduced-motion live (${name})`, async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-    const html = page.locator('html');
-    await expect(html).toHaveAttribute('data-motion', 'full');
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await expect(html).toHaveAttribute('data-motion', 'reduced');
-    expect(await page.locator(loop).evaluate((el) => getComputedStyle(el).animationPlayState)).toBe('paused');
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await expect(html).toHaveAttribute('data-motion', 'full');
-    expect(
-      await page
-        .locator(loop)
-        .evaluate((el) => [getComputedStyle(el).animationPlayState, getComputedStyle(el).animationDuration]),
-    ).toEqual(['running', period]);
-  });
+test('« suivre Windows » follows prefers-reduced-motion live', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/?window=overlay&demo=1&scenario=long');
+  const html = page.locator('html');
+  await expect(html).toHaveAttribute('data-motion', 'full');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(html).toHaveAttribute('data-motion', 'reduced');
+  expect(await page.locator(loop).evaluate((el) => getComputedStyle(el).animationPlayState)).toBe('paused');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(html).toHaveAttribute('data-motion', 'full');
+  expect(
+    await page
+      .locator(loop)
+      .evaluate((el) => [getComputedStyle(el).animationPlayState, getComputedStyle(el).animationDuration]),
+  ).toEqual(['running', period]);
+});
 
 test('« suivre Windows » tells Motion live too, not only the CSS', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -71,39 +67,37 @@ test('« suivre Windows » tells Motion live too, not only the CSS', async ({ pa
   expect((await transformsDuring(page, '.more-menu', 250)).some((transform) => transform !== 'none')).toBe(true);
 });
 
-for (const { name, query, loop } of loops)
-  test(`« réduites » wins over a system that does not reduce: loops rest, menus and pills never move (${name})`, async ({
-    page,
-  }) => {
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-    await saveSettings(page, { motion: 'reduced' });
-    await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
-    expect(await page.locator(loop).evaluate((el) => getComputedStyle(el).animationPlayState)).toBe('paused');
-    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-    // Motion is told too (MotionConfig), not only the CSS: the menu opens without a transform.
-    await page.getByRole('button', { name: 'More options', exact: true }).click();
-    for (const transform of await transformsDuring(page, '.more-menu', 300)) expect(transform).toBe('none');
-  });
+test('« réduites » wins over a system that does not reduce: loops rest, menus and pills never move', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await page.goto('/?window=overlay&demo=1&scenario=long');
+  await saveSettings(page, { motion: 'reduced' });
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+  expect(await page.locator(loop).evaluate((el) => getComputedStyle(el).animationPlayState)).toBe('paused');
+  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
+  // Motion is told too (MotionConfig), not only the CSS: the menu opens without a transform.
+  await page.getByRole('button', { name: 'More options', exact: true }).click();
+  for (const transform of await transformsDuring(page, '.more-menu', 300)) expect(transform).toBe('none');
+});
 
-for (const { name, query, loop, period } of loops)
-  test(`« toujours » animates even when the system reduces motion (${name})`, async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: 'reduce' });
-    await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-    await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
-    await saveSettings(page, { motion: 'full' });
-    await expect(page.locator('html')).toHaveAttribute('data-motion', 'full');
-    expect(
-      await page
-        .locator(loop)
-        .evaluate((el) => [getComputedStyle(el).animationPlayState, getComputedStyle(el).animationDuration]),
-    ).toEqual(['running', period]);
-    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-    await page.getByRole('button', { name: 'More options', exact: true }).click();
-    // The menu enters on the spring: glide and scale show, then it rests.
-    expect((await transformsDuring(page, '.more-menu', 250)).some((transform) => transform !== 'none')).toBe(true);
-    await expect(page.getByRole('menu')).toHaveCSS('transform', 'none');
-  });
+test('« toujours » animates even when the system reduces motion', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/?window=overlay&demo=1&scenario=long');
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+  await saveSettings(page, { motion: 'full' });
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'full');
+  expect(
+    await page
+      .locator(loop)
+      .evaluate((el) => [getComputedStyle(el).animationPlayState, getComputedStyle(el).animationDuration]),
+  ).toEqual(['running', period]);
+  await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
+  await page.getByRole('button', { name: 'More options', exact: true }).click();
+  // The menu enters on the spring: glide and scale show, then it rests.
+  expect((await transformsDuring(page, '.more-menu', 250)).some((transform) => transform !== 'none')).toBe(true);
+  await expect(page.getByRole('menu')).toHaveCSS('transform', 'none');
+});
 
 test('the preset reaches Motion and the CSS: « bouncy » enters from 0.94 and springs the band', async ({ page }) => {
   await page.goto('/?window=overlay&demo=1&scenario=long');

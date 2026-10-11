@@ -113,14 +113,15 @@ export function useTranslation(readyOnMount = false) {
           serverId,
           actionId: capture.execution?.actionId ?? settingsRef.current?.defaultActionId ?? defaultActionId,
         })
-        .catch((error: unknown) => {
+        .catch(() => {
           if (requestRef.current === id)
             dispatch({
               type: 'STREAM',
               event: {
                 requestId: id,
                 kind: 'error',
-                message: typeof error === 'string' ? error : t('error.startFailed'),
+                // Rust refuses with a code (`{message, code}`): its French message never shows.
+                message: t('error.startFailed'),
               },
             });
         });
@@ -232,8 +233,7 @@ export function useTranslation(readyOnMount = false) {
         dispatch({ type: 'DELIVERY', event });
         // Pasted: the pill's check is the whole feedback; only a fallback needs its reason, in
         // the glass. The Îlot says it in its error pill, from the code.
-        if (event.status === 'fallback' && !ilotJourney(settingsRef.current, captureRef.current))
-          showNotice(event.message);
+        if (event.status === 'fallback' && !ilotJourney(captureRef.current)) showNotice(event.message);
       }),
       bridge.on<Screen>('work-area', (next) => setScreen(next)),
       // Lot 9: Undo is no longer safe; the reason decides what the Îlot says (src/menu/outcome.ts):
@@ -299,7 +299,7 @@ export function useTranslation(readyOnMount = false) {
     const timer = window.setTimeout(() => {
       const message = t('error.deliveryTimeout');
       dispatch({ type: 'DELIVERY', event: { requestId, status: 'fallback', confirmed: false, message } });
-      if (!ilotJourney(settingsRef.current, captureRef.current)) showNotice(message);
+      if (!ilotJourney(captureRef.current)) showNotice(message);
     }, DELIVERY_MS);
     return () => window.clearTimeout(timer);
   }, [state.phase, state.delivery, state.requestId, showNotice]);

@@ -1,3 +1,4 @@
+use crate::error::{ErrorKind, Refusal, SettingsRefusal};
 use crate::types::{Language, Server, Settings};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -67,16 +68,13 @@ pub struct Execution {
     pub delivered: bool,
 }
 impl Execution {
-    /// A direct capture. A `menu` binding reaches here only under the 0.4 interface
-    /// (`uiVersion: v4`): it runs the default action and replaces the selection.
+    /// A direct capture: an `action` binding's action and output mode, or the default action
+    /// shown when there is no binding. A `menu` binding never comes here: it opens the Îlot.
     pub fn snapshot(
         settings: &Settings,
         binding: Option<&ShortcutBinding>,
     ) -> Result<Self, String> {
         let (id, output_mode) = match binding {
-            Some(b) if b.kind == BindingKind::Menu => {
-                (settings.default_action_id.as_str(), OutputMode::Replace)
-            }
             Some(b) => (b.action_id.as_str(), b.output_mode),
             None => (settings.default_action_id.as_str(), OutputMode::Display),
         };
@@ -110,12 +108,15 @@ impl Execution {
         settings: &Settings,
         action_id: &str,
         instruction: Option<&str>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Refusal> {
         let action = match instruction {
             Some(instruction) => {
                 validate_instruction(instruction)?;
                 if action_id != INSTRUCTION_ACTION_ID {
-                    return Err("La consigne libre ne correspond pas à l’action demandée.".into());
+                    return Err(Refusal::new(
+                        ErrorKind::InstructionInvalid,
+                        "La consigne libre ne correspond pas à l’action demandée.",
+                    ));
                 }
                 ActionDefinition {
                     id: INSTRUCTION_ACTION_ID.into(),
@@ -239,8 +240,7 @@ pub fn defaults() -> Vec<ActionDefinition> {
 pub fn default_menu_action_ids() -> Vec<String> {
     DEFAULTS.iter().map(|(id, ..)| (*id).to_string()).collect()
 }
-/// A fresh install has one shortcut: the Îlot menu on Ctrl+Alt+Space. Under the 0.4
-/// interface (`uiVersion: v4`) it runs the default action and replaces the selection.
+/// A fresh install has one shortcut: the Îlot menu on Ctrl+Alt+Space.
 pub fn default_bindings() -> Vec<ShortcutBinding> {
     vec![menu_binding("menu".into())]
 }
@@ -427,22 +427,24 @@ pub fn instruction_prompt(instruction: &str) -> String {
     format!("You are a writing assistant. Rewrite the text by following the user's instruction below. Do what the instruction asks and nothing else; unless it says otherwise, keep the language of the text, its meaning, names, numbers and facts.\n\nThe user's instruction: {}\n\n{OUTPUT_RULES}", instruction.trim())
 }
 /// A free instruction typed in the Îlot: 1 to 1,000 Unicode characters, not blank, no NUL.
-pub fn validate_instruction(instruction: &str) -> Result<(), String> {
+pub fn validate_instruction(instruction: &str) -> Result<(), Refusal> {
     if instruction.trim().is_empty()
         || instruction.chars().count() > 1000
         || instruction.contains('\0')
     {
-        return Err(
-            "La consigne libre doit contenir de 1 à 1 000 caractères, sans caractère nul.".into(),
-        );
+        return Err(Refusal::new(
+            ErrorKind::InstructionInvalid,
+            "La consigne libre doit contenir de 1 à 1 000 caractères, sans caractère nul.",
+        ));
     }
     Ok(())
 }
-pub fn validate_template(template: &str) -> Result<(), String> {
+pub fn validate_template(template: &str) -> Result<(), Refusal> {
     if template.trim().is_empty() || template.chars().count() > 8000 || template.contains('\0') {
-        return Err(
-            "La consigne doit contenir de 1 à 8 000 caractères, sans caractère nul.".into(),
-        );
+        return Err(Refusal::new(
+            SettingsRefusal::ActionPrompt,
+            "La consigne doit contenir de 1 à 8 000 caractères, sans caractère nul.",
+        ));
     }
     Ok(())
 }
@@ -600,9 +602,16 @@ pub fn hotkey_vk(shortcut: &Shortcut) -> Option<(u32, u32)> {
     };
     Some((vk, mods))
 }
-pub fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
+/// A refusal of the Settings: its code, and the French message of 0.4 for the journal.
+fn refusal(code: SettingsRefusal, message: &str) -> Refusal {
+    Refusal::new(code, message)
+}
+pub fn parse_shortcut(value: &str) -> Result<Shortcut, Refusal> {
     if value.len() > 80 {
-        return Err("Le raccourci est trop long.".into());
+        return Err(refusal(
+            SettingsRefusal::ShortcutTooLong,
+            "Le raccourci est trop long.",
+        ));
     }
     let parts = value
         .split('+')
@@ -614,16 +623,25 @@ pub fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
             "super" | "meta" | "win" | "windows" | "cmd" | "command"
         )
     }) {
-        return Err("La touche Windows est réservée au système.".into());
+        return Err(refusal(
+            SettingsRefusal::ShortcutWindowsKey,
+            "La touche Windows est réservée au système.",
+        ));
     }
     if parts.iter().any(|v| v == "f12") {
-        return Err("F12 est réservée par Windows.".into());
+        return Err(refusal(
+            SettingsRefusal::ShortcutF12,
+            "F12 est réservée par Windows.",
+        ));
     }
     if !parts
         .iter()
         .any(|v| matches!(v.as_str(), "ctrl" | "control" | "alt"))
     {
-        return Err("Ajoutez Ctrl ou Alt à la combinaison.".into());
+        return Err(refusal(
+            SettingsRefusal::ShortcutNeedsModifier,
+            "Ajoutez Ctrl ou Alt à la combinaison.",
+        ));
     }
     if (parts.iter().any(|p| p == "ctrl" || p == "control")
         && parts.iter().any(|p| p == "alt")
@@ -633,26 +651,41 @@ pub fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
                 .last()
                 .is_some_and(|p| matches!(p.as_str(), "tab" | "f4" | "escape")))
     {
-        return Err("Cette combinaison est réservée à Windows.".into());
+        return Err(refusal(
+            SettingsRefusal::ShortcutReserved,
+            "Cette combinaison est réservée à Windows.",
+        ));
     }
-    value
-        .parse()
-        .map_err(|_| "Le raccourci n’est pas reconnu.".into())
+    value.parse().map_err(|_| {
+        refusal(
+            SettingsRefusal::ShortcutUnknown,
+            "Le raccourci n’est pas reconnu.",
+        )
+    })
 }
-pub fn validate(settings: &Settings) -> Result<(), String> {
+pub fn validate(settings: &Settings) -> Result<(), Refusal> {
     if settings.actions.is_empty() || settings.actions.len() > 24 {
-        return Err("Configurez entre 1 et 24 actions.".into());
+        return Err(refusal(
+            SettingsRefusal::Actions,
+            "Configurez entre 1 et 24 actions.",
+        ));
     }
     let mut ids = HashSet::new();
     for action in &settings.actions {
         if action.id.is_empty() || action.id.len() > 80 || !ids.insert(&action.id) {
-            return Err("Identifiant d’action invalide ou dupliqué.".into());
+            return Err(refusal(
+                SettingsRefusal::ActionId,
+                "Identifiant d’action invalide ou dupliqué.",
+            ));
         }
         if action.name.trim().is_empty()
             || action.name.chars().count() > 60
             || action.name.chars().any(char::is_control)
         {
-            return Err("Le nom d’une action doit contenir de 1 à 60 caractères.".into());
+            return Err(refusal(
+                SettingsRefusal::ActionName,
+                "Le nom d’une action doit contenir de 1 à 60 caractères.",
+            ));
         }
         validate_template(&action.prompt_template)?;
         if let Some(short) = &action.short_name {
@@ -660,7 +693,10 @@ pub fn validate(settings: &Settings) -> Result<(), String> {
                 || short.chars().count() > 16
                 || short.chars().any(char::is_control)
             {
-                return Err("Le nom court d’une action doit contenir de 1 à 16 caractères.".into());
+                return Err(refusal(
+                    SettingsRefusal::ActionShortName,
+                    "Le nom court d’une action doit contenir de 1 à 16 caractères.",
+                ));
             }
         }
         if let Some(icon) = &action.icon {
@@ -668,7 +704,10 @@ pub fn validate(settings: &Settings) -> Result<(), String> {
                 || icon.len() > 40
                 || !icon.chars().all(|c| c.is_ascii_alphanumeric())
             {
-                return Err("Icône d’action invalide.".into());
+                return Err(refusal(
+                    SettingsRefusal::ActionIcon,
+                    "Icône d’action invalide.",
+                ));
             }
         }
     }
@@ -680,40 +719,65 @@ pub fn validate(settings: &Settings) -> Result<(), String> {
     {
         let mut chars = key.chars();
         let (Some(letter), None) = (chars.next(), chars.next()) else {
-            return Err("La touche d’une action est une seule lettre.".into());
+            return Err(refusal(
+                SettingsRefusal::ActionLetter,
+                "La touche d’une action est une seule lettre.",
+            ));
         };
         if !letter.is_alphabetic() || !letters.insert(letter.to_lowercase().to_string()) {
-            return Err(
-                "La touche d’une action est une lettre, différente pour chaque action.".into(),
-            );
+            return Err(refusal(
+                SettingsRefusal::ActionLetter,
+                "La touche d’une action est une lettre, différente pour chaque action.",
+            ));
         }
     }
     if settings.menu_action_ids.len() > 6 {
-        return Err("La grille du menu contient six actions au plus.".into());
+        return Err(refusal(
+            SettingsRefusal::GridTooMany,
+            "La grille du menu contient six actions au plus.",
+        ));
     }
     let mut grid = HashSet::new();
     for id in &settings.menu_action_ids {
         if !ids.contains(id) || !grid.insert(id) {
-            return Err("La grille du menu utilise une action absente ou répétée.".into());
+            return Err(refusal(
+                SettingsRefusal::GridAction,
+                "La grille du menu utilise une action absente ou répétée.",
+            ));
         }
     }
     if !ids.contains(&settings.default_action_id) {
-        return Err("L’action par défaut n’existe pas.".into());
+        return Err(refusal(
+            SettingsRefusal::DefaultAction,
+            "L’action par défaut n’existe pas.",
+        ));
     }
     if settings.shortcut_bindings.is_empty() || settings.shortcut_bindings.len() > 12 {
-        return Err("Configurez entre 1 et 12 raccourcis.".into());
+        return Err(refusal(
+            SettingsRefusal::Shortcuts,
+            "Configurez entre 1 et 12 raccourcis.",
+        ));
     }
     let mut binding_ids = HashSet::new();
     let mut keys = HashSet::new();
     for binding in &settings.shortcut_bindings {
         if binding.id.is_empty() || binding.id.len() > 80 || !binding_ids.insert(&binding.id) {
-            return Err("Identifiant de raccourci invalide ou dupliqué.".into());
+            return Err(refusal(
+                SettingsRefusal::ShortcutId,
+                "Identifiant de raccourci invalide ou dupliqué.",
+            ));
         }
         if !ids.contains(&binding.action_id) {
-            return Err("Un raccourci utilise une action absente.".into());
+            return Err(refusal(
+                SettingsRefusal::ShortcutAction,
+                "Un raccourci utilise une action absente.",
+            ));
         }
         if binding.enabled && !keys.insert(parse_shortcut(&binding.shortcut)?.id()) {
-            return Err("Deux raccourcis actifs utilisent la même combinaison.".into());
+            return Err(refusal(
+                SettingsRefusal::ShortcutDuplicate,
+                "Deux raccourcis actifs utilisent la même combinaison.",
+            ));
         }
     }
     Ok(())
@@ -827,15 +891,28 @@ mod tests {
     }
     #[test]
     fn shortcut_policy_and_alias_duplicates() {
-        for value in ["T", "Shift+T", "Super+T", "Ctrl+F12"] {
-            assert!(parse_shortcut(value).is_err());
+        // Each refusal with its code (the Settings say it in the interface language).
+        let code = |value: &str| parse_shortcut(value).unwrap_err().code;
+        for (value, expected) in [
+            ("T", SettingsRefusal::ShortcutNeedsModifier),
+            ("Shift+T", SettingsRefusal::ShortcutNeedsModifier),
+            ("Super+T", SettingsRefusal::ShortcutWindowsKey),
+            ("Ctrl+F12", SettingsRefusal::ShortcutF12),
+            ("Alt+F4", SettingsRefusal::ShortcutReserved),
+            ("Ctrl+Alt+Nope", SettingsRefusal::ShortcutUnknown),
+            (&"Ctrl+".repeat(17), SettingsRefusal::ShortcutTooLong),
+        ] {
+            assert_eq!(code(value), expected.into(), "{value}");
         }
         let mut settings = Settings::default();
         let mut other = settings.shortcut_bindings[0].clone();
         other.id = "other".into();
         other.shortcut = "Control+Alt+Space".into();
         settings.shortcut_bindings.push(other);
-        assert!(validate(&settings).is_err());
+        assert_eq!(
+            validate(&settings).unwrap_err().code,
+            SettingsRefusal::ShortcutDuplicate.into()
+        );
         settings.shortcut_bindings[1].enabled = false;
         assert!(validate(&settings).is_ok());
     }
@@ -1067,36 +1144,25 @@ mod tests {
                 enabled: true
             }]
         );
-        assert_eq!(
-            settings.ui_version,
-            crate::types::UiVersion::Ilot,
-            "a fresh install opens the Îlot"
-        );
         assert!(validate(&settings).is_ok());
     }
     #[test]
-    fn under_the_0_4_interface_a_menu_shortcut_runs_the_default_action_and_replaces() {
+    fn a_direct_shortcut_runs_its_own_action_and_output_mode() {
         let settings = Settings {
             default_action_id: "translate".into(),
             ..Settings::default()
         };
-        let menu = settings.shortcut_bindings[0].clone();
-        let run = Execution::snapshot(&settings, Some(&menu)).unwrap();
-        assert_eq!(
-            (run.info.action_id.as_str(), run.info.output_mode),
-            ("translate", OutputMode::Replace),
-            "not the binding's own action id"
-        );
         let direct = ShortcutBinding {
             kind: BindingKind::Action,
             action_id: "shorten".into(),
             output_mode: OutputMode::Display,
-            ..menu
+            ..settings.shortcut_bindings[0].clone()
         };
         let run = Execution::snapshot(&settings, Some(&direct)).unwrap();
         assert_eq!(
             (run.info.action_id.as_str(), run.info.output_mode),
-            ("shorten", OutputMode::Display)
+            ("shorten", OutputMode::Display),
+            "not the default action"
         );
     }
     #[test]

@@ -143,14 +143,10 @@ export function ShortcutsPage() {
   const t = useT();
   const { settings, persist, recordShortcut, recording, registrations } = useSettingsContext();
   const [fresh, setFresh] = useState<string | null>(null);
-  const ilot = settings.uiVersion === 'ilot';
   // The menu's own binding lives in « Menu »; any other one is a direct shortcut.
   const menuBinding = settings.shortcutBindings.find((binding) => binding.kind === 'menu');
   const direct = settings.shortcutBindings.filter((binding) => binding !== menuBinding);
-  const help =
-    menuBinding && !menuBinding.enabled
-      ? t('settings.menuShortcutOff')
-      : t(ilot ? 'settings.menuShortcutHelp' : 'settings.menuShortcutHelpV4');
+  const help = menuBinding && !menuBinding.enabled ? t('settings.menuShortcutOff') : t('settings.menuShortcutHelp');
   const update = (id: string, patch: Partial<ShortcutBinding>) =>
     persist(
       {
@@ -203,7 +199,7 @@ export function ShortcutsPage() {
         <Row
           id="defaultAction"
           title={t('settings.defaultAction')}
-          description={t(ilot ? 'settings.defaultActionHelp' : 'settings.defaultActionHelpV4')}
+          description={t('settings.defaultActionHelp')}
           control={
             <Select
               label={t('settings.defaultAction')}

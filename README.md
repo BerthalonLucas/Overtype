@@ -75,8 +75,11 @@ npx playwright test
 cargo fmt --check --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 cargo test --locked --manifest-path src-tauri/Cargo.toml
+npm run test:replacement  # banc de remplacement réel : Edge, VS Code, Writer (Windows)
 npm run tauri -- build --bundles nsis
 ```
+
+Ce banc prend clavier, souris et presse-papiers ; ses XFAIL sont des risques ouverts, attendus en échec.
 
 Modes sans moteur : `Overtype.exe --demo-selection`, `--demo-clipboard`, `--demo-long` ;
 `--simulate-inference` garde la capture réelle et simule la réponse ; `--settings` ouvre les

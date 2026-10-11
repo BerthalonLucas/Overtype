@@ -8,7 +8,7 @@ param(
     [string]$DataDirectory = '',
     # settings.json copied into that folder before launch. By default the probe's own
     # (scripts/native-ui-settings/<Theme>.json): the demo opens the reader the probe checks first,
-    # no global shortcut is registered, and the Îlot (uiVersion's default) runs its journey.
+    # no global shortcut is registered, and the Îlot runs its journey.
     [string]$SettingsFile = '',
     [ValidateSet('light', 'dark')]
     [string]$Theme = 'light',

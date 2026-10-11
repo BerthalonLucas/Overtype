@@ -1,16 +1,16 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { scenarios } from '../src/lab/scenarios';
 
-// Two journeys, two sets of references (README.md). The frame opens in the Îlot, the app's
-// default: the 0.4 journey (uiVersion « v4 ») is asked for with ui=v4. `--grep @v4` or
-// `--grep @ilot` checks one set alone.
+// Two sets of references (README.md): the glass states recorded at 0.4.0 (`@v4`) and the Îlot's
+// (`@ilot`). The frame opens in the app's one interface, the Îlot. `--grep @v4` or `--grep @ilot`
+// checks one set alone.
 
-// The 0.4 journey: the images recorded at 0.4.0, under their names of then.
+// The images recorded at 0.4.0, under their names of then.
 const v4States = ['short', 'long', 'pending', 'partial', 'error', 'notice', 'settings', 'history'] as const;
 for (const theme of ['light', 'dark']) {
   for (const id of v4States) {
     test(`${id} / ${theme}`, { tag: '@v4' }, async ({ page }) => {
-      await page.goto(`/lab-frame.html?scenario=${id}&theme=${theme}&motion=reduce&ui=v4`);
+      await page.goto(`/lab-frame.html?scenario=${id}&theme=${theme}&motion=reduce`);
       if (['short', 'long'].includes(id))
         await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'complete');
       else if (['error', 'partial'].includes(id))
@@ -39,7 +39,7 @@ for (const [width, height] of [
 ]) {
   test(`reader on a ${width} px screen`, { tag: '@v4' }, async ({ page }) => {
     await page.setViewportSize({ width, height });
-    await page.goto(`/lab-frame.html?scenario=long&theme=dark&motion=reduce&ui=v4`);
+    await page.goto(`/lab-frame.html?scenario=long&theme=dark&motion=reduce`);
     await expect(page.locator('[data-lab-phase]')).toHaveAttribute('data-lab-phase', 'complete');
     await expect(page.locator('.translation-bubble')).toHaveCSS('width', `${width / 2}px`);
     await expect(page).toHaveScreenshot(`reader-${width}.png`);
@@ -47,7 +47,7 @@ for (const [width, height] of [
 }
 test('settings at narrow width', { tag: '@v4' }, async ({ page }) => {
   await page.setViewportSize({ width: 480, height: 640 });
-  await page.goto('/lab-frame.html?scenario=settings&motion=reduce&ui=v4');
+  await page.goto('/lab-frame.html?scenario=settings&motion=reduce');
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await expect(page).toHaveScreenshot('settings-narrow.png');
 });

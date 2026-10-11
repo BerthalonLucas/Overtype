@@ -23,7 +23,7 @@ import { indicatorOf } from '../loaders/pill';
 import { useMotionPreset, useReducedMotionSetting } from '../motion/MotionPreferences';
 import { animateCorner, fadeCorner, type CornerMove, type CornerOffset } from '../motion/surface';
 import { checkOnlyMs, Countdown, resultTiming } from '../result/countdown';
-import { errorCodeOf, refusalCode, type ErrorAction } from '../result/errors';
+import { describeError, errorCodeOf, refusalCode, type ErrorAction } from '../result/errors';
 import { changedRanges } from '../result/highlight';
 import { resultContent, type ActionAnswer, type ResultStage } from '../result/ResultPill';
 import type {
@@ -44,7 +44,7 @@ import { MorphSurface, type ShapeChange, type SurfaceSize } from './MorphSurface
 import { effectiveAfterReplace, ilotOutcome, ownPasteRefusal, type OwnPaste, type UndoProgress } from './outcome';
 
 /*
- * The Îlot in the overlay (lot 7, uiVersion 'ilot'): a menu capture (`capture.menu`, no execution
+ * The Îlot in the overlay (lot 7): a menu capture (`capture.menu`, no execution
  * yet) opens the Îlot by its selection; the choice goes through `choose_action` once
  * (useTranslation.choose), then the same surface, never unmounted, carries the whole result
  * (lots 8 to 10, src/result/ResultPill.tsx resultContent): the work pill while the model works and
@@ -74,7 +74,7 @@ import { effectiveAfterReplace, ilotOutcome, ownPasteRefusal, type OwnPaste, typ
  *   lost      `target-invalidated` before any choice (none on its way either): the Îlot leaves.
  *   buttons   configuration → open_settings on the request's field, then the Îlot leaves;
  *             transient → Try again: the same action on the same capture (useTranslation.start,
- *             the v4 relaunch), whose result the Îlot pastes itself (replace_result, once: Rust
+ *             the glass's relaunch), whose result the Îlot pastes itself (replace_result, once: Rust
  *             delivers a capture's first request only; a refusal reads as its code, `{message,
  *             code}`, src/result/errors.ts refusalCode); paste → Copy result (copy_result), nothing
  *             replaced; content → ✕ only; cancelled → the Îlot leaves. ✕ and Escape close.
@@ -440,7 +440,8 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     choose(actionId, instruction).catch((reason: unknown) => {
       if (!alive.current) return;
       setChoosing(false);
-      setRefusal(typeof reason === 'string' ? reason : t('error.startFailed'));
+      // Rust's code, in the interface language (never its French message).
+      setRefusal(t(describeError(refusalCode(reason)).message));
     });
   };
 

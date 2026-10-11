@@ -64,6 +64,8 @@ import './ilot.css';
  *   onRequestKeyboard()  'injected' only: the pastille or the « Ask » tile clicked asks for the
  *                  keyboard; the field opens once the promise answers true (the parent then
  *                  passes keyboard 'focused').
+ *                  'none': a picture of the Îlot (the Settings previews): no key listened to,
+ *                  no focus moved, the free instruction drawn as available.
  *   ref            IlotHandle: press(key, modifiers) → whether the menu used the key: a key Rust
  *                  forwards (`menu-key`), or one the window received before the Îlot listened
  *                  (src/menu/IlotStage.tsx replays them in order). A character pressed while the
@@ -82,7 +84,7 @@ import './ilot.css';
  * Wrap it in <AnimatePresence> for its exit. Measure it on [data-ilot-shape].
  */
 
-export type IlotKeyboard = 'focused' | 'injected';
+export type IlotKeyboard = 'focused' | 'injected' | 'none';
 export type IlotShape = 'menu' | 'pill';
 // The content of the pill shape (the same as src/result/ResultPill.tsx ResultContent).
 export type PillContent = { key: string; size?: SurfaceSize; node: ReactNode };
@@ -149,6 +151,10 @@ export function Ilot({
 }: IlotProps) {
   const t = useT();
   const promptAvailable = keyboard !== 'injected';
+  // A picture of the Îlot (keyboard 'none': the Settings previews) holds no button: it is drawn
+  // inside other controls (a Settings card is a button), where a button cannot nest.
+  const Item = keyboard === 'none' ? 'span' : 'button';
+  const itemType = keyboard === 'none' ? undefined : ('button' as const);
   const context = useMemo(
     () => ilotKeyContext(actions, lastActionId, promptAvailable, knownActions),
     [actions, lastActionId, promptAvailable, knownActions],
@@ -276,8 +282,8 @@ export function Ilot({
   }, [keyboard]);
 
   // Roving focus: the highlighted item holds the focus while the window has the keyboard.
-  const compactItems = useRef<Partial<Record<CompactItem, HTMLButtonElement | null>>>({});
-  const tileItems = useRef<Array<HTMLButtonElement | null>>([]);
+  const compactItems = useRef<Partial<Record<CompactItem, HTMLElement | null>>>({});
+  const tileItems = useRef<Array<HTMLElement | null>>([]);
   useEffect(() => {
     if (keyboard !== 'focused' || shape !== 'menu') return;
     const target =
@@ -335,10 +341,10 @@ export function Ilot({
           const digit = String(index + 1);
           const common = {
             role: 'menuitem',
-            type: 'button' as const,
+            type: itemType,
             tabIndex: isHot ? 0 : -1,
             className: `ilot-tile${isHot ? ' is-hot' : ''}`,
-            ref: (element: HTMLButtonElement | null) => {
+            ref: (element: HTMLElement | null) => {
               tileItems.current[index] = element;
             },
             onMouseEnter: () => setHot(index),
@@ -346,7 +352,7 @@ export function Ilot({
           };
           if (tile.kind === 'ask')
             return (
-              <button
+              <Item
                 key="ask"
                 {...common}
                 data-tile="ask"
@@ -356,11 +362,11 @@ export function Ilot({
               >
                 <Icon name="custom" size={16} />
                 <span className="ilot-tile-label">{t('ilot.ask')}</span>
-              </button>
+              </Item>
             );
           const letter = letterOf(tile.action, context.letters);
           return (
-            <button
+            <Item
               key={tile.action.id}
               {...common}
               data-tile={tile.action.id}
@@ -369,7 +375,7 @@ export function Ilot({
             >
               <ActionIcon action={tile.action} size={16} />
               <span className="ilot-tile-label">{shortLabel(tile.action)}</span>
-            </button>
+            </Item>
           );
         })}
       </div>
@@ -380,9 +386,9 @@ export function Ilot({
     content = (
       <div role="menu" aria-label={t('ilot.menu')} aria-orientation="horizontal" className="ilot-row">
         {last && (
-          <button
+          <Item
             role="menuitem"
-            type="button"
+            type={itemType}
             tabIndex={focusable === 'last' ? 0 : -1}
             className="ilot-btn is-default"
             data-item="last"
@@ -398,14 +404,14 @@ export function Ilot({
             <span className="ilot-hint" aria-hidden="true">
               ↵
             </span>
-          </button>
+          </Item>
         )}
         {last && <span className="ilot-sep" aria-hidden="true" />}
-        <button
+        <Item
           role="menuitem"
-          type="button"
+          type={itemType}
           tabIndex={focusable === 'ask' ? 0 : -1}
-          className="ilot-btn ilot-ask"
+          className="ilot-btn"
           data-item="ask"
           ref={(element) => {
             compactItems.current.ask = element;
@@ -425,7 +431,7 @@ export function Ilot({
           onClick={openField}
         >
           <span className="ilot-dot" />
-        </button>
+        </Item>
       </div>
     );
   }

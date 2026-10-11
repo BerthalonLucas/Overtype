@@ -11,7 +11,7 @@
 /* 5 Perle (gradient orb) */
 .perle { --size: 14px; --rot: 3s; --blur: 2.5px; --breathe: .9; --glow: .45; width: var(--size); height: var(--size); border-radius: 50%; overflow: hidden; isolation: isolate;
   box-shadow: 0 0 0 .5px rgb(var(--ink-rgb) / .12), 0 1px 6px rgb(188 130 243 / var(--glow)); animation: perle-b calc(2.4s / var(--speed)) cubic-bezier(.45,0,.55,1) infinite; }
-.perle::before { content: ""; position: absolute; inset: -30%; background: conic-gradient(from 0deg, #BC82F3, #F5B9EA, #8D9FFF, #AA6EEE, #FF6778, #FFBA71, #C686FF, #BC82F3); filter: blur(var(--blur)); animation: ldr-spin calc(var(--rot) / var(--speed)) linear infinite; }
+.perle::before { content: ""; position: absolute; inset: -30%; background: conic-gradient(from 0deg, var(--brand-stops-rich)); filter: blur(var(--blur)); animation: ldr-spin calc(var(--rot) / var(--speed)) linear infinite; }
 .perle::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: radial-gradient(circle at 34% 28%, rgb(255 255 255 / .9) 0, rgb(255 255 255 / 0) 42%), radial-gradient(circle at 70% 80%, rgb(255 255 255 / 0) 50%, rgb(255 255 255 / .35) 100%); }
 @keyframes perle-b { 0%, 100% { transform: scale(var(--breathe)); } 50% { transform: scale(1); } }
 

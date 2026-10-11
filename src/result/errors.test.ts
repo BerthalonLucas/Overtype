@@ -20,6 +20,15 @@ const outcomes = new Function(
 )() as Outcome[];
 const outcome = (id: string) => outcomes.find((item) => item.id === id)!;
 
+// ErrorKind::ALL as src-tauri/src/error.rs writes it, each variant by the snake_case word its
+// test's exhaustive match gives it (`kind_name`): the list Rust really sends, read from its source.
+const rustKinds = () => {
+  const start = errorRs.indexOf('impl ErrorKind {');
+  const variants = [...errorRs.slice(start, errorRs.indexOf('];', start)).matchAll(/Self::(\w+)/g)].map((m) => m[1]);
+  const names = new Map([...errorRs.matchAll(/ErrorKind::(\w+) => "([a-z0-9_]+)"/g)].map((m) => [m[1], m[2]]));
+  return variants.map((variant) => names.get(variant) ?? `?${variant}`);
+};
+
 // Words as a reader counts them: a number with its thousands separator is one.
 const wordCount = (text: string) =>
   text
@@ -53,6 +62,10 @@ describe('error codes', () => {
       'read_only',
       'protected_window',
       'setup_open',
+      'clipboard_unkeepable',
+      'target_unverified',
+      'capture_gone',
+      'instruction_invalid',
     ]);
     const families = Object.fromEntries(errorCodes.map((kind) => [kind, errorFamily(kind)]));
     expect(families).toEqual({
@@ -71,6 +84,8 @@ describe('error codes', () => {
       not_editable: 'paste',
       keys_held: 'paste',
       read_only: 'paste',
+      clipboard_unkeepable: 'paste',
+      target_unverified: 'paste',
       too_long: 'content',
       no_selection: 'content',
       protected_field: 'content',
@@ -78,16 +93,22 @@ describe('error codes', () => {
       nothing_recent: 'content',
       protected_window: 'content',
       setup_open: 'content',
+      capture_gone: 'content',
+      instruction_invalid: 'content',
       cancelled: 'silent',
     });
   });
 
   it('knows every code Rust sends, and no other', () => {
-    // src-tauri/src/error.rs lists each ErrorKind with its snake_case name in its own test: a code
-    // added on the native side fails here until the front gives it a family and its texts.
-    const rust = [...errorRs.matchAll(/\(ErrorKind::\w+, "([a-z_]+)"\)/g)].map((match) => match[1]);
-    expect(rust.length).toBeGreaterThan(0);
-    expect([...rust].sort()).toEqual([...errorCodes].sort());
+    // ErrorKind::ALL (src-tauri/src/error.rs), whose own test matches every variant exhaustively and
+    // counts ALL against it: a code added on the native side fails here until the front gives it a
+    // family and its texts.
+    const rust = rustKinds();
+    expect(rust.length).toBeGreaterThan(20);
+    expect(rust).toEqual([...errorCodes]);
+    for (const code of errorCodes)
+      for (const language of languages)
+        expect(translate(language, describeError(code).message).trim(), `${code} ${language}`).not.toBe('');
   });
 
   it('reads a code from the bridge, anything unknown being internal', () => {
@@ -127,15 +148,35 @@ describe('error codes', () => {
     for (const code of errorCodes) {
       const { action, actionLabel, message } = describeError(code, { source: 'capture' });
       expect([action, actionLabel], code).toEqual([null, null]);
-      // The request's words, but for the source window changing during the capture: nothing
-      // was tried, so « not replaced » would mislead.
+      // The request's words, but for the source window changing during the capture and for a
+      // clipboard that could not be kept (the copy was never sent): nothing was tried, so « not
+      // replaced » would mislead.
       expect(message, code).toBe(
-        code === 'target_changed' ? 'result.notice.target_changed' : describeError(code).message,
+        code === 'target_changed' || code === 'clipboard_unkeepable'
+          ? `result.notice.${code}`
+          : describeError(code).message,
       );
     }
     expect(
       languages.map((language) => translate(language, describeError('target_changed', { source: 'capture' }).message)),
     ).toEqual(['Window changed — try again', 'Fenêtre changée, réessayez']);
+    // NATIVE-004 (lot C): why, and what to do; nothing was lost.
+    expect(
+      languages.map((language) =>
+        translate(language, describeError('clipboard_unkeepable', { source: 'capture' }).message),
+      ),
+    ).toEqual(['Can’t save clipboard — copy, then retry', 'Presse-papiers non sauvegardable : copiez, puis relancez']);
+    expect(languages.map((language) => translate(language, describeError('clipboard_unkeepable').message))).toEqual([
+      'Can’t save clipboard — not replaced',
+      'Presse-papiers non sauvegardable, rien remplacé',
+    ]);
+    expect(describeError('clipboard_unkeepable').action).toEqual({ type: 'copy' });
+    // NATIVE-001 (lot C): UI Automation no longer answers at the paste: Copy result.
+    expect(languages.map((language) => translate(language, describeError('target_unverified').message))).toEqual([
+      'Can’t check selection — not replaced',
+      'Sélection invérifiable, rien remplacé',
+    ]);
+    expect(describeError('target_unverified').action).toEqual({ type: 'copy' });
   });
 
   it('says why an Undo could not be done in its own words, with no button: nothing else is pasted', () => {

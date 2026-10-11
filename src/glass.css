@@ -46,16 +46,9 @@
 .wait-spinner { display: inline-flex; align-items: center; justify-content: center; height: 28px; color: var(--text); }
 .wait-spinner svg { display: block; animation: wait-spin 1s linear infinite; will-change: transform; }
 @keyframes wait-spin { to { transform: rotate(360deg); } }
-/* The waiting pill alone: 60 × 28 where the action pill will stand (anchored), or centred (bottom); a progress sweep after 1.5 s. */
-.wait-pill { position: absolute; top: 0; right: 16px; display: inline-flex; align-items: center; justify-content: center; width: 60px; height: 28px; border-radius: 14px; overflow: hidden; }
 .is-pending .glass-body { min-height: 42px; }
-.wait-pill[data-done] { color: var(--text); }
-.is-bottom .wait-pill { right: auto; left: calc(50% - 30px); }
-.wait-pill[data-slow="true"]::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, transparent, var(--accent-cursor), transparent); animation: wait-sweep 1400ms linear infinite; }
-@keyframes wait-sweep { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
-/* Îlot (lot 8): the working pill (44 or 52 × 28, src/loaders/pill.ts) stands where the wait pill
-   stood, at the upper right of the glass to come (anchored) or centred (bottom); no sweep, it never
-   grows. Centred with left rather than a transform: the regions unscale the paint transform only. */
+/* Îlot (lot 8): the working pill (44 or 52 × 28, src/loaders/pill.ts) stands at the upper right of
+   the glass to come (anchored) or centred (bottom); no sweep, it never grows. Centred with left rather than a transform: the regions unscale the paint transform only. */
 .glass-body > .working-pill { position: absolute; top: 0; right: 16px; }
 .is-bottom .glass-body > .working-pill { right: auto; left: calc(50% - var(--working-pill-width) / 2); }
 .wait-inline { display: block; height: var(--copy-line); }
@@ -119,14 +112,13 @@
 .quiet-action { color: var(--text); background: var(--quiet-bg); }
 .subtle-warning { margin: 12px 0 0; color: var(--warning-text); font-size: 12px; line-height: 18px; }
 .error-copy { color: var(--error-text); }
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; pointer-events: none; }
+.sr-only, .st-sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; pointer-events: none; }
 /* Reduced motion (« Animations : réduites », or « suivre Windows » while Windows reduces them):
    data-motion on <html> (src/motion/preference.ts), same global reach as the media query it
    replaces. Nothing moves or springs; loops rest (paused, as the lab's loaders.css), the sweep
    stands still; only opacity fades of 120 ms remain (≤ 150 ms, plan §Lot 2). */
 :root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after { animation-duration: .01ms !important; animation-delay: 0s !important; animation-iteration-count: 1 !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
 :root[data-motion="reduced"] .wait-spinner svg { animation-play-state: paused !important; }
-:root[data-motion="reduced"] .wait-pill::after { animation: none !important; }
 :root[data-motion="reduced"] .translation-bubble[data-reveal="true"], :root[data-motion="reduced"] .translation-bubble[data-reveal="true"] .reveal { animation: text-in 120ms linear both !important; }
 
 /* A surface that changes shape (src/motion/surface.ts, animateSurface): the clip follows the

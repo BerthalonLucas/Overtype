@@ -5,7 +5,7 @@ param(
     # A fresh data folder per run: the build-target executable would otherwise read and
     # rewrite the installed app's settings.json and history (%APPDATA%\com.flowtranslate.desktop).
     [string]$DataDirectory = '',
-    # Optional settings.json copied into that folder before launch (e.g. uiVersion « ilot »).
+    # Optional settings.json copied into that folder before launch (e.g. a theme or an indicator).
     [string]$SettingsFile = ''
 )
 $ErrorActionPreference = 'Stop'

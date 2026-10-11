@@ -1,16 +1,23 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "settings-resize",
-  "description": "The framed windows (settings, setup): drag by the home-made title bar, minimise, resize the settings from its corner grip, and title them in the interface language",
+  "identifier": "settings",
+  "description": "The Settings window: its home-made title bar (drag through drag_settings, minimise, the corner grip, the title in the interface language, whether it is on screen), the restore of the defaults, the history, the updates, « Revoir l'accueil » and « Quitter ».",
   "windows": [
-    "settings",
-    "setup"
+    "settings"
   ],
   "permissions": [
     "core:window:allow-start-resize-dragging",
-    "core:window:allow-start-dragging",
     "core:window:allow-minimize",
     "core:window:allow-set-title",
-    "core:window:allow-is-visible"
+    "core:window:allow-is-visible",
+    "allow-drag-settings",
+    "allow-reset-settings",
+    "allow-get-history",
+    "allow-delete-history",
+    "allow-update-status",
+    "allow-check-update",
+    "allow-install-update",
+    "allow-open-setup",
+    "allow-quit-app"
   ]
 }

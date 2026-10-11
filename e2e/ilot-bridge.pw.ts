@@ -27,7 +27,7 @@ type Fixture = {
   refuseChoice: () => void;
   holdChoice: () => void;
   releaseChoice: () => void;
-  invalidate: (anchorLost?: boolean, captureId?: string) => Promise<void>;
+  invalidate: (captureId?: string) => Promise<void>;
   windowAt: (x: number, y: number) => void;
   workAreaAt: (x: number, y: number, width: number, height: number) => void;
   holdPosition: () => void;
@@ -73,8 +73,6 @@ async function openIlot(page: Page) {
   });
   await page.goto('/?window=overlay&fixture=1');
   await expect(page.locator('.glass-overlay')).toBeVisible();
-  // The Îlot is the fixture's default, as it is Rust's: nothing to switch on.
-  await expect(page.locator('html')).toHaveAttribute('data-ui', 'ilot');
 }
 // The Îlot at rest: entered, its shape settled.
 async function settled(page: Page, shape: 'menu' | 'pill' = 'menu') {
@@ -433,7 +431,7 @@ test('Îlot: the selection lost before any choice closes the menu; a choice on i
   await openIlot(page);
   await on(page, (f) => f.captureMenu('lost'));
   await settled(page);
-  await on(page, (f) => f.invalidate(true, 'stale-capture'));
+  await on(page, (f) => f.invalidate('stale-capture'));
   await page.waitForTimeout(100);
   expect(await calls(page, 'dismiss_overlay')).toHaveLength(0);
   await on(page, (f) => f.invalidate());
@@ -600,7 +598,9 @@ test('Îlot: a click in the field keeps its focus, Escape still goes back, and t
   await expect(ilot).toHaveAttribute('data-shape', 'pill');
 });
 
-test('Îlot: a refused choice gives the menu back, and the next choice goes through', async ({ page }) => {
+test('Îlot: a refused choice gives the menu back, says why in the interface language, and the next choice goes through', async ({
+  page,
+}) => {
   await openIlot(page);
   await on(page, (f) => {
     f.refuseChoice();
@@ -608,7 +608,9 @@ test('Îlot: a refused choice gives the menu back, and the next choice goes thro
   });
   await settled(page);
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('alert')).toHaveText('L’action n’existe plus.');
+  // Rust's code (capture_gone) in English, never its French message (ARCH-05).
+  await expect(page.getByRole('alert')).toHaveText('Menu closed — select again');
+  await expect(page.getByRole('alert')).not.toContainText('capture');
   await expect(page.locator('[data-ilot]')).toHaveAttribute('data-shape', 'menu');
   expect(await translations(page, 'refused')).toHaveLength(0);
   await page.keyboard.press('Enter');
@@ -780,20 +782,9 @@ test('Îlot: the menu opens right of the compact bubble when there is room, its 
   expect(grid.x + grid.width).toBeCloseTo(corner, 0);
 });
 
-test('Îlot: under v4 nothing changes, the menu capture shows no Îlot and a direct capture keeps its spinner pill', async ({
-  page,
-}) => {
+test('Îlot: a direct capture keeps the standalone working pill of lot 8, without the Îlot', async ({ page }) => {
   await openIlot(page);
-  await on(page, (f) => f.settings({ uiVersion: 'v4' }));
   await on(page, (f) => f.capture('direct'));
-  await expect(page.locator('.wait-pill')).toBeVisible();
-  await on(page, (f) => f.captureMenu('v4-menu'));
-  await expect(page.locator('[data-capture-id="v4-menu"]')).toBeVisible();
-  await expect(page.locator('[data-ilot]')).toHaveCount(0);
-  expect(await calls(page, 'focus_overlay')).toHaveLength(0);
-  // Under the Îlot, a direct capture keeps the standalone working pill of lot 8.
-  await on(page, (f) => f.settings({ uiVersion: 'ilot' }));
-  await on(page, (f) => f.capture('direct-ilot'));
   await expect(page.locator('.working-pill')).toBeVisible();
   await expect(page.locator('[data-ilot]')).toHaveCount(0);
 });

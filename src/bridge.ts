@@ -9,9 +9,10 @@ import {
   localizeDefaults,
 } from './actionDefaults';
 import { resetFrom } from './settings/reset';
+import { emptyServer } from './settings/servers';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import { listen as tauriListen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
 import {
   connectionCommand,
   isConnectionCommand,
@@ -32,7 +33,7 @@ import type {
   ProbeResult,
   Rect,
   Refusal,
-  Screen,
+  RefusalCode,
   Server,
   Settings,
   SettingsField,
@@ -78,7 +79,6 @@ type EventName =
 type Handler<T> = (payload: T) => void;
 
 // A fresh install, as Rust's Settings::default(): one server, nothing set up, the setup to do.
-const emptyServer: Server = { id: 's1', name: '', endpoint: '', apiKey: '', noKey: false, model: '' };
 const defaultSettings: Settings = {
   defaultActionId,
   actions: structuredClone(defaultActions),
@@ -87,7 +87,6 @@ const defaultSettings: Settings = {
   autostart: false,
   textSize: 'normal',
   autoClose: 'normal',
-  uiVersion: 'ilot',
   language: 'en',
   theme: 'system',
   motion: 'system',
@@ -98,7 +97,7 @@ const defaultSettings: Settings = {
   pillPlacement: 'below',
   glassMaterial: 'glass',
   menuActionIds: [...defaultMenuActionIds],
-  servers: [structuredClone(emptyServer)],
+  servers: [emptyServer('s1')],
   defaultServerId: 's1',
   setupDone: false,
   changedWordsStyle: 'encre',
@@ -110,7 +109,7 @@ function previewServers(search: string): Pick<Settings, 'servers' | 'defaultServ
   const params = new URLSearchParams(search);
   const fresh = params.get('window') === 'setup' && params.get('replay') !== '1' && params.get('stage') !== 'demo';
   const asked = params.get('servers') ?? (fresh ? 'empty' : 'one');
-  if (asked === 'empty') return { servers: [structuredClone(emptyServer)], defaultServerId: 's1', setupDone: false };
+  if (asked === 'empty') return { servers: [emptyServer('s1')], defaultServerId: 's1', setupDone: false };
   const first: Server = {
     id: 's1',
     name: '',
@@ -140,12 +139,9 @@ let demoCapture: Capture = {
 };
 type DemoScenario = 'normal' | 'error' | 'long' | 'very-long' | 'pending' | 'partial';
 let demoScenario: DemoScenario = 'normal';
-// The preview starts where the app does, in the Îlot (Rust's default since 0.5.0); `?ui=v4` asks
-// for the 0.4 journey, as the tests and the lab's 0.4 states do.
 let demoSettings: Settings = {
   ...structuredClone(defaultSettings),
   ...previewServers(location.search),
-  uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot',
 };
 let activeTimer: number | undefined;
 let activeDemoRequest: string | undefined;
@@ -197,11 +193,10 @@ const azertyAltGr: Record<string, string> = {
   equal: '}',
 };
 
-// A `{message, code}` refusal (replace_result) read as its message, for the callers of 0.4.
-function refusalMessage(reason: unknown): unknown {
-  return typeof reason === 'object' && reason !== null && typeof (reason as Refusal).message === 'string'
-    ? (reason as Refusal).message
-    : reason;
+// The preview refuses as Rust does (ARCH-05): `{message, code}`, the French message for the
+// journal only, the code for the interface.
+function refusal(code: RefusalCode, message: string): Refusal {
+  return { code, message };
 }
 
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> {
@@ -223,7 +218,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
       };
     });
     if (next.servers.some((server) => server.endpoint !== '' && !normalizeEndpoint(server.endpoint).ok))
-      throw 'L’adresse du serveur est invalide.';
+      throw refusal('address', 'L’adresse du serveur est invalide.');
     demoSettings = next;
     emit('settings-changed', demoSettings);
     return undefined as T;
@@ -257,7 +252,6 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   }
   // The preview registers every chord: its proposal is Rust's first.
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
-  if (name === 'capture_text') return structuredClone(demoCapture) as T;
   if (name === 'frontend_ready') return null as T;
   // The preview never updates; `?update=0.9.0` shows a version waiting.
   if (name === 'update_status' || name === 'check_update')
@@ -271,7 +265,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
       downloaded: 0,
       total: null,
     } as T;
-  if (name === 'install_update') throw 'Aperçu : pas de mise à jour.';
+  if (name === 'install_update') throw refusal('internal', 'Aperçu : pas de mise à jour.');
   if (name === 'get_history') return structuredClone(demoHistory) as T;
   if (name === 'delete_history') {
     const id = args?.id as string | null;
@@ -337,7 +331,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
         actionId === instructionActionId
           ? instructionError(instruction)
           : 'La consigne libre ne correspond pas à l’action demandée.';
-      if (error) throw error;
+      if (error) throw refusal('instruction_invalid', error);
       return {
         actionId,
         actionName: instructionActionName,
@@ -346,7 +340,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
       } as T;
     }
     const action = demoSettings.actions.find((item) => item.id === actionId);
-    if (!action) throw 'L’action n’existe plus.';
+    if (!action) throw refusal('internal', 'L’action n’existe plus.');
     return {
       actionId,
       actionName: action.name,
@@ -384,7 +378,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     return undefined as T;
   }
   // Lot 9: the preview pastes nothing, so there is no text to stand under or to mark; Undo has nothing to read back.
-  if (name === 'result_pill') throw 'Aperçu : aucun texte collé.';
+  if (name === 'result_pill') throw refusal('internal', 'Aperçu : aucun texte collé.');
   if (name === 'highlight_changes') return { ranges: 0, lines: 0 } satisfies HighlightResult as T;
   if (name === 'undo_result')
     return {
@@ -401,10 +395,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
 // receive the settings with their API keys meant for the Settings window, and the Settings
 // window the keyless copy meant for the overlay (which it could then save back, losing the keys).
 async function event<T>(name: EventName, handler: Handler<T>): Promise<Unlisten> {
-  if (native)
-    return tauriListen<T>(name, (e) => handler(e.payload), {
-      target: { kind: 'WebviewWindow', label: getCurrentWebviewWindow().label },
-    });
+  if (native) return getCurrentWebviewWindow().listen<T>(name, (e) => handler(e.payload));
   const set = demoListeners.get(name) ?? new Set();
   set.add(handler as (payload: never) => void);
   demoListeners.set(name, set);
@@ -415,25 +406,21 @@ export const bridge = {
   native,
   getSettings: () => command<Settings>('get_settings'),
   saveSettings: (settings: Settings) => command<void>('save_settings', { settings }),
-  captureText: () => command<Capture>('capture_text'),
   frontendReady: () => command<Capture | null>('frontend_ready'),
   closeSettings: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       return getCurrentWindow().close();
     }
     location.assign('/');
   },
   resizeSettingsCorner: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().startResizeDragging('SouthEast');
     }
   },
   // The settings window's title bar text (taskbar, Alt+Tab) follows the interface language.
   setSettingsTitle: async (title: string) => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().setTitle(title);
     } else document.title = title;
   },
@@ -443,7 +430,6 @@ export const bridge = {
   windowShown: async (): Promise<boolean> => {
     if (!native) return true;
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       return await getCurrentWindow().isVisible();
     } catch {
       return true;
@@ -454,10 +440,6 @@ export const bridge = {
   translate: (request: TranslationRequest) => command<void>('translate', { request }),
   cancel: (requestId: string) => command<void>('cancel_translation', { requestId }),
   copy: (requestId: string) => command<void>('copy_result', { requestId }),
-  replace: (requestId: string) =>
-    command<void>('replace_result', { requestId }).catch((reason: unknown) => {
-      throw refusalMessage(reason);
-    }),
   dismiss: () => command<void>('dismiss_overlay'),
   completeDismiss: (captureId: string) => command<void>('complete_overlay_dismiss', { captureId }),
   // field (lot 10): the Settings open on that field; page (0.6): on that page. Rust ignores an
@@ -509,13 +491,11 @@ export const bridge = {
   // The framed windows without decorations (settings, setup): drag by their own title bar, minimise.
   dragWindow: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().startDragging();
     }
   },
   minimizeWindow: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().minimize();
     }
   },
@@ -537,7 +517,6 @@ export const bridge = {
   // so the Îlot knows on which side of the selection it opened; null outside the native app.
   windowPosition: async (): Promise<{ x: number; y: number } | null> => {
     if (!native) return null;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const position = await getCurrentWindow().innerPosition();
     return { x: position.x, y: position.y };
   },
@@ -546,7 +525,6 @@ export const bridge = {
   // it (src/layout.ts ilotShift). null outside the native app, or off every screen.
   workAreaAt: async (x: number, y: number): Promise<Rect | null> => {
     if (!native) return null;
-    const { monitorFromPoint } = await import('@tauri-apps/api/window');
     const monitor = await monitorFromPoint(x, y);
     if (!monitor) return null;
     const { position, size } = monitor.workArea;
@@ -588,10 +566,6 @@ export const bridge = {
   demoNotice: (message: string) => {
     if (!native) emit('capture-notice', { message });
   },
-  // Browser preview only: what Rust emits when the cursor changes screen under a bottom form.
-  demoWorkArea: (screen: Screen) => {
-    if (!native) emit('work-area', screen);
-  },
   // Lot 10: the state of every binding (a chord another application holds is 'taken').
   shortcutStatus: () => command<ShortcutStatus[]>('shortcut_status'),
   // Lucas, 24/09: a chord for the menu that Windows gives now, when another application holds
@@ -610,10 +584,10 @@ export const bridge = {
     command<HighlightResult>('highlight_changes', { requestId, ranges }),
   // Lot 9: undo a pasted result, once, after revalidation (`undo_result` → UndoOutcome). Read its
   // status: a resolved promise may be a refusal (`refused`: nothing was sent; `failed`: sent, the
-  // original did not read back); a rejection is a French string (the result no longer current).
+  // original did not read back); a rejection is a Refusal (the result no longer current).
   undoResult: (requestId: string) => command<UndoOutcome>('undo_result', { requestId }),
   // `replace_result` with its refusal as Rust sends it, `{message, code}` (Refusal): the code says
-  // why (target_changed, keys_held, not_editable, paste_blocked); `replace` keeps the message only,
-  // for the glass of 0.4. The Îlot's own paste of a retried result reads the code (IlotStage).
+  // why (target_changed, keys_held, not_editable, paste_blocked). The glass's « Replace » and the
+  // Îlot's own paste of a retried result read the code (GlassOverlay, IlotStage), never the message.
   replaceResult: (requestId: string) => command<void>('replace_result', { requestId }),
 };

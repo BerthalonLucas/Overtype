@@ -454,6 +454,9 @@ pub fn undo(
                 selection_len,
                 editable: true,
                 check: TargetCheck::Uia,
+                // The re-paste keeps its behaviour: no witness copy (QA-03-A covers the
+                // delivery's paste only), the selection just read back as the pasted text.
+                copy_witness: false,
             };
             // Every refusal of the paste comes before its chord: nothing was written.
             let delivery = capture::paste(&identity, target.original, false, ticket)

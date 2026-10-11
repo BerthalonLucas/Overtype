@@ -5985,6 +5985,7 @@ mod tests {
             selection_len: 5,
             editable: true,
             check: types::TargetCheck::Uia,
+            copy_witness: false,
         };
         let ready = || {
             let mut i = Inner::new(Settings::default());

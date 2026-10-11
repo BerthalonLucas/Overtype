@@ -39,6 +39,9 @@ const ANCHOR_DRIFT: f64 = 2.;
 /// How much of a document UI Automation is asked for (UTF-16 units). A text that fills it was
 /// cut there: what lies beyond was not read.
 const FIELD_CAP: usize = 200_000;
+/// The UI Automation framework id of Chromium's content (Edge, Chrome, Electron), measured
+/// on Edge 155 (11/10): its targets get the witness copy at the paste (QA-03-A).
+const CHROMIUM_FRAMEWORK: &str = "Chrome";
 /// The longest text sent (Lucas, 2026-10-08; 6,000 before): a translation spends the context
 /// twice, the text then about as much again, so this fits a context of 131k tokens.
 pub(crate) const MAX_CHARS: usize = 200_000;
@@ -527,6 +530,10 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                         crate::host::focused_control(source_window).map_or(0, |(handle, _)| handle);
                     let can_replace =
                         replaceable(CaptureOrigin::Uia, editable, &source_class, false);
+                    // QA-03-A: one property read now, the witness copy at the paste only.
+                    let copy_witness = element
+                        .get_framework_id()
+                        .is_ok_and(|framework| framework == CHROMIUM_FRAMEWORK);
                     let public = Capture {
                         id: Uuid::new_v4().to_string(),
                         text: text.clone(),
@@ -549,6 +556,7 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                         selection_len,
                         editable,
                         check: TargetCheck::Uia,
+                        copy_witness,
                     });
                     ensure_source_unchanged(source_window)?;
                     return Ok(StoredCapture {
@@ -653,6 +661,8 @@ pub(crate) fn clipboard_capture(
         selection_len: text.chars().count(),
         editable: true,
         check: TargetCheck::Copy,
+        // A copy target already gets its control copy before the paste.
+        copy_witness: false,
     });
     let public = Capture {
         id: Uuid::new_v4().to_string(),
@@ -878,7 +888,8 @@ fn element_changed(check: TargetCheck, captured: &[i32], now: Option<&[i32]>) ->
 /// copied again right before the paste, once the target is revalidated and the keys are up:
 /// the paste goes on only when the source copies exactly the captured text again. Nothing
 /// selected any more makes VS Code copy its whole line: never « contains », always « equals ».
-/// The clipboard is put back as after the capture's own copy.
+/// The clipboard is put back as after the capture's own copy. QA-03-A: a Chromium UIA target
+/// (`copy_witness`) gets the same copy, held to `same_witness`.
 fn control_copy(target: &TargetIdentity) -> Result<(), AppError> {
     let copied =
         match copy_and_restore() {
@@ -902,7 +913,31 @@ fn control_copy(target: &TargetIdentity) -> Result<(), AppError> {
             .because(FOREIGN_WRITE)),
             Err(_) => None,
         };
-    same_copy(copied.as_deref(), &target.selected_text)
+    if target.check == TargetCheck::Copy {
+        same_copy(copied.as_deref(), &target.selected_text)
+    } else {
+        same_witness(copied.as_deref(), &target.selected_text)
+    }
+}
+
+/// The witness copy of a Chromium UIA target must give the text UI Automation read, line endings
+/// and non-breaking spaces aside (`canonical`: the two write them apart). Another text: UI
+/// Automation read past the selection (QA-03-A, measured on Edge 155: a selection bounded by its
+/// element read with the text of the next one) or the selection moved, and nothing is pasted.
+fn same_witness(copied: Option<&str>, captured: &str) -> Result<(), AppError> {
+    let refused = |reason| {
+        Err(AppError::new(
+            ErrorKind::TargetChanged,
+            "La sélection copiée ne correspond pas au texte lu; remplacement refusé, utilisez \
+             Copier.",
+        )
+        .because(reason))
+    };
+    match copied {
+        Some(text) if !text.is_empty() && canonical(text) == canonical(captured) => Ok(()),
+        Some(text) if !text.is_empty() => refused("witness copy differs"),
+        _ => refused("witness copy empty"),
+    }
 }
 
 /// The control copy of a copy target must give back exactly the captured text.
@@ -1091,7 +1126,9 @@ pub fn paste(
     validate_target(target)?;
     released(crate::host::wait_modifiers_released(CHORD_RELEASE))?;
     validate_target(target)?;
-    if target.check == TargetCheck::Copy {
+    // A copy target, and a Chromium UIA target whose selection UI Automation may misread
+    // (QA-03-A), are copied once more: the paste goes on only on the captured text.
+    if target.check == TargetCheck::Copy || target.copy_witness {
         if !ticket.live() {
             return Err(revoked());
         }
@@ -1370,6 +1407,7 @@ mod tests {
             selection_len: 5,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         assert_eq!(
             selection_changed(&target, &Ok(("bloc B".into(), Vec::new(), 6, true))),
@@ -1560,6 +1598,7 @@ mod tests {
             selection_len: 11,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         let same: Result<(String, Vec<Rect>, usize, bool), String> = Ok((
             "Deux lignes".into(),
@@ -1618,6 +1657,7 @@ mod tests {
             selection_len: 1,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         faults::silence_uia(true);
         let silent = validate_target(&target);
@@ -1821,6 +1861,7 @@ mod tests {
             selection_len: 1,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         assert_eq!(
             paste_preflight(&target, "a\0b").unwrap_err().kind,
@@ -1892,6 +1933,7 @@ mod tests {
             selection_len: 12,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         assert_eq!(
             selection_changed(&target, &Err(MULTIPLE_SELECTION.into())),

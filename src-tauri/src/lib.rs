@@ -3919,8 +3919,10 @@ fn validate_frame(frame: &SurfaceRegion, width: f64, height: f64) -> Result<(), 
 
 /// The reading budget is spent: the frontend dims the glass before it leaves. While it
 /// dims, Escape is the user's again (no scope); an approach re-arms it through `position`.
-// Off the main thread (`async`, NATIVE-005): the state lock, released before the window is read.
-#[tauri::command(async)]
+// On the main thread on purpose (NATIVE-005 left it there): the page sends it without waiting,
+// and only the main thread keeps two of them in order (a `false` overtaking a later `true` would
+// leave Escape armed while the glass dims). Its lock is brief.
+#[tauri::command]
 fn overlay_dimming(
     app: AppHandle,
     state: State<'_, AppState>,

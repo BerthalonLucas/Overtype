@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "setup",
+  "description": "The first-run setup: dragged by its title bar, its real glass, the notice of unreadable settings, the demo (opened, watched over) and the end of the setup.",
+  "windows": [
+    "setup"
+  ],
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "allow-glass-frame",
+    "allow-settings-recovery",
+    "allow-open-demo",
+    "allow-close-demo",
+    "allow-complete-setup",
+    "allow-finish-setup"
+  ]
+}

@@ -1,3 +1,4 @@
+mod acl;
 mod actions;
 mod backdrop;
 mod brand;
@@ -854,7 +855,11 @@ fn emit_shortcut_statuses(app: &AppHandle) {
 /// `shortcut-status` event (startup refusals, saves).
 // Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
 #[tauri::command(async)]
-fn shortcut_status(state: State<'_, AppState>) -> Result<Vec<ShortcutStatus>, String> {
+fn shortcut_status(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Vec<ShortcutStatus>, String> {
+    acl::only(&window, &KEYED)?;
     current_shortcut_statuses(&state)
 }
 
@@ -896,9 +901,20 @@ fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingS
         })
 }
 // Off the main thread (`async`, NATIVE-005): the save lock, the state lock and the disk. Each
-// window queues its saves, so their order holds.
+// window queues its saves, so their order holds. The keyed windows only (NATIVE-011): every
+// other one gets the settings without their API keys, and saving that copy would wipe them.
 #[tauri::command(async)]
 fn save_settings(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: Settings,
+) -> Result<(), String> {
+    acl::only(&window, &KEYED)?;
+    store_settings(app, state, settings)
+}
+/// A whole copy of the settings saved, under the save lock (save_settings, reset_settings).
+fn store_settings(
     app: AppHandle,
     state: State<'_, AppState>,
     settings: Settings,
@@ -1063,6 +1079,7 @@ fn reset_settings(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<Settings, String> {
+    acl::only(&window, &acl::SETTINGS)?;
     let current = state
         .inner
         .lock()
@@ -1070,11 +1087,11 @@ fn reset_settings(
         .settings
         .clone();
     let fresh = settings::reset(&current);
-    match save_settings(app.clone(), state, fresh.clone()) {
+    match store_settings(app.clone(), state, fresh.clone()) {
         Ok(()) => {}
         Err(error) => {
             let kept = settings::keep_menu_chord(&fresh, &current).ok_or(error)?;
-            save_settings(app.clone(), app.state::<AppState>(), kept)?;
+            store_settings(app.clone(), app.state::<AppState>(), kept)?;
         }
     };
     // What is now saved (the save cleans it: the default actions in the interface's language).
@@ -1103,7 +1120,12 @@ fn reset_settings(
 const MENU_ALTERNATIVES: [&str; 3] = ["Ctrl+Alt+Shift+Space", "Alt+Shift+Space", "Ctrl+Alt+Home"];
 // Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
 #[tauri::command(async)]
-fn suggest_shortcut(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
+fn suggest_shortcut(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Option<String>, String> {
+    acl::only(&window, &KEYED)?;
     let used = state
         .inner
         .lock()
@@ -1965,10 +1987,12 @@ fn frontend_ready(
 // either order, and the older one would then cancel the newer).
 #[tauri::command]
 fn translate(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request: TranslationRequest,
 ) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     if request.text.is_empty() || request.text.chars().count() > capture::MAX_CHARS {
         return Err("La traduction accepte de 1 à 200 000 caractères.".into());
     }
@@ -2265,10 +2289,12 @@ fn halo_scene(captured: &StoredCapture) -> Option<halo::Scene> {
 // (Escape, ✕, a click on the working pill) never waits on the main thread for the state lock.
 #[tauri::command(async)]
 fn cancel_translation(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
 ) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     let mut i = state.inner.lock().map_err(|_| lock_error())?;
     let working = i.current(&request_id);
     i.cancel(Some(&request_id));
@@ -2510,12 +2536,14 @@ fn last_line(lines: &[Rect]) -> Option<Rect> {
 // Off the main thread (`async`, NATIVE-005): the state lock, released before the window is read.
 #[tauri::command(async)]
 fn result_pill(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
     width: f64,
     height: f64,
 ) -> Result<PillTarget, String> {
+    acl::only(&window, &acl::OVERLAY)?;
     if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
         return Err("Dimensions invalides.".into());
     }
@@ -2578,12 +2606,14 @@ fn result_pill(
 /// pill would leave the window. Kept by every later placement of this capture.
 #[tauri::command]
 async fn move_overlay(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
     dx: f64,
     dy: f64,
 ) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     let size = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;
         if !dx.is_finite()
@@ -2636,11 +2666,13 @@ async fn move_overlay(
 /// Answers how many ranges were found and how many lines are drawn (0: nothing shown).
 #[tauri::command]
 async fn highlight_changes(
+    caller: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
     ranges: Vec<TextRange>,
 ) -> Result<HighlightResult, String> {
+    acl::only(&caller, &acl::OVERLAY)?;
     if ranges.len() > 64 {
         return Err("Trop de plages.".into());
     }
@@ -2762,7 +2794,12 @@ fn lose_undo(app: &AppHandle, request: Option<&str>, reason: UndoLoss, forget_te
 /// again, the keys must be up, and they are checked once more. Refused: nothing was sent.
 /// Failed: sent, and the original did not come back. The clipboard is kept as for any paste.
 #[tauri::command]
-async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, String> {
+async fn undo_result(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    request_id: String,
+) -> Result<UndoOutcome, String> {
+    acl::only(&window, &acl::OVERLAY)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let refused = |kind: ErrorKind, message: &str| UndoOutcome {
@@ -2857,7 +2894,12 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
 }
 // Off the main thread (`async`, NATIVE-005): the state lock and the clipboard.
 #[tauri::command(async)]
-fn copy_result(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
+fn copy_result(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    request_id: String,
+) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     let r = result_for(&state, &request_id)?;
     // Our own write must not count as a fresh copy for the next shortcut.
     host::suppress_clipboard_tracking(std::time::Duration::from_millis(1_500));
@@ -2869,10 +2911,12 @@ fn copy_result(state: State<'_, AppState>, request_id: String) -> Result<(), Str
 /// back to the front first (the click was on our window). One attempt per result.
 #[tauri::command]
 async fn replace_result(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     request_id: String,
 ) -> Result<(), Refusal> {
+    acl::only(&window, &acl::OVERLAY).map_err(AppError::internal)?;
     let r = result_for(&state, &request_id)
         .map_err(|message| AppError::new(ErrorKind::PasteBlocked, message))?;
     // UI Automation uses an MTA worker, never the WebView's STA UI thread.
@@ -3190,10 +3234,12 @@ fn watch_overlay(app: AppHandle) {
 
 #[tauri::command(async)]
 fn complete_overlay_dismiss(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
 ) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     let generation = {
         let i = state.inner.lock().map_err(|_| lock_error())?;
         let Some((pending_id, generation)) = i.pending_dismiss.as_ref() else {
@@ -3207,7 +3253,12 @@ fn complete_overlay_dismiss(
     schedule_finish_dismiss(app, capture_id, generation)
 }
 #[tauri::command(async)]
-fn dismiss_overlay(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+fn dismiss_overlay(
+    window: tauri::WebviewWindow,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     dismiss(&app, &state)
 }
 // The Windows app mode for the « follow Windows » theme (see system_theme.rs); null when unknown.
@@ -3610,8 +3661,10 @@ fn drag_settings(window: tauri::WebviewWindow) -> Result<(), String> {
         .map_err(|_| "Déplacement indisponible.".into())
 }
 #[tauri::command]
-fn quit_app(app: AppHandle) {
+fn quit_app(window: tauri::WebviewWindow, app: AppHandle) -> Result<(), String> {
+    acl::only(&window, &acl::SETTINGS)?;
     app.exit(0);
+    Ok(())
 }
 /// Probe only (see `host::override_cursor`): screen point the hit tester reads instead
 /// of the real cursor; both `None` restore the real cursor.
@@ -3623,7 +3676,8 @@ fn override_cursor(x: Option<i32>, y: Option<i32>) -> Result<(), String> {
 /// lot 3). True when the overlay really holds the foreground afterwards; false leaves
 /// the menu to the hook's keyboard fallback (`menu-key`).
 #[tauri::command]
-async fn focus_overlay(app: AppHandle) -> Result<bool, String> {
+async fn focus_overlay(window: tauri::WebviewWindow, app: AppHandle) -> Result<bool, String> {
+    acl::only(&window, &acl::OVERLAY)?;
     tauri::async_runtime::spawn_blocking(move || focus_overlay_now(&app))
         .await
         .map_err(|_| "Activation interrompue.".to_string())?
@@ -3750,12 +3804,14 @@ fn remembered_process(
 // read) and the menu memory on disk. The page waits for its answer before `translate`.
 #[tauri::command(async)]
 fn choose_action(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     capture_id: String,
     action_id: String,
     instruction: Option<String>,
 ) -> Result<ExecutionInfo, String> {
+    acl::only(&window, &acl::OVERLAY)?;
     let (info, source, process) = {
         let mut i = state.inner.lock().map_err(|_| lock_error())?;
         let info = i.choose(&capture_id, &action_id, instruction.as_deref())?;
@@ -3791,7 +3847,11 @@ fn choose_action(
 /// window's), and the character that chord types there (lot 4, for the recorder of the
 /// settings window). A plain space typed by Ctrl+Space is not a conflict.
 #[tauri::command]
-fn shortcut_conflict(shortcut: String) -> Result<ShortcutConflict, String> {
+fn shortcut_conflict(
+    window: tauri::WebviewWindow,
+    shortcut: String,
+) -> Result<ShortcutConflict, String> {
+    acl::only(&window, &KEYED)?;
     let character = altgr_types(&actions::parse_shortcut(&shortcut)?);
     Ok(ShortcutConflict {
         alt_gr: character.is_some(),
@@ -3810,6 +3870,7 @@ fn altgr_types(shortcut: &Shortcut) -> Option<char> {
 #[allow(clippy::too_many_arguments)] // Signature inherited as is: reshaping it is out of this change's scope.
 #[tauri::command]
 async fn resize_overlay(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     width: f64,
@@ -3819,6 +3880,7 @@ async fn resize_overlay(
     regions: Option<Vec<SurfaceRegion>>,
     frame: Option<SurfaceRegion>,
 ) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     if !width.is_finite() || !height.is_finite() || width <= 0. || height <= 0. {
         return Err("Dimensions invalides.".into());
     }
@@ -3905,10 +3967,12 @@ fn validate_frame(frame: &SurfaceRegion, width: f64, height: f64) -> Result<(), 
 // leave Escape armed while the glass dims). Its lock is brief.
 #[tauri::command]
 fn overlay_dimming(
+    window: tauri::WebviewWindow,
     app: AppHandle,
     state: State<'_, AppState>,
     dimming: bool,
 ) -> Result<(), String> {
+    acl::only(&window, &acl::OVERLAY)?;
     if dimming {
         host::close_escape_scope();
         return Ok(());
@@ -4379,17 +4443,31 @@ fn open_stores(
     Ok((store, settings, recovery, history))
 }
 #[tauri::command]
-fn settings_recovery(state: State<'_, AppState>) -> Option<SettingsRecovery> {
-    state.settings_recovery.clone()
+fn settings_recovery(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Option<SettingsRecovery>, String> {
+    acl::only(&window, &acl::SETUP)?;
+    Ok(state.settings_recovery.clone())
 }
-// Off the main thread (`async`, NATIVE-005): the history on disk (SQLite, DPAPI).
+// Off the main thread (`async`, NATIVE-005): the history on disk (SQLite, DPAPI). The Settings
+// window only (NATIVE-011): the history is decrypted here.
 #[tauri::command(async)]
-fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
+fn get_history(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Vec<HistoryEntry>, String> {
+    acl::only(&window, &acl::SETTINGS)?;
     state.history.list()
 }
 // Off the main thread (`async`, NATIVE-005): the history on disk.
 #[tauri::command(async)]
-fn delete_history(state: State<'_, AppState>, id: Option<String>) -> Result<(), String> {
+fn delete_history(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    id: Option<String>,
+) -> Result<(), String> {
+    acl::only(&window, &acl::SETTINGS)?;
     state.history.delete(id.as_deref())
 }
 

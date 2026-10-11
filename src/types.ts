@@ -8,7 +8,7 @@ export type Screen = { width: number; height: number; scale: number };
 export type Replay = { requestId: string; translatedText: string; serverId: string };
 // origin: how Rust obtained the text (uia selection, synthetic copy, fresh user copy, tray replay, demo); shown nowhere.
 export type CaptureOrigin = 'uia' | 'copy' | 'fresh' | 'replay' | 'demo';
-// menu: a `menu` shortcut under the Îlot (uiVersion 'ilot'): no execution until `choose_action`, the frontend opens the menu.
+// menu: a `menu` shortcut: no execution until `choose_action`, the frontend opens the Îlot's menu.
 // The halo window (lot 6, « mise en valeur »): logical pixels relative to the window (width × height). menu: the selection at three levels (textBox, full lines, lines = exact text), still; work: the reflection over the exact text and the aurora around the text box, after 250 ms unless a menu was shown; marks: a wave over the new text (whole), then the changed words (lines), held; leave fades, clear removes. tone and ground come from the colour read under the text (null: the app's theme).
 export type HaloPhase = 'menu' | 'work' | 'marks' | 'leave' | 'clear';
 export type HaloTone = 'light' | 'dark';
@@ -62,9 +62,6 @@ export type ChangedWordsStyle = 'encre' | 'eclat';
 // textSize: reading presets (16/24 · 22/33, 18/27 · 24/36, 20/30 · 26/39); autoClose: reading budget × 0.7, × 1, × 1.5, or never.
 export type TextSize = 'normal' | 'large' | 'xlarge';
 export type AutoClose = 'fast' | 'normal' | 'slow' | 'never';
-// Hidden switch of the « Îlot » art direction (docs/DA-PLAN.md, lot 0): v4 keeps the 0.4
-// journey, ilot the menu beside the selection. Not shown in the settings window.
-export type UiVersion = 'v4' | 'ilot';
 // Réglages of the Îlot art direction (docs/DA-PLAN.md); Rust persists and validates them.
 export type Theme = 'system' | 'light' | 'dark';
 export type MotionPreference = 'system' | 'full' | 'reduced';
@@ -97,7 +94,6 @@ export type Settings = {
   autostart: boolean;
   textSize: TextSize;
   autoClose: AutoClose;
-  uiVersion: UiVersion;
   language: Language;
   theme: Theme;
   motion: MotionPreference;
@@ -225,6 +221,12 @@ export const errorCodes = [
   'protected_window',
   // 0.6: a shortcut pressed while the first-run setup (or its demo) is in front.
   'setup_open',
+  // Lot C (NATIVE-004): the clipboard cannot be kept whole (an Office picture beside its text):
+  // nothing is copied or pasted over it, nothing is lost.
+  'clipboard_unkeepable',
+  // Lot C (NATIVE-001): UI Automation no longer answers for the selection at the paste: nothing
+  // proves it, nothing is replaced.
+  'target_unverified',
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.

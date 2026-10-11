@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Download, Globe, Info, LogOut, Power, RotateCcw, Sparkles } from 'lucide-react';
 import { menuShortcut, withLanguage } from '../../actionDefaults';
 import { bridge } from '../../bridge';
-import { useT } from '../../i18n';
+import { languageNames, useT } from '../../i18n';
 import { Button, Group, ICON, Row, Select, Switch } from '../../components/controls';
 import type { Language } from '../../types';
 import { useSettingsContext } from '../useSettingsStore';
@@ -82,8 +82,8 @@ export function GeneralPage() {
               onChange={(language) => persist(withLanguage(settings, language), true)}
               width={150}
               options={[
-                { value: 'fr', label: 'Français' },
-                { value: 'en', label: 'English' },
+                { value: 'fr', label: languageNames.fr },
+                { value: 'en', label: languageNames.en },
               ]}
             />
           }

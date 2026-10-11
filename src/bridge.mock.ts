@@ -44,7 +44,6 @@ export function connScenarioFrom(search: string): ConnScenario {
   return (connScenarios as readonly string[]).includes(value ?? '') ? (value as ConnScenario) : 'ok';
 }
 let scenario: ConnScenario = connScenarioFrom(typeof location === 'undefined' ? '' : location.search);
-export const getConnScenario = () => scenario;
 export function setConnScenario(next: ConnScenario) {
   if ((connScenarios as readonly string[]).includes(next)) scenario = next;
 }

@@ -72,6 +72,17 @@ jobs:
       - run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      # Real replacement bench (SendInput, UI Automation, clipboard) in Edge on the runner's
+      # interactive desktop; VS Code and LibreOffice cases say SKIP where they are not installed.
+      - name: Real replacement bench
+        timeout-minutes: 10
+        run: npm run test:replacement -- --report replacement-bench.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: replacement-bench
+          path: replacement-bench.json
+          if-no-files-found: ignore
       # The PowerShell case of server/test_evaluation.py only runs on Windows.
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:

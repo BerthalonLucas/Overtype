@@ -20,7 +20,6 @@ export type GlassShape = { x: number; y: number; width: number; height: number; 
 // src/theme.css (src/glassBackdrop.test.ts keeps the two in step).
 export const overlayGlassSurfaces = [
   '.translation-bubble',
-  '.wait-pill',
   '.working-pill',
   '.action-pill',
   '.more-menu',

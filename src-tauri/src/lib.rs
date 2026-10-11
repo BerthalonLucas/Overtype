@@ -20,6 +20,10 @@ mod menu_memory;
 mod pasted;
 mod placement;
 mod probe;
+// The real replacement bench's native driver (scripts/test-replacement-windows.mjs): test
+// builds only, its one test ignored by default.
+#[cfg(test)]
+mod replacement_tests;
 mod selection_lines;
 mod settings;
 mod system_motion;
@@ -98,6 +102,9 @@ enum Repeat {
 struct Inner {
     settings: Settings,
     capture: Option<StoredCapture>,
+    /// The right of the capture's session to paste and undo (NATIVE-006), taken when it is
+    /// stored: the emergency exit revokes it without the lock, a paste in flight reads it again.
+    delivery: capture::Ticket,
     menu: Option<MenuSession>,
     menu_press: Option<MenuPress>,
     pending_capture: Option<Capture>,
@@ -300,6 +307,7 @@ impl Inner {
         Self {
             settings,
             capture: None,
+            delivery: capture::Ticket::current(),
             menu: None,
             menu_press: None,
             pending_capture: None,
@@ -395,13 +403,11 @@ impl Inner {
         {
             return Some(Watched::Delivering);
         }
-        Some(
-            if self.settings.ui_version == UiVersion::Ilot && capture.public.menu.is_some() {
-                Watched::Pill
-            } else {
-                Watched::Reading
-            },
-        )
+        Some(if capture.public.menu.is_some() {
+            Watched::Pill
+        } else {
+            Watched::Reading
+        })
     }
     /// The state that outlived its limit at `now`, and for how long it has been silent.
     /// `near`: how long ago the pointer last rested on the bubble (the user is reading it, or
@@ -638,11 +644,9 @@ impl Inner {
     }
     /// The watcher found the target of `capture_id` changed: nothing can be replaced any more.
     /// A menu still waiting closes (review n°6: nothing left to act on; a choice in flight is
-    /// refused). Under the Îlot the window keeps its place, anchor and side (the working pill,
-    /// then the error pill, stay where the user looks; review of da-ilot 3e678ff); under v4 the
-    /// glass loses its anchor and docks at the bottom, as in 0.4.
+    /// refused). Otherwise the window keeps its place, anchor and side (the working pill, then
+    /// the error pill, stay where the user looks; review of da-ilot 3e678ff).
     fn invalidate(&mut self, capture_id: &str) -> Invalidated {
-        let ilot = self.settings.ui_version == UiVersion::Ilot;
         let Some(capture) = self
             .capture
             .as_mut()
@@ -663,12 +667,7 @@ impl Inner {
             menu.invalidated = true;
             return Invalidated::CloseMenu;
         }
-        if ilot {
-            return Invalidated::Stay;
-        }
-        capture.public.anchor = None;
-        self.side = None;
-        Invalidated::Redock
+        Invalidated::Stay
     }
     /// `replace_result` under the state lock: the completed result's target, spent once (the
     /// capture can no longer be replaced afterwards: `spent`, the frontend is told). Refused
@@ -779,7 +778,8 @@ fn without_keys(mut settings: Settings) -> Settings {
     }
     settings
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn get_settings(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
@@ -852,7 +852,8 @@ fn emit_shortcut_statuses(app: &AppHandle) {
 }
 /// The state of every binding: the settings window asks at load and follows the
 /// `shortcut-status` event (startup refusals, saves).
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn shortcut_status(state: State<'_, AppState>) -> Result<Vec<ShortcutStatus>, String> {
     current_shortcut_statuses(&state)
 }
@@ -894,7 +895,9 @@ fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingS
             )
         })
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the save lock, the state lock and the disk. Each
+// window queues its saves, so their order holds.
+#[tauri::command(async)]
 fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1053,7 +1056,8 @@ fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Resu
 /// application starts over too. When Windows refuses the default menu chord, the menu keeps the
 /// one it had (settings::keep_menu_chord) and everything else is restored. Answers what is now
 /// saved, the keys to the windows that edit the connection only.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): a save (see `save_settings`).
+#[tauri::command(async)]
 fn reset_settings(
     window: tauri::WebviewWindow,
     app: AppHandle,
@@ -1097,7 +1101,8 @@ fn reset_settings(
 /// that Windows gives now (taken, then let go at once). None when Windows gives none of them.
 /// Never Ctrl+Shift+Space: Word types a non-breaking space with it, which French needs.
 const MENU_ALTERNATIVES: [&str; 3] = ["Ctrl+Alt+Shift+Space", "Alt+Shift+Space", "Ctrl+Alt+Home"];
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn suggest_shortcut(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
     let used = state
         .inner
@@ -1168,12 +1173,9 @@ fn store_capture(
         i.notice_generation = i.notice_generation.wrapping_add(1);
         i.side = None;
         // The menu shows its selection at three levels while it waits (Lucas, 25/09).
-        menu_scene = if is_menu {
-            halo_scene(&i.settings, &captured)
-        } else {
-            None
-        };
+        menu_scene = if is_menu { halo_scene(&captured) } else { None };
         i.capture = Some(captured);
+        i.delivery = capture::Ticket::current();
         i.menu = menu;
         i.execution = execution;
         i.visible = true;
@@ -1403,13 +1405,14 @@ fn replay_last(app: &AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): a whole capture (UI Automation, a synthetic copy).
+#[tauri::command(async)]
 fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, String> {
     capture_with_binding(app, &state, None)
         .map_err(String::from)?
         .ok_or_else(|| "Sélectionnez un texte dans une autre application.".into())
 }
-/// What a shortcut opens: one action at once, or (a `menu` binding under the Îlot) the
+/// What a shortcut opens: one action at once, or (a `menu` binding) the Îlot's
 /// menu beside the selection, with the settings of the moment frozen for the choice.
 enum Opening {
     Direct(Box<Execution>),
@@ -1515,8 +1518,7 @@ fn capture_with_binding(
         // Nothing is ever queued: the shortcut spammed opens one bubble and runs one request.
         let menu = binding
             .as_ref()
-            .is_some_and(|binding| binding.kind == BindingKind::Menu)
-            && i.settings.ui_version == UiVersion::Ilot;
+            .is_some_and(|binding| binding.kind == BindingKind::Menu);
         let repeat = binding
             .as_ref()
             .filter(|_| menu)
@@ -1813,10 +1815,8 @@ enum Invalidated {
     Stale,
     /// A menu still waiting: it closes.
     CloseMenu,
-    /// Under the Îlot: `target-invalidated`, the window stays where it is.
+    /// `target-invalidated`, the window stays where it is.
     Stay,
-    /// Under v4: `target-invalidated`, then the glass docks at the bottom.
-    Redock,
 }
 /// What the scope becomes when a menu press opened it and got no capture: the scope of what
 /// is still shown, never a menu scope left open over nothing (the hook would keep the keys).
@@ -1942,7 +1942,8 @@ fn capture_opening(
     }
     result.map(Some)
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn frontend_ready(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -1959,6 +1960,9 @@ fn frontend_ready(
     Ok(pending)
 }
 
+// Kept on the main thread although it takes the state lock (NATIVE-005): the page sends it
+// without waiting, and a relaunch right after must start after it (two `async` starts may run in
+// either order, and the older one would then cancel the newer).
 #[tauri::command]
 fn translate(
     app: AppHandle,
@@ -2004,7 +2008,7 @@ fn translate(
         actions::validate_template(&run.action.prompt_template)?;
         let instruction = run.action.prompt_template.clone();
         let execution_info = run.info.clone();
-        let halo_scene = halo_scene(&i.settings, captured);
+        let halo_scene = halo_scene(captured);
         let captured_replaceable = captured.public.can_replace
             && !captured.invalidated
             && run.info.output_mode == OutputMode::Replace;
@@ -2244,15 +2248,12 @@ fn translate(
     Ok(())
 }
 /// What the halo shows of a selection while the menu waits and while an action works (lot 6,
-/// « mise en valeur »): under the Îlot only, for a UIA selection that still has its anchor (the
-/// watcher removes it once the selection moved): its exact text, its whole lines, its text box
-/// and the ground under it, as the capture read them.
-fn halo_scene(settings: &Settings, captured: &StoredCapture) -> Option<halo::Scene> {
+/// « mise en valeur »): for a UIA selection that still has its anchor (the watcher removes it
+/// once the selection moved): its exact text, its whole lines, its text box and the ground
+/// under it, as the capture read them.
+fn halo_scene(captured: &StoredCapture) -> Option<halo::Scene> {
     let capture = &captured.public;
-    (settings.ui_version == UiVersion::Ilot
-        && capture.anchor.is_some()
-        && !capture.selection_rects.is_empty())
-    .then(|| halo::Scene {
+    (capture.anchor.is_some() && !capture.selection_rects.is_empty()).then(|| halo::Scene {
         lines: capture.selection_rects.clone(),
         full: captured.levels.full_lines.clone(),
         text_box: captured.levels.text_box,
@@ -2341,11 +2342,11 @@ fn schedule_auto_delivery(app: &AppHandle) {
                     Ok(target)
                 }
             })
-            .and_then(|target| capture::paste(target, &result.translated_text, true));
-        // Under the Îlot (lot 9): the pasted text is found at once, still under the lock (no
-        // new capture in between), for the pill's place, the marks and Undo.
+            .and_then(|target| capture::paste(target, &result.translated_text, true, i.delivery));
+        // Lot 9: the pasted text is found at once, still under the lock (no new capture in
+        // between), for the pill's place, the marks and Undo.
         let applied = match (&outcome, &target) {
-            (Ok(_), Some(target)) if i.settings.ui_version == UiVersion::Ilot => {
+            (Ok(_), Some(target)) => {
                 let located = locate_pasted(&result.translated_text, target.native_window);
                 let old = i
                     .capture
@@ -2506,7 +2507,8 @@ fn last_line(lines: &[Rect]) -> Option<Rect> {
 /// pill's size, logical. The answer is relative to the overlay window as it stands, logical;
 /// `inside` false means the pill would leave the window: `move_overlay` first. Estimated from
 /// the old selection when the pasted text could not be found.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock, released before the window is read.
+#[tauri::command(async)]
 fn result_pill(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2776,6 +2778,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             return Err("Ce résultat n’est plus actif.".into());
         }
         let strategy = i.settings.undo_strategy;
+        let delivery = i.delivery;
         let Some(applied) = i.applied.as_mut().filter(|a| a.request_id == request_id) else {
             return Err("Ce résultat n’est plus actif.".into());
         };
@@ -2810,7 +2813,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             original: &applied.original,
             pasted: &applied.pasted,
         };
-        let undone = pasted::undo(&target, strategy, true);
+        let undone = pasted::undo(&target, strategy, true, delivery);
         i.touch();
         drop(i);
         let outcome = match undone {
@@ -2852,7 +2855,8 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
     .await
     .map_err(|_| "L’annulation a été interrompue.".to_string())?
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock and the clipboard.
+#[tauri::command(async)]
 fn copy_result(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
     let r = result_for(&state, &request_id)?;
     // Our own write must not count as a fresh copy for the next shortcut.
@@ -2893,7 +2897,9 @@ async fn replace_result(
             );
         }
         // Held through the paste, as for the automatic one: nothing commits in between.
-        let pasted = target.and_then(|target| capture::paste(&target, &r.translated_text, true));
+        let ticket = i.delivery;
+        let pasted =
+            target.and_then(|target| capture::paste(&target, &r.translated_text, true, ticket));
         i.touch();
         drop(i);
         match &pasted {
@@ -3019,6 +3025,9 @@ fn force_close(app: &AppHandle, why: &'static str) {
         host::hide_handle(overlay);
     };
     silence();
+    // NATIVE-006: before the lock is asked for. A paste that holds it sends no Ctrl+V after this
+    // (it reads its session's ticket again right before the chord).
+    capture::revoke_deliveries();
     halo::hide(app);
     backdrop::hide(app, "overlay");
     let handle = app.clone();
@@ -3270,7 +3279,8 @@ fn show_settings(
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn open_settings(
     app: AppHandle,
     field: Option<String>,
@@ -3736,7 +3746,9 @@ fn remembered_process(
 ) -> Option<String> {
     process.filter(|_| !instruction && !simulated)
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock (released before the window is
+// read) and the menu memory on disk. The page waits for its answer before `translate`.
+#[tauri::command(async)]
 fn choose_action(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -3888,6 +3900,9 @@ fn validate_frame(frame: &SurfaceRegion, width: f64, height: f64) -> Result<(), 
 
 /// The reading budget is spent: the frontend dims the glass before it leaves. While it
 /// dims, Escape is the user's again (no scope); an approach re-arms it through `position`.
+// On the main thread on purpose (NATIVE-005 left it there): the page sends it without waiting,
+// and only the main thread keeps two of them in order (a `false` overtaking a later `true` would
+// leave Escape armed while the glass dims). Its lock is brief.
 #[tauri::command]
 fn overlay_dimming(
     app: AppHandle,
@@ -3977,7 +3992,9 @@ fn validate_regions(regions: &[SurfaceRegion], width: f64, height: f64) -> Resul
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock is never held while the window is
+// read or moved.
+#[tauri::command(async)]
 fn start_drag(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -4308,7 +4325,8 @@ async fn try_model(
     Ok(result)
 }
 /// The journal: the 500 last entries, the oldest first. Never a text, never a whole key.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the journal's lock, which a write to disk may hold.
+#[tauri::command(async)]
 fn get_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
@@ -4317,7 +4335,8 @@ fn get_diagnostics(
     Ok(state.diagnostics.list())
 }
 /// Empties the journal, in memory and on disk.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the journal on disk.
+#[tauri::command(async)]
 fn clear_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
@@ -4363,11 +4382,13 @@ fn open_stores(
 fn settings_recovery(state: State<'_, AppState>) -> Option<SettingsRecovery> {
     state.settings_recovery.clone()
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the history on disk (SQLite, DPAPI).
+#[tauri::command(async)]
 fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
     state.history.list()
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the history on disk.
+#[tauri::command(async)]
 fn delete_history(state: State<'_, AppState>, id: Option<String>) -> Result<(), String> {
     state.history.delete(id.as_deref())
 }
@@ -4764,13 +4785,7 @@ fn watch_context(app: AppHandle) {
                         a.located.clone(),
                     )
                 });
-                (
-                    i.source_window,
-                    i.source_rect,
-                    i.capture.clone(),
-                    i.size,
-                    applied,
-                )
+                (i.source_window, i.source_rect, i.capture.clone(), applied)
             };
             let fg = host::foreground();
             // By the handles kept at startup: a window getter would wait for the main thread,
@@ -4803,7 +4818,7 @@ fn watch_context(app: AppHandle) {
             // move must not leave it over other text for long.
             // After a paste under the Îlot (lot 9) too: the pill and the marks stand on the
             // new text.
-            let period = if halo::visible() || snapshot.4.is_some() {
+            let period = if halo::visible() || snapshot.3.is_some() {
                 3
             } else {
                 12
@@ -4811,7 +4826,7 @@ fn watch_context(app: AppHandle) {
             if (!ticks.is_multiple_of(period) && suspected.is_none()) || state.demo {
                 continue;
             }
-            if let Some((request_id, window, window_rect, located)) = snapshot.4 {
+            if let Some((request_id, window, window_rect, located)) = snapshot.3 {
                 // The caret after the pasted text is normal and keeps the pill; the window
                 // moving, another application in front, or the text scrolling or reflowing
                 // (its rectangles changed) hide pill and marks. The text no longer before the
@@ -4849,7 +4864,7 @@ fn watch_context(app: AppHandle) {
             // A capture without anchor (a copy, a selection without drawable rectangle) has no
             // place to lose; its target is still checked while the source is in front (review n°1).
             let anchored = captured.public.anchor.is_some();
-            // Once invalidated, a capture is not checked again (under the Îlot it keeps its anchor).
+            // Once invalidated, a capture is not checked again (it keeps its anchor).
             if captured.invalidated || (!anchored && captured.target.is_none()) {
                 suspected = None;
                 continue;
@@ -4896,28 +4911,23 @@ fn watch_context(app: AppHandle) {
                     .detail(why),
                 );
             }
-            let redock = match outcome {
+            match outcome {
                 Invalidated::Stale => continue,
                 Invalidated::CloseMenu => {
                     let _ = dismiss(&app, &state);
                     continue;
                 }
-                Invalidated::Stay => false,
-                Invalidated::Redock => true,
-            };
+                Invalidated::Stay => {}
+            }
             let _ = app.emit_to(
                 "overlay",
                 "target-invalidated",
                 TargetInvalidated {
                     capture_id: id,
-                    anchor_lost: redock && anchored,
                     message: "La sélection a changé. Utilisez Copier.".into(),
                     code: ErrorKind::TargetChanged,
                 },
             );
-            if redock {
-                let _ = position(&app, &state, snapshot.3 .0, snapshot.3 .1, None);
-            }
         }
     });
 }
@@ -5287,6 +5297,7 @@ mod tests {
     fn cancel_revokes_automatic_delivery_even_after_inference_finishes() {
         let settings = Settings::default();
         let mut binding = settings.shortcut_bindings[0].clone();
+        binding.kind = BindingKind::Action;
         binding.output_mode = OutputMode::Replace;
         let mut i = Inner::new(settings.clone());
         let mut run = Execution::snapshot(&settings, Some(&binding)).unwrap();
@@ -5945,6 +5956,7 @@ mod tests {
             selection_len: 5,
             editable: true,
             check: types::TargetCheck::Uia,
+            copy_witness: false,
         };
         let ready = || {
             let mut i = Inner::new(Settings::default());
@@ -5990,26 +6002,19 @@ mod tests {
         );
     }
     #[test]
-    fn an_invalidated_capture_keeps_its_place_under_the_ilot_and_docks_under_v4() {
+    fn an_invalidated_capture_keeps_its_place() {
         let anchor = Rect {
             x: 10.,
             y: 20.,
             width: 30.,
             height: 16.,
         };
-        let chosen = |ui: UiVersion| {
-            let mut i = Inner::new(Settings {
-                ui_version: ui,
-                ..Settings::default()
-            });
-            menu_capture(&mut i, "c");
-            i.capture.as_mut().unwrap().public.anchor = Some(anchor);
-            i.side = Some(PlacementSide::Below);
-            i.choose("c", "correct", None).unwrap();
-            i
-        };
-        // The working pill under the Îlot: it stays where it is, anchor and side kept.
-        let mut i = chosen(UiVersion::Ilot);
+        let mut i = Inner::new(Settings::default());
+        menu_capture(&mut i, "c");
+        i.capture.as_mut().unwrap().public.anchor = Some(anchor);
+        i.side = Some(PlacementSide::Below);
+        i.choose("c", "correct", None).unwrap();
+        // The working pill: it stays where it is, anchor and side kept.
         assert_eq!(i.invalidate("c"), Invalidated::Stay);
         let c = i.capture.as_ref().unwrap();
         assert_eq!(
@@ -6023,13 +6028,6 @@ mod tests {
         );
         assert_eq!(i.side, Some(PlacementSide::Below));
         assert_eq!(i.invalidate("c"), Invalidated::Stale, "checked once");
-        // Under v4 the glass loses its anchor and docks at the bottom, as in 0.4.
-        let mut i = chosen(UiVersion::V4);
-        assert_eq!(i.invalidate("c"), Invalidated::Redock);
-        assert_eq!(
-            (i.capture.as_ref().unwrap().public.anchor, i.side),
-            (None, None)
-        );
         // A menu still waiting closes; another capture is stale.
         let mut i = Inner::new(Settings::default());
         menu_capture(&mut i, "m");
@@ -6476,7 +6474,7 @@ mod tests {
         assert!(!i.current("new"));
     }
     #[test]
-    fn the_halo_shows_only_an_anchored_uia_selection_under_the_ilot_at_its_three_levels() {
+    fn the_halo_shows_only_an_anchored_uia_selection_at_its_three_levels() {
         let line = Rect {
             x: 10.,
             y: 20.,
@@ -6519,17 +6517,7 @@ mod tests {
             invalidated: false,
             levels: levels.clone(),
         };
-        let mut settings = Settings {
-            ui_version: UiVersion::V4,
-            ..Settings::default()
-        };
-        assert_eq!(
-            halo_scene(&settings, &stored(capture.clone())),
-            None,
-            "the 0.4 journey has no halo"
-        );
-        settings.ui_version = UiVersion::Ilot;
-        let scene = halo_scene(&settings, &stored(capture.clone())).expect("a scene");
+        let scene = halo_scene(&stored(capture.clone())).expect("a scene");
         assert_eq!(
             (scene.lines, scene.full, scene.text_box, scene.ground),
             (
@@ -6551,7 +6539,7 @@ mod tests {
             invalidated: false,
             levels: HaloLevels::default(),
         };
-        let scene = halo_scene(&settings, &bare).expect("a scene");
+        let scene = halo_scene(&bare).expect("a scene");
         assert_eq!(
             (scene.lines, scene.full.len(), scene.text_box, scene.ground),
             (vec![line], 0, None, None)
@@ -6561,7 +6549,7 @@ mod tests {
             ..capture.clone()
         };
         assert_eq!(
-            halo_scene(&settings, &stored(moved)),
+            halo_scene(&stored(moved)),
             None,
             "an invalidated selection is not shown"
         );
@@ -6573,7 +6561,7 @@ mod tests {
             ..capture
         };
         assert_eq!(
-            halo_scene(&settings, &stored(copied)),
+            halo_scene(&stored(copied)),
             None,
             "the copy paths have no rectangles"
         );

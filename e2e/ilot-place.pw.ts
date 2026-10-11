@@ -96,8 +96,6 @@ async function openIlot(
   });
   await page.goto('/?window=overlay&fixture=1');
   await expect(page.locator('.glass-overlay')).toBeVisible();
-  // The Îlot is the fixture's default, as it is Rust's: only the test's own settings are sent.
-  await expect(page.locator('html')).toHaveAttribute('data-ui', 'ilot');
   await page.evaluate(
     (next) => (window as unknown as { nativeFixture: Fixture }).nativeFixture.settings(next),
     settings,

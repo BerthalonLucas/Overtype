@@ -31,7 +31,6 @@ const settings = (patch: Partial<Settings> = {}): Settings => ({
   autostart: false,
   textSize: 'normal',
   autoClose: 'normal',
-  uiVersion: 'ilot',
   language: 'fr',
   theme: 'system',
   motion: 'system',

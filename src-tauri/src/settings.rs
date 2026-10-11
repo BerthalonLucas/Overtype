@@ -48,8 +48,8 @@ struct PersistedSettings {
     text_size: crate::types::TextSize,
     #[serde(default)]
     auto_close: crate::types::AutoClose,
-    #[serde(default)]
-    ui_version: crate::types::UiVersion,
+    // `uiVersion` (`v4` or `ilot`) chose the interface until 10/10/2026; only the Îlot is left.
+    // The key of an older file is ignored on load (unknown keys are) and never written again.
     #[serde(default)]
     language: crate::types::Language,
     #[serde(default)]
@@ -364,7 +364,6 @@ impl SettingsStore {
             autostart: raw.autostart,
             text_size: raw.text_size,
             auto_close: raw.auto_close,
-            ui_version: raw.ui_version,
             language: raw.language,
             theme: raw.theme,
             motion: raw.motion,
@@ -434,7 +433,6 @@ impl SettingsStore {
             autostart: settings.autostart,
             text_size: settings.text_size,
             auto_close: settings.auto_close,
-            ui_version: settings.ui_version,
             language: settings.language,
             theme: settings.theme,
             motion: settings.motion,
@@ -1431,11 +1429,6 @@ mod tests {
             }
         );
         assert_eq!(migrated.default_action_id, "correct");
-        assert_eq!(
-            migrated.ui_version,
-            crate::types::UiVersion::Ilot,
-            "0.5.0 opens the Îlot, its menu binding included"
-        );
         assert!(migrated.history_enabled && migrated.autostart);
         assert_eq!(
             (migrated.text_size, migrated.auto_close),
@@ -1526,7 +1519,7 @@ mod tests {
     }
     #[test]
     fn restoring_the_defaults_keeps_only_what_sets_this_device_up() {
-        use crate::types::{Language, TextSize, Theme, UiVersion};
+        use crate::types::{Language, TextSize, Theme};
         let mut current = Settings::default();
         current.actions.push(ActionDefinition {
             id: "custom".into(),
@@ -1542,14 +1535,8 @@ mod tests {
         (
             current.text_size,
             current.theme,
-            current.ui_version,
             current.changed_words_style,
-        ) = (
-            TextSize::Large,
-            Theme::Dark,
-            UiVersion::V4,
-            ChangedWordsStyle::Eclat,
-        );
+        ) = (TextSize::Large, Theme::Dark, ChangedWordsStyle::Eclat);
         (
             current.history_enabled,
             current.autostart,
@@ -1796,7 +1783,6 @@ mod tests {
         value.changed_words_style = ChangedWordsStyle::Eclat;
         value.text_size = crate::types::TextSize::Large;
         value.auto_close = crate::types::AutoClose::Never;
-        value.ui_version = crate::types::UiVersion::Ilot;
         store.save(&value).unwrap();
         let loaded = store.load().unwrap();
         assert_eq!(loaded, value);
@@ -1827,27 +1813,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]
-    fn a_0_4_settings_file_without_the_ui_switch_opens_the_ilot_and_v4_stays_reachable() {
-        let root = temp_root("settings-test");
+    fn a_file_that_still_asks_for_v4_loads_as_the_ilot_and_loses_the_switch_at_the_next_save() {
+        // The hidden `uiVersion` switch is gone (Lucas, 10/10/2026): a file that still
+        // carries it, `v4` included, loads as it is, nothing set aside, and the key is dropped.
+        let root = temp_root("settings-v4");
         let store = SettingsStore::new(&root);
-        store.save(&Settings::default()).unwrap();
+        let saved = Settings {
+            setup_done: true,
+            ..Settings::default()
+        };
+        store.save(&saved).unwrap();
         let path = root.join("settings.json");
         let mut raw: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        raw.as_object_mut().unwrap().remove("uiVersion");
-        std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
-        assert_eq!(
-            store.load().unwrap().ui_version,
-            crate::types::UiVersion::Ilot
-        );
         raw.as_object_mut()
             .unwrap()
             .insert("uiVersion".into(), "v4".into());
         std::fs::write(&path, serde_json::to_vec(&raw).unwrap()).unwrap();
+        let (loaded, set_aside) = store.load_or_recover().unwrap();
+        assert_eq!((&loaded, set_aside), (&saved, None));
+        assert!(path.exists() && !store.backup_path().exists());
+        let menu = &loaded.shortcut_bindings[0];
         assert_eq!(
-            store.load().unwrap().ui_version,
-            crate::types::UiVersion::V4
+            (menu.kind, menu.enabled),
+            (actions::BindingKind::Menu, true),
+            "the menu shortcut opens the Îlot"
         );
+        store.save(&loaded).unwrap();
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(written.get("uiVersion").is_none());
         let _ = std::fs::remove_dir_all(root);
     }
     #[test]

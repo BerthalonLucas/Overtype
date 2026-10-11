@@ -23,7 +23,7 @@
 .ilot-btn:has(> svg:first-child) { padding-left: 8px; }
 .ilot-hint { position: relative; top: 1px; font-size: 10.5px; color: rgb(var(--ink-rgb) / .42); }
 .ilot-sep { flex: none; width: 1px; height: 14px; margin: 0 3px; background: rgb(var(--ink-rgb) / .12); }
-.ilot-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(#BC82F3, #8D9FFF, #FF6778, #FFBA71, #BC82F3); box-shadow: 0 0 6px rgba(188, 130, 243, .6); }
+.ilot-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(var(--brand-stops)); box-shadow: 0 0 6px rgba(188, 130, 243, .6); }
 
 /* Grid: 3 × 2 tiles of 66 × 50, 4 apart, 6 from the edge (app.css:188-190). */
 .ilot-grid { display: grid; grid-template-columns: repeat(3, 66px); gap: 4px; padding: 6px; }

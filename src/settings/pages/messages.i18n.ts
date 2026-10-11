@@ -217,7 +217,6 @@ export const settingsPagesMessages = {
     en: 'The menu overshoots a little, then comes back.',
     fr: 'Le menu dépasse un peu, puis revient.',
   },
-  'page.appearance.miniAction': { en: 'Fix', fr: 'Corriger' },
   'page.appearance.sample': {
     en: 'Could you send me the signed quote before Friday?',
     fr: 'Could you send me the signed quote before Friday?',

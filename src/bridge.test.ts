@@ -171,8 +171,6 @@ describe('the simulated connection of the preview', () => {
     if (name === 'probe-step') steps.push(payload as ProbeStepEvent);
     else journal.push(payload as DiagEntry);
   };
-  const servers = (id: string) =>
-    id === 's1' ? { endpoint: 'https://llm.exemple.com', apiKey: key, noKey: false } : undefined;
   const probe = (run: string, endpoint = 'https://llm.exemple.com/v1', apiKey = key, noKey = false) =>
     connectionCommand('probe_connection', { run, endpoint, apiKey, noKey }, emit) as Promise<ProbeResult>;
   const attempt = (run: string, model: string, apiKey = key) =>

@@ -1,13 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import * as Collapsible from '@radix-ui/react-collapsible';
-import { AnimatePresence, motion } from 'motion/react';
-import { ChevronRight, Plus, RotateCcw, Trash2, WandSparkles } from 'lucide-react';
+import { ChevronRight, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { isCurrentDefault, newActionTemplate, promptError, shippedInstruction } from '../../actionDefaults';
 import { locales, t as tNow, translate, useLanguage, useT } from '../../i18n';
-import { Icon, iconFromLucide } from '../../ui';
 import { Button, Group, ICON, Input, Keycap } from '../../components/controls';
-import { useTx } from '../../components/motion';
 import type { ActionDefinition, Settings } from '../../types';
+import { IlotView } from '../../menu/Ilot';
+import { menuActions } from '../../menu/IlotStage';
 import { MenuGrid } from '../MenuGrid';
 import { deleteAction, gridLimit } from '../grid';
 import { useSettingsContext } from '../useSettingsStore';
@@ -16,17 +15,13 @@ import { ActionGlyph } from './Shortcuts';
 export const actionLimit = 24;
 export const nameMaxLength = 60;
 export const shortNameMaxLength = 16;
-export const promptMaxLength = 8000;
 
-// The Îlot as it will open beside a selection: the tiles in their order, each with its letter;
-// the free instruction takes the last tile while there is room.
+// The Îlot as it will open beside a selection: the app's own Îlot (src/menu/Ilot.tsx) on its
+// grid, with the menu's tiles in their order and the free instruction last while there is room.
+// A picture: it listens to no key, moves no focus and takes no click (inert).
 function IlotPreview({ settings }: { settings: Settings }) {
   const t = useT();
-  const tx = useTx();
-  const tiles = settings.menuActionIds
-    .map((id) => settings.actions.find((action) => action.id === id))
-    .filter((action): action is ActionDefinition => Boolean(action))
-    .slice(0, gridLimit);
+  const actions = useMemo(() => menuActions(settings), [settings]);
   return (
     <figure className="st-ilot-stage" aria-label={t('page.actions.previewLabel')}>
       <div className="st-ilot-text" aria-hidden="true">
@@ -36,44 +31,17 @@ function IlotPreview({ settings }: { settings: Settings }) {
           {t('page.actions.sampleRest')}
         </span>
       </div>
-      <div className="st-ilot">
-        <div className="st-ilot-grid">
-          <AnimatePresence initial={false} mode="popLayout">
-            {tiles.map((action) => {
-              const glyph = iconFromLucide(action.icon);
-              return (
-                <motion.span
-                  key={action.id}
-                  layout
-                  className="st-ilot-tile"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={tx('smooth')}
-                >
-                  {glyph && <Icon name={glyph} size={16} />}
-                  <span className="st-ilot-label">{action.shortName || action.name || t('actions.untitled')}</span>
-                  {action.key && <span className="st-ilot-key">{action.key}</span>}
-                </motion.span>
-              );
-            })}
-            {tiles.length < gridLimit && (
-              <motion.span
-                key="\nfree"
-                layout
-                className="st-ilot-tile"
-                data-free=""
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                transition={tx('smooth')}
-              >
-                <WandSparkles size={16} strokeWidth={1.5} aria-hidden="true" />
-                <span className="st-ilot-label">{t('ilot.ask')}</span>
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
+      <div style={{ gridColumn: 2, gridRow: '1 / span 2' }} inert>
+        <IlotView
+          actions={actions}
+          knownActions={settings.actions}
+          lastActionId={settings.defaultActionId}
+          keyboard="none"
+          initialMode="grid"
+          onChoose={() => undefined}
+          onInstruction={() => undefined}
+          onClose={() => undefined}
+        />
       </div>
       <figcaption>{t('page.actions.preview')}</figcaption>
     </figure>

@@ -143,11 +143,16 @@ export function instructionError(value: string): string | null {
 }
 // One shortcut on a fresh install: the Îlot menu (under uiVersion 'v4' it runs the default
 // action and replaces the selection).
+// The first free id for a menu binding: « menu », then « menu-2 », « menu-3 »…
+export const freeMenuId = (bindings: ShortcutBinding[]) =>
+  ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find((id) => bindings.every((binding) => binding.id !== id))!;
 export const defaultBindings: ShortcutBinding[] = [
   { id: 'menu', kind: 'menu', shortcut: menuShortcut, actionId: defaultActionId, outputMode: 'replace', enabled: true },
 ];
+// An action's instruction holds 1 to 8000 characters, without NUL.
+export const promptMaxLength = 8000;
 export function promptError(template: string): string | null {
-  if (!template.trim() || [...template].length > 8000 || template.includes('\0'))
+  if (!template.trim() || [...template].length > promptMaxLength || template.includes('\0'))
     return 'La consigne doit contenir de 1 à 8 000 caractères, sans caractère nul.';
   return null;
 }

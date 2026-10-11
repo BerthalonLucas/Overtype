@@ -163,52 +163,45 @@ test('the theme follows the system scheme live, and a forced theme wins over it'
   expect(await unreloaded(page)).toBe(true);
 });
 
-// The waiting pill of each journey: the Îlot's working pill (the preview's default, as the app's)
-// and, asked for (`&ui=v4`), the 0.4 spinner pill.
-const waitingPills = [
-  { name: 'Îlot', query: '', pill: '.working-pill' },
-  { name: '0.4', query: '&ui=v4', pill: '.wait-pill' },
-] as const;
-
+// The waiting pill: the working pill.
 for (const colorScheme of ['light', 'dark'] as const)
-  for (const { name, query, pill: waiting } of waitingPills) {
-    test(`the ${colorScheme} material paints every surface, and every icon is a thin Lucide of 14 to 16 px (${name})`, async ({
-      page,
-    }) => {
-      await page.emulateMedia({ colorScheme });
-      await page.goto(`/?window=overlay&demo=1&scenario=long${query}`);
-      await expect(page.locator(waiting)).toBeVisible();
-      await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
-      const paint = (selector: string) =>
-        page.locator(selector).evaluate((el) => ({
-          image: getComputedStyle(el).backgroundImage,
-          color: getComputedStyle(el).backgroundColor,
-          shadow: getComputedStyle(el).boxShadow,
-        }));
-      const pill = await paint(waiting);
-      expect(pill.shadow).toContain('0.5px');
-      await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
-      await page.getByRole('button', { name: 'More options', exact: true }).click();
-      await expect(page.getByRole('menu')).toBeVisible();
-      const surfaces = await Promise.all(['.translation-bubble', '.action-pill', '.more-menu'].map(paint));
-      for (const surface of surfaces) expect(surface).toEqual(pill);
-      expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.06)');
-      expect(pill.color).toBe(colorScheme === 'dark' ? 'rgb(24, 23, 31)' : 'rgb(250, 249, 253)');
-      // Layout size, not the painted box: a surface still entering on its spring scales from .97.
-      const icons = await page.locator('.glass-overlay svg.lucide').evaluateAll((nodes) =>
-        nodes.map((node) => ({
-          stroke: node.getAttribute('stroke-width'),
-          width: parseFloat(getComputedStyle(node).width),
-          height: parseFloat(getComputedStyle(node).height),
-        })),
-      );
-      expect(icons.length).toBeGreaterThanOrEqual(4);
-      for (const icon of icons) {
-        expect(icon.stroke).toBe('1.5');
-        expect(icon.width).toBeGreaterThanOrEqual(14);
-        expect(icon.width).toBeLessThanOrEqual(16);
-        expect(icon.height).toBe(icon.width);
-      }
-      await page.screenshot({ path: `test-results/lot1-material-${colorScheme}.png` });
-    });
-  }
+  test(`the ${colorScheme} material paints every surface, and every icon is a thin Lucide of 14 to 16 px`, async ({
+    page,
+  }) => {
+    const waiting = '.working-pill';
+    await page.emulateMedia({ colorScheme });
+    await page.goto('/?window=overlay&demo=1&scenario=long');
+    await expect(page.locator(waiting)).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', colorScheme);
+    const paint = (selector: string) =>
+      page.locator(selector).evaluate((el) => ({
+        image: getComputedStyle(el).backgroundImage,
+        color: getComputedStyle(el).backgroundColor,
+        shadow: getComputedStyle(el).boxShadow,
+      }));
+    const pill = await paint(waiting);
+    expect(pill.shadow).toContain('0.5px');
+    await expect(page.getByRole('button', { name: 'Copy translation', exact: true })).toBeEnabled({ timeout: 30000 });
+    await page.getByRole('button', { name: 'More options', exact: true }).click();
+    await expect(page.getByRole('menu')).toBeVisible();
+    const surfaces = await Promise.all(['.translation-bubble', '.action-pill', '.more-menu'].map(paint));
+    for (const surface of surfaces) expect(surface).toEqual(pill);
+    expect(pill.image).toContain(colorScheme === 'light' ? 'rgba(255, 255, 255, 0.5)' : 'rgba(255, 255, 255, 0.06)');
+    expect(pill.color).toBe(colorScheme === 'dark' ? 'rgb(24, 23, 31)' : 'rgb(250, 249, 253)');
+    // Layout size, not the painted box: a surface still entering on its spring scales from .97.
+    const icons = await page.locator('.glass-overlay svg.lucide').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        stroke: node.getAttribute('stroke-width'),
+        width: parseFloat(getComputedStyle(node).width),
+        height: parseFloat(getComputedStyle(node).height),
+      })),
+    );
+    expect(icons.length).toBeGreaterThanOrEqual(4);
+    for (const icon of icons) {
+      expect(icon.stroke).toBe('1.5');
+      expect(icon.width).toBeGreaterThanOrEqual(14);
+      expect(icon.width).toBeLessThanOrEqual(16);
+      expect(icon.height).toBe(icon.width);
+    }
+    await page.screenshot({ path: `test-results/lot1-material-${colorScheme}.png` });
+  });

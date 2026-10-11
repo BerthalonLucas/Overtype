@@ -33,7 +33,7 @@ import { errorCodes, type ErrorCode, type ProfileField, type SettingsField } fro
  *                               not read back; its own words, ✕ only.
  *   ErrorAction                 { type: 'settings', field } | { type: 'retry' } | { type: 'copy' }.
  *
- * Only codes decide. Rust's French words travel beside them for the 0.4 journey and are never
+ * Only codes decide. Rust's French words travel beside them for the glass and are never
  * read here: each situation the Îlot tells apart has its own code (settings_open and
  * nothing_recent for the notices, the Refusal of replace_result; docs/BRIDGE.md « error codes »).
  */
@@ -102,7 +102,7 @@ export function errorCodeOf(value: unknown): ErrorCode {
   return (errorCodes as readonly unknown[]).includes(value) ? (value as ErrorCode) : 'internal';
 }
 // A command refused with its code (`replace_result` since the review of da-ilot: `{message, code}`).
-// The message is Rust's French sentence for the 0.4 journey: never read here.
+// The message is Rust's French sentence for the glass: never read here.
 export function refusalCode(reason: unknown): ErrorCode {
   return errorCodeOf(typeof reason === 'object' && reason !== null ? (reason as { code?: unknown }).code : undefined);
 }

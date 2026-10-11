@@ -98,14 +98,12 @@ export function dragSurface(
 type ScrollEdge = 'top' | 'middle' | 'bottom' | 'none';
 const SCROLLBAR_LINGER = 800;
 const NEAR_MARGIN = 32;
-// The waiting pill shows a progress sweep once the engine has taken longer than this.
-const SLOW_AFTER = 1500;
 
 // Three dots hopping in turn (900 ms cycle, 120 ms apart): the whole result lands at
 // once behind them (deltas are buffered in useTranslation), so the window resizes once.
 // The wait is shadcn's spinner: lucide's LoaderCircle turning once a second, at the 16 px
-// ceiling of the thin Lucide set (lot 1). The Îlot journey shows the working pill of lot 8
-// instead (src/loaders/WorkingPill.tsx).
+// ceiling of the thin Lucide set (lot 1). Before any text, the wait is the working pill of
+// lot 8 (src/loaders/WorkingPill.tsx).
 function WaitSpinner() {
   return (
     <span className="wait-spinner" aria-hidden="true">
@@ -113,25 +111,6 @@ function WaitSpinner() {
     </span>
   );
 }
-// The pill alone: the spinner while the model works; in « replace » mode it also shows
-// the check once the result was pasted, then the glass leaves (0.4.0).
-function WaitPill({ slow, done }: { slow: boolean; done: boolean }) {
-  const t = useT();
-  const enter = useSurfacePresence('up');
-  return (
-    <motion.span
-      {...enter}
-      className="wait-pill"
-      role="img"
-      aria-label={t(done ? 'glass.replaced' : 'glass.working')}
-      data-slow={slow && !done}
-      data-done={done || undefined}
-    >
-      {done ? <Icon name="check" size={16} /> : <WaitSpinner />}
-    </motion.span>
-  );
-}
-
 // Long runs (paths, URLs, identifiers) get a break opportunity after their separators,
 // so the glass wraps them there instead of cutting a word at its rounded edge.
 function Breakable({ text }: { text: string }) {
@@ -255,20 +234,20 @@ function ReadingSurface({
   );
 }
 
-// A menu capture under the Îlot lives on the Îlot's surface from the menu to its check or its
-// error pill (src/menu/IlotStage.tsx); everything else is the glass.
+// A menu capture lives on the Îlot's surface from the menu to its check or its error pill
+// (src/menu/IlotStage.tsx); everything else is the glass.
 export function GlassOverlay({ controller }: { controller: TranslationController }) {
-  const { state, settings, notice } = controller;
+  const { state, notice } = controller;
   if (state.capture)
-    return ilotJourney(settings, state.capture) ? (
+    return ilotJourney(state.capture) ? (
       <IlotStage key={state.capture.id} controller={controller} capture={state.capture} />
     ) : (
       <GlassSession key={state.capture.id} controller={controller} />
     );
   if (!notice) return null;
-  // Under the Îlot a refused capture reads as its error pill, in the interface language, from its
-  // code alone; v4 keeps Rust's message.
-  return settings?.uiVersion === 'ilot' && notice.code ? (
+  // A refused capture reads as its error pill, in the interface language, from its code alone;
+  // a notice without a code keeps Rust's message.
+  return notice.code ? (
     <IlotNotice key={notice.id} code={notice.code} />
   ) : (
     <NoticePill key={notice.id} message={notice.message} />
@@ -318,12 +297,11 @@ function previewScreen(): Screen {
 // then comes back to « Translation complete »), never in a second region.
 export function overlayStatus(state: {
   streaming: boolean;
-  ilot: boolean;
   applied: boolean;
   complete: boolean;
   copied: boolean;
-}): 'pill.working' | 'glass.working' | 'glass.replaced' | 'glass.copied' | 'glass.complete' | null {
-  if (state.streaming) return state.ilot ? 'pill.working' : 'glass.working';
+}): 'pill.working' | 'glass.replaced' | 'glass.copied' | 'glass.complete' | null {
+  if (state.streaming) return 'pill.working';
   if (state.applied) return 'glass.replaced';
   if (state.copied) return 'glass.copied';
   if (state.complete) return 'glass.complete';
@@ -363,7 +341,6 @@ function GlassSession({ controller }: { controller: TranslationController }) {
     ),
   );
   const [moving, setMoving] = useState(false);
-  const [slow, setSlow] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuAtExit = useRef(false);
   useLayoutEffect(() => {
@@ -408,22 +385,20 @@ function GlassSession({ controller }: { controller: TranslationController }) {
   const settled = (state.phase === 'complete' || state.phase === 'error' || state.phase === 'cancelled') && !replacing;
   const ready = state.phase === 'complete' && !closingCaptureId && !moving && !replacing;
   const isReader = form === 'reader';
-  // The Îlot art direction (hidden switch, lot 0): the wait is the working pill with the chosen
-  // indicator (lot 8); the 0.4 journey keeps its spinner pill. A menu capture under the Îlot never
-  // reaches this glass (GlassOverlay renders IlotStage for it).
-  const ilot = settings?.uiVersion === 'ilot';
+  // The wait is the working pill with the chosen indicator (lot 8). A menu capture never reaches
+  // this glass (GlassOverlay renders IlotStage for it).
   const indicator = indicatorOf(settings?.indicator);
   // « Run again with … » (0.6): the server after the one that answered, with two servers or more.
   const servers = settings?.servers ?? [];
   const currentServer = servers.findIndex((server) => server.id === (state.serverId ?? settings?.defaultServerId));
   const nextServer = servers.length > 1 ? servers[(Math.max(currentServer, 0) + 1) % servers.length] : null;
-  // Under the Îlot the working pill enters from the selection's side, as the lab's surfaces do
+  // The working pill enters from the selection's side, as the lab's surfaces do
   // (Surface.jsx:46, Simulator.jsx:68): down from it when the glass hangs below the selection, up
   // toward it above, up from the bottom edge (review of bc57857, finding 8). The side is read once
   // from where Rust put the window, before the pill enters (frameSide); at most SIDE_WAIT_MS, then
   // below. The browser preview has no window: below.
   const [pillSide, setPillSide] = useState<IlotSide | null>(() =>
-    ilot && bridge.native && placement === 'anchored' ? null : 'below',
+    bridge.native && placement === 'anchored' ? null : 'below',
   );
   const sideAsked = useRef(false);
   const readPillSide = (frameTop: number) => {
@@ -463,14 +438,6 @@ function GlassSession({ controller }: { controller: TranslationController }) {
     const timer = window.setTimeout(cancelAndDismiss, 900);
     return () => window.clearTimeout(timer);
   }, [state.delivery, cancelAndDismiss]);
-  useEffect(() => {
-    if (!streaming) {
-      setSlow(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setSlow(true), SLOW_AFTER);
-    return () => window.clearTimeout(timer);
-  }, [streaming, state.requestId]);
   useEffect(() => {
     setMenuOpen(false);
     setFeedback(null);
@@ -645,14 +612,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
       if (active.current.closing) return;
       const bounds = element.getBoundingClientRect();
       // Order is a bridge invariant: the glass comes first; Rust anchors `frame`.
-      const selectors = [
-        '.translation-bubble',
-        '.wait-pill',
-        '.working-pill',
-        '.action-pill',
-        '.more-menu',
-        '.compact-feedback',
-      ];
+      const selectors = ['.translation-bubble', '.working-pill', '.action-pill', '.more-menu', '.compact-feedback'];
       const parts = selectors.flatMap((selector) => {
         const part = element.querySelector<HTMLElement>(selector);
         if (!part) return [];
@@ -713,7 +673,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
         void bridge.resize(width, height, geometry).then(
           () => {
             placed();
-            if (ilot && !bottom) readPillSide(frameRegion.y);
+            if (!bottom) readPillSide(frameRegion.y);
           },
           () => {
             if (previousGeometry.current === signature) previousGeometry.current = '';
@@ -730,7 +690,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
     const observer = new ResizeObserver(measure);
     observer.observe(element);
     element
-      .querySelectorAll('.translation-bubble,.wait-pill,.working-pill,.action-pill,.more-menu,.compact-feedback')
+      .querySelectorAll('.translation-bubble,.working-pill,.action-pill,.more-menu,.compact-feedback')
       .forEach((part) => observer.observe(part));
     // A hidden WebView may suspend rAF; the first geometry must unlock native show.
     publish();
@@ -876,11 +836,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
       >
         <div className="glass-body">
           {form === 'pending' ? (
-            ilot ? (
-              <WorkingPill indicator={indicator} grow={pillGrow} done={state.delivery === 'applied'} />
-            ) : (
-              <WaitPill slow={slow} done={state.delivery === 'applied'} />
-            )
+            <WorkingPill indicator={indicator} grow={pillGrow} done={state.delivery === 'applied'} />
           ) : (
             <>
               <div
@@ -958,7 +914,6 @@ function GlassSession({ controller }: { controller: TranslationController }) {
         {(() => {
           const key = overlayStatus({
             streaming,
-            ilot,
             applied: state.delivery === 'applied',
             complete: state.phase === 'complete' && !replacing,
             copied,

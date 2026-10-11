@@ -125,7 +125,7 @@
 /* One material for every floating surface: the light from the top over the grain and the fill,
    the rim over the shadow. Geometry stays with each component: the 1 px border of 0.4 became
    1 px of padding, so every box keeps its size while the edge is a 0.5 px shadow outside it. */
-.translation-bubble, .wait-pill, .working-pill, .action-pill, .more-menu, .notice-pill, .compact-feedback, .initialization-error {
+.translation-bubble, .working-pill, .action-pill, .more-menu, .notice-pill, .compact-feedback, .initialization-error {
   background: var(--surface-sheen), var(--surface-bg);
   box-shadow: var(--surface-rim), var(--surface-shadow);
 }
@@ -135,7 +135,7 @@
    surface floats over the page's own content (the demo in the setup window: backdrop-filter
    blurs the mail behind the Îlot, as the lab's .ft-glass). The dense paint gives way to the
    lab's light tint; grain, rim and shadow stay. Without the attribute, the painted material. */
-:root[data-backdrop="glass"] :is(.translation-bubble, .wait-pill, .working-pill, .action-pill, .more-menu, .notice-pill, .compact-feedback, .ilot-shape) {
+:root[data-backdrop="glass"] :is(.translation-bubble, .working-pill, .action-pill, .more-menu, .notice-pill, .compact-feedback, .ilot-shape) {
   background: var(--surface-grain), var(--glass-tint);
   -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
 }

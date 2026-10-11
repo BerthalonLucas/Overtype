@@ -218,10 +218,6 @@ const dictionary = {
     en: 'Select some text, then press these keys: the menu opens beside it.',
     fr: 'Sélectionnez du texte, puis appuyez sur ces touches : le menu s’ouvre à côté.',
   },
-  'settings.menuShortcutHelpV4': {
-    en: 'Runs the default action on the selected text.',
-    fr: 'Lance l’action par défaut sur le texte sélectionné.',
-  },
   'settings.menuShortcutOff': {
     en: 'Off. Record a combination to turn it on.',
     fr: 'Désactivé. Enregistrez une combinaison pour l’activer.',
@@ -231,7 +227,6 @@ const dictionary = {
     en: 'The menu starts on the last action used in each app, or on this one.',
     fr: 'Le menu propose la dernière action utilisée dans chaque application, sinon celle-ci.',
   },
-  'settings.defaultActionHelpV4': { en: 'What the shortcut runs.', fr: 'Ce que lance le raccourci.' },
   'settings.bubble': { en: 'Result bubble', fr: 'Bulle de résultat' },
   'settings.bubbleIntro': {
     en: 'When a shortcut shows the result, or a paste fails.',

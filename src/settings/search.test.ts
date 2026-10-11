@@ -5,7 +5,7 @@ import { fold, searchLimit, searchSettings } from './search';
 
 const fr: Translate = (key, params) => translate('fr', key, params);
 const en: Translate = (key, params) => translate('en', key, params);
-const pages = visiblePages({ uiVersion: 'ilot' }, false);
+const pages = visiblePages(false);
 
 describe('the search of the Settings sidebar', () => {
   it('finds a setting by its title, its page or its extra words, without accents or case', () => {
@@ -31,6 +31,12 @@ describe('the search of the Settings sidebar', () => {
 
   it('leaves out the rows of a page that is not shown', () => {
     expect(searchSettings('coche', fr, pages).map((result) => result.page)).toEqual(['after']);
-    expect(searchSettings('coche', fr, visiblePages({ uiVersion: 'v4' }, false))).toEqual([]);
+    expect(
+      searchSettings(
+        'coche',
+        fr,
+        pages.filter((page) => page !== 'after'),
+      ),
+    ).toEqual([]);
   });
 });

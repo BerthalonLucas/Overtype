@@ -73,7 +73,6 @@ function InstructionEditor({
   const used =
     settings.defaultActionId === action.id ||
     settings.shortcutBindings.some((binding) => binding.actionId === action.id);
-  const ilot = settings.uiVersion === 'ilot';
   const first = action.promptTemplate.split('\n')[0];
   return (
     <Collapsible.Root className="ft-row st-instr" defaultOpen={defaultOpen} data-action={action.id}>
@@ -95,7 +94,7 @@ function InstructionEditor({
       </Collapsible.Trigger>
       <Collapsible.Content className="st-collapse">
         <div className="st-instr-edit">
-          <div className="st-instr-name" data-two={ilot ? '' : undefined}>
+          <div className="st-instr-name">
             <div>
               <label className="st-mini-label" htmlFor={`name-${action.id}`}>
                 {t('actions.name')}
@@ -109,26 +108,24 @@ function InstructionEditor({
               />
             </div>
             {/* The tile's label in the Îlot (1 to 16 characters); empty, the tile shows the name. */}
-            {ilot && (
-              <div>
-                <label className="st-mini-label" htmlFor={`short-${action.id}`}>
-                  {t('actions.shortName')}
-                </label>
-                <Input
-                  id={`short-${action.id}`}
-                  value={action.shortName ?? ''}
-                  maxLength={shortNameMaxLength}
-                  placeholder={action.name}
-                  onChange={(event) =>
-                    onChange(
-                      ({ shortName: _old, ...item }) =>
-                        event.target.value.trim() ? { ...item, shortName: event.target.value } : item,
-                      false,
-                    )
-                  }
-                />
-              </div>
-            )}
+            <div>
+              <label className="st-mini-label" htmlFor={`short-${action.id}`}>
+                {t('actions.shortName')}
+              </label>
+              <Input
+                id={`short-${action.id}`}
+                value={action.shortName ?? ''}
+                maxLength={shortNameMaxLength}
+                placeholder={action.name}
+                onChange={(event) =>
+                  onChange(
+                    ({ shortName: _old, ...item }) =>
+                      event.target.value.trim() ? { ...item, shortName: event.target.value } : item,
+                    false,
+                  )
+                }
+              />
+            </div>
           </div>
           <label className="st-mini-label" htmlFor={`instr-${action.id}`}>
             {t('actions.instruction')}
@@ -189,7 +186,6 @@ export function ActionsPage() {
   const t = useT();
   const { settings, persist } = useSettingsContext();
   const [fresh, setFresh] = useState<string | null>(null);
-  const ilot = settings.uiVersion === 'ilot';
   const full = settings.actions.length >= actionLimit;
   const edit = (id: string, patch: (action: ActionDefinition) => ActionDefinition, immediate: boolean) =>
     persist(
@@ -218,20 +214,16 @@ export function ActionsPage() {
   const menuFull = settings.menuActionIds.length >= gridLimit;
   return (
     <>
-      {ilot && (
-        <>
-          <IlotPreview settings={settings} />
-          <Group title={t('grid.title')} description={t('grid.intro')}>
-            <MenuGrid settings={settings} persist={persist} />
-          </Group>
-          <p className="st-footnote st-footnote-tight">
-            {t('page.actions.free')} <Keycap size="sm">{t('page.key.space')}</Keycap> {t('page.actions.or')}{' '}
-            <Keycap size="sm">/</Keycap>
-            {t('page.actions.freeEnd')}
-            {menuFull && t('page.actions.full')}
-          </p>
-        </>
-      )}
+      <IlotPreview settings={settings} />
+      <Group title={t('grid.title')} description={t('grid.intro')}>
+        <MenuGrid settings={settings} persist={persist} />
+      </Group>
+      <p className="st-footnote st-footnote-tight">
+        {t('page.actions.free')} <Keycap size="sm">{t('page.key.space')}</Keycap> {t('page.actions.or')}{' '}
+        <Keycap size="sm">/</Keycap>
+        {t('page.actions.freeEnd')}
+        {menuFull && t('page.actions.full')}
+      </p>
 
       <Group
         title={t('actions.instructions')}

@@ -86,7 +86,6 @@ const defaultSettings: Settings = {
   autostart: false,
   textSize: 'normal',
   autoClose: 'normal',
-  uiVersion: 'ilot',
   language: 'en',
   theme: 'system',
   motion: 'system',
@@ -139,12 +138,9 @@ let demoCapture: Capture = {
 };
 type DemoScenario = 'normal' | 'error' | 'long' | 'very-long' | 'pending' | 'partial';
 let demoScenario: DemoScenario = 'normal';
-// The preview starts where the app does, in the Îlot (Rust's default since 0.5.0); `?ui=v4` asks
-// for the 0.4 journey, as the tests and the lab's 0.4 states do.
 let demoSettings: Settings = {
   ...structuredClone(defaultSettings),
   ...previewServers(location.search),
-  uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot',
 };
 let activeTimer: number | undefined;
 let activeDemoRequest: string | undefined;

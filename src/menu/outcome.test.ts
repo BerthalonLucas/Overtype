@@ -42,11 +42,10 @@ const outcome = (
 ) => ilotOutcome(state(patch), { chosen, paste, undo });
 
 describe('the Îlot journey', () => {
-  it('is a menu capture under uiVersion ilot, nothing else', () => {
-    expect(ilotJourney({ uiVersion: 'ilot' }, { menu: { lastActionId: null } })).toBe(true);
-    expect(ilotJourney({ uiVersion: 'v4' }, { menu: { lastActionId: null } })).toBe(false);
-    expect(ilotJourney({ uiVersion: 'ilot' }, {})).toBe(false);
-    expect(ilotJourney(null, { menu: { lastActionId: null } })).toBe(false);
+  it('is a menu capture, nothing else', () => {
+    expect(ilotJourney({ menu: { lastActionId: null } })).toBe(true);
+    expect(ilotJourney({})).toBe(false);
+    expect(ilotJourney(null)).toBe(false);
   });
 });
 

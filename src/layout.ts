@@ -15,7 +15,6 @@ export const glass = {
   // Text paddings: top, side, bottom (short glass / reader band).
   shortPadding: { top: 16, side: 22, bottom: 13 },
   readerPadding: { top: 18, side: 28, bottom: 16 },
-  waitPill: { width: 60, height: 28 },
 };
 export const COMPACT_MAX_LINES = 8;
 // Shadow halo around the tight regions in the packaged window (glass.css carries the same values).

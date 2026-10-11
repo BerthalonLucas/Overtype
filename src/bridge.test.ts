@@ -39,25 +39,7 @@ describe('bridge preview', () => {
     expect(settings.shortcutBindings.map((binding) => [binding.kind, binding.shortcut])).toEqual([
       ['menu', 'Ctrl+Alt+Space'],
     ]);
-    // The Îlot, as Rust's UiVersion::Ilot.
-    expect(settings.uiVersion).toBe('ilot');
     expect(settings.servers.map((server) => server.id)).toContain(settings.defaultServerId);
-  });
-  it('asks for the 0.4 journey with ?ui=v4 only', async () => {
-    const at = location.href;
-    const loaded = async (search: string) => {
-      history.replaceState(null, '', `/${search}`);
-      vi.resetModules();
-      return (await (await import('./bridge')).bridge.getSettings()).uiVersion;
-    };
-    try {
-      expect(await loaded('?ui=v4')).toBe('v4');
-      expect(await loaded('?ui=v5')).toBe('ilot');
-      expect(await loaded('')).toBe('ilot');
-    } finally {
-      history.replaceState(null, '', at);
-      vi.resetModules();
-    }
   });
 });
 

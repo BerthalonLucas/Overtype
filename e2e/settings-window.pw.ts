@@ -91,13 +91,6 @@ test('the sidebar: one page per topic, each with its colour, in English and Fren
     );
   }
   expect(colours.size).toBe(7);
-  // The 0.4 journey has nothing after a replacement to set, and no grid.
-  await set(page, { uiVersion: 'v4' });
-  await expect(tab(page, 'After replacing')).toHaveCount(0);
-  await go(page, 'Actions');
-  await expect(page.getByRole('list', { name: 'Menu actions' })).toHaveCount(0);
-  await set(page, { uiVersion: 'ilot' });
-  await expect(tab(page, 'After replacing')).toBeVisible();
 
   await go(page, 'General');
   await choose(page, 'Interface language', 'Français');
@@ -118,7 +111,7 @@ test('the sidebar: one page per topic, each with its colour, in English and Fren
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(19, 18, 25)');
   await expect(page.locator('.ft-page-header h2')).toHaveCSS('color', 'rgb(241, 239, 248)');
-  await expect.poll(() => saved(page)).toMatchObject({ language: 'fr', theme: 'dark', uiVersion: 'ilot' });
+  await expect.poll(() => saved(page)).toMatchObject({ language: 'fr', theme: 'dark' });
   await expect(page.locator('.st-save')).toHaveText('Enregistré');
   await shot(page, 'e2e-appearance-fr-dark');
   // The default actions nobody renamed follow the language (0.6); what the person named stays.

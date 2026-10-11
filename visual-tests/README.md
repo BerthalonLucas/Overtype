@@ -4,14 +4,16 @@ Une comparaison réussie signifie seulement que le rendu n’a pas changé depui
 l’image de référence. Ne pas remplacer les images pour faire passer un test sans
 examiner attendu / réel / différence (rapport HTML de `npm run ui:check`).
 
-## Deux parcours, deux jeux d’images
+## Deux jeux d’images
 
-`states.spec.ts` ouvre les scénarios de l’atelier (`lab-frame.html`), qui partent
-de l’Îlot, le parcours par défaut de l’application. Le parcours 0.4 (réglage caché
-`uiVersion` « v4 ») se demande avec `ui=v4`.
+`states.spec.ts` ouvre les scénarios de l’atelier (`lab-frame.html`) dans la seule
+interface de l’application, l’Îlot. Le parcours 0.4 (l’ancien réglage caché
+« v4 ») a été retiré le 11/10/2026 : les états du verre restent, ceux des
+raccourcis directs.
 
 - **0.4** (`@v4`) : les 21 PNG à la racine de `references/win32/chromium/`,
-  relevés à la 0.4.0, défauts connus compris (docs/UI-ISSUES.md).
+  relevés à la 0.4.0 dans le parcours 0.4, défauts connus compris
+  (docs/UI-ISSUES.md).
 - **Îlot** (`@ilot`) : les PNG de `references/win32/chromium/ilot/`.
 
 `npm run ui:check -- --grep @v4` ou `npm run ui:check -- --grep @ilot` vérifie un
@@ -60,9 +62,11 @@ produit sa différence.
 
 Le lot 14 ne les a pas fait bouger : les 21 états 0.4, rendus avant et après le
 passage à l’Îlot par défaut, sont identiques octet pour octet, et les 13 écarts
-qui existaient déjà comptent les mêmes pixels qu’avant. À Lucas de décider après
-examen : régénérer (`npm run ui:reference -- --grep @v4`) ou attendre le retrait
-de la 0.4.
+qui existaient déjà comptent les mêmes pixels qu’avant. Depuis le retrait de la
+0.4 (11/10/2026), ces états se rendent dans l’Îlot : l’attente (`pending`) montre
+la pilule de travail au lieu du spinner, et `settings` s’ouvre sur « After
+replacing ». Les images n’ont pas été régénérées : à Lucas de décider après
+examen (`npm run ui:reference -- --grep @v4`).
 
 ## Régénérer
 

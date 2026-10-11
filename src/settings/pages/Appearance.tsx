@@ -125,7 +125,6 @@ export function AppearancePage() {
   const t = useT();
   const { settings, persist } = useSettingsContext();
   const systemReduces = useSystemReducesMotion();
-  const ilot = settings.uiVersion === 'ilot';
   return (
     <>
       <Group title={t('settings.theme')}>
@@ -153,30 +152,27 @@ export function AppearancePage() {
         </div>
       </Group>
 
-      {/* The working pill's indicator exists only in the Îlot journey: the 0.4 one keeps its spinner. */}
-      {ilot && (
-        <Group title={t('settings.indicator')} description={t('settings.indicatorHelp')}>
-          <div className="st-group-pad" data-field="indicator">
-            <CardChoice<Indicator>
-              label={t('settings.indicator')}
-              value={indicatorOf(settings.indicator)}
-              onChange={(indicator) => persist({ ...settings, indicator }, true)}
-              options={[
-                { value: 'perle', label: t('settings.indicatorPerle'), hint: t('page.appearance.perleHint') },
-                { value: 'nebuleuse', label: t('settings.indicatorNebula'), hint: t('page.appearance.nebulaHint') },
-                { value: 'ruban', label: t('settings.indicatorRibbon'), hint: t('page.appearance.ribbonHint') },
-              ]}
-              render={(option) => (
-                <span className="st-ind-art">
-                  <span className="st-ind-pill">
-                    <IndicatorView indicator={option.value} />
-                  </span>
+      <Group title={t('settings.indicator')} description={t('settings.indicatorHelp')}>
+        <div className="st-group-pad" data-field="indicator">
+          <CardChoice<Indicator>
+            label={t('settings.indicator')}
+            value={indicatorOf(settings.indicator)}
+            onChange={(indicator) => persist({ ...settings, indicator }, true)}
+            options={[
+              { value: 'perle', label: t('settings.indicatorPerle'), hint: t('page.appearance.perleHint') },
+              { value: 'nebuleuse', label: t('settings.indicatorNebula'), hint: t('page.appearance.nebulaHint') },
+              { value: 'ruban', label: t('settings.indicatorRibbon'), hint: t('page.appearance.ribbonHint') },
+            ]}
+            render={(option) => (
+              <span className="st-ind-art">
+                <span className="st-ind-pill">
+                  <IndicatorView indicator={option.value} />
                 </span>
-              )}
-            />
-          </div>
-        </Group>
-      )}
+              </span>
+            )}
+          />
+        </div>
+      </Group>
 
       <Group title={t('page.appearance.motion')} description={t('page.appearance.motionHelp')}>
         <div className="st-group-pad" data-field="motionPreset">

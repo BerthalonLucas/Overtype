@@ -141,8 +141,7 @@ export function instructionError(value: string): string | null {
     return 'La consigne libre doit contenir de 1 à 1 000 caractères, sans caractère nul.';
   return null;
 }
-// One shortcut on a fresh install: the Îlot menu (under uiVersion 'v4' it runs the default
-// action and replaces the selection).
+// One shortcut on a fresh install: the Îlot menu.
 // The first free id for a menu binding: « menu », then « menu-2 », « menu-3 »…
 export const freeMenuId = (bindings: ShortcutBinding[]) =>
   ['menu', ...bindings.map((_, n) => `menu-${n + 2}`)].find((id) => bindings.every((binding) => binding.id !== id))!;

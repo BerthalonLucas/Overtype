@@ -337,11 +337,7 @@ function SettingsWindowBody({ initialPage = 'general' }: { initialPage?: PageId 
     [],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the pages depend on uiVersion only, not the whole settings object
-  const pages = useMemo(
-    () => visiblePages(settings ?? { uiVersion: 'ilot' }, showDiag),
-    [settings?.uiVersion, showDiag],
-  );
+  const pages = useMemo(() => visiblePages(showDiag), [showDiag]);
   const current = pageOr(page, pages);
   const showToast = useCallback((text: string, extra?: ToastExtra) => {
     setToast({ text, ...extra });

@@ -397,8 +397,7 @@
 .st-recorder .shortcut-suggestion .ft-button { margin-left: -10px; }
 .ft-row[data-stack] > .st-recorder { padding: 0 var(--ft-row-px) var(--ft-row-py); }
 .st-binding-edit .st-recorder { min-width: 0; }
-.st-instr-name { grid-template-columns: minmax(0, 1fr); }
-.st-instr-name[data-two] { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
+.st-instr-name { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; }
 .st-instr-name > div { display: grid; gap: 6px; min-width: 0; }
 .st-instr-actions { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .st-grid-letter input:disabled { opacity: var(--ft-disabled); }

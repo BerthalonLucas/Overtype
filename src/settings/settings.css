@@ -157,20 +157,6 @@
 .st-ilot-text { display: grid; gap: 4px; font-size: 13px; line-height: 1.55; color: var(--ft-text-2); }
 .st-ilot-text mark { padding: 1px 0; border-radius: 3px; color: var(--ft-text); background: rgb(var(--ft-page-rgb) / .22); }
 .st-ilot-stage figcaption { grid-column: 1; grid-row: 2; font-size: 12px; color: var(--ft-text-3); }
-.st-ilot {
-  grid-column: 2; grid-row: 1 / span 2; padding: 6px; border-radius: 18px;
-  background: rgb(var(--ft-surface-rgb) / .78); -webkit-backdrop-filter: blur(20px) saturate(1.6); backdrop-filter: blur(20px) saturate(1.6);
-  box-shadow: 0 14px 34px rgb(0 0 0 / .16), 0 2px 6px rgb(0 0 0 / .08), 0 0 0 .5px rgb(var(--ft-ink-rgb) / .14), inset 0 1px 0 rgb(255 255 255 / .5);
-}
-:root[data-theme="dark"] .st-ilot { box-shadow: 0 14px 34px rgb(0 0 0 / .45), 0 0 0 .5px rgb(255 255 255 / .12), inset 0 1px 0 rgb(255 255 255 / .08); }
-.st-ilot-grid { display: grid; grid-template-columns: repeat(3, 70px); gap: 4px; }
-.st-ilot-tile {
-  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; height: 52px; padding: 0 4px;
-  border-radius: 12px; background: rgb(var(--ft-ink-rgb) / .045); color: rgb(var(--ft-ink-rgb) / .86); font-size: 11px;
-}
-.st-ilot-tile[data-free] { color: var(--ft-accent-text); background: rgb(var(--ft-accent-rgb) / .1); }
-.st-ilot-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.st-ilot-key { position: absolute; top: 4px; right: 5px; display: grid; place-items: center; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 4px; font-size: 10px; font-weight: 700; line-height: 1; color: var(--ft-text-3); background: rgb(var(--ft-ink-rgb) / .06); }
 
 /* ——— Actions: ordered list ——— */
 .st-grid-list { list-style: none; margin: 0; padding: 0; }
@@ -273,17 +259,6 @@
 .st-motion-doc i:nth-child(2) { width: 64%; background: linear-gradient(90deg, rgb(var(--ft-ink-rgb) / .12) 0 30%, rgb(var(--ft-page-rgb) / .45) 30% 100%); }
 .st-motion-doc i:nth-child(3) { width: 80%; }
 /* the selected line ends at 64 % of the doc: the compact Îlot's right edge sits there, 6 px under it */
-.st-mini-ilot { position: absolute; left: calc(22px + (100% - 44px) * .64 - 104px); top: 41px; display: grid; place-items: center; overflow: hidden; color: var(--ft-text); transform-origin: 0 0; will-change: transform, opacity; }
-.st-mini-act { display: inline-flex; align-items: center; gap: 4px; }
-.st-mini-act svg { display: block; flex: none; }
-.st-mini-hint { font-size: 9.5px; color: var(--ft-text-3); }
-.st-mini-layer { position: absolute; left: 50%; top: 50%; translate: -50% -50%; display: grid; place-items: center; }
-.st-mini-pill { grid-auto-flow: column; gap: 5px; height: 26px; padding: 0 8px 0 9px; font-size: 11px; white-space: nowrap; }
-.st-mini-pill b { font-weight: 600; }
-.st-mini-dot { display: block; width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(var(--brand-stops)); box-shadow: 0 0 5px rgb(188 130 243 / .6); }
-.st-mini-sep { display: block; width: 1px; height: 12px; background: rgb(var(--ft-ink-rgb) / .14); }
-.st-mini-grid { grid-template-columns: repeat(3, 32px); gap: 3px; padding: 4px; }
-.st-mini-grid > span { display: grid; place-items: center; width: 32px; height: 26px; border-radius: 8px; background: rgb(var(--ft-ink-rgb) / .05); color: rgb(var(--ft-ink-rgb) / .8); }
 
 .st-size-preview { overflow: hidden; }
 .st-size-preview p { margin: 2px 0 0; padding: 10px 14px; border-radius: var(--ft-r-control); background: rgb(var(--ft-ink-rgb) / .045); color: var(--ft-text); line-height: 1.5; }

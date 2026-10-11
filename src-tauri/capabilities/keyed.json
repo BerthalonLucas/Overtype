@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "keyed",
+  "description": "The windows that edit the settings and the connection (Rust's KEYED: settings, setup): save the settings, record a shortcut, check a server, read the journal, close themselves.",
+  "windows": [
+    "settings",
+    "setup"
+  ],
+  "permissions": [
+    "core:window:allow-close",
+    "allow-save-settings",
+    "allow-shortcut-status",
+    "allow-suggest-shortcut",
+    "allow-shortcut-conflict",
+    "allow-probe-connection",
+    "allow-cancel-probe",
+    "allow-try-model",
+    "allow-get-diagnostics",
+    "allow-clear-diagnostics"
+  ]
+}

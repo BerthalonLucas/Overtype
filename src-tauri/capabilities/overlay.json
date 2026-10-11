@@ -1,0 +1,30 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay",
+  "description": "The bubble and the Îlot: the capture's life (ready, choose, translate, cancel, dismiss), the result (copy, replace, pill, changed words, undo), the window's placement (resize, move, drag, where it is and on which screen), the real glass, the keyboard, and the Settings opened from an error.",
+  "windows": [
+    "overlay"
+  ],
+  "permissions": [
+    "core:window:allow-inner-position",
+    "core:window:allow-monitor-from-point",
+    "allow-glass-frame",
+    "allow-frontend-ready",
+    "allow-choose-action",
+    "allow-translate",
+    "allow-cancel-translation",
+    "allow-dismiss-overlay",
+    "allow-complete-overlay-dismiss",
+    "allow-copy-result",
+    "allow-replace-result",
+    "allow-result-pill",
+    "allow-highlight-changes",
+    "allow-undo-result",
+    "allow-resize-overlay",
+    "allow-move-overlay",
+    "allow-start-drag",
+    "allow-overlay-dimming",
+    "allow-focus-overlay",
+    "allow-open-settings"
+  ]
+}

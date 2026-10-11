@@ -16,6 +16,12 @@
 //!     which only another writer takes away, never a counter;
 //!   - a copy that lands after we stopped waiting is still undone (`watch_late`), as long as
 //!     the session saw no input since (the user did nothing: that copy is ours).
+//!
+//! Lot C (Lucas, 10/10). A change of the clipboard is the source's copy only when the window that
+//! owns the clipboard belongs to one of the source's processes, checked under our session right
+//! before the read (`from_source`, NATIVE-003): another application's write is neither read as
+//! the selection nor undone. A clipboard that cannot be kept whole is never touched
+//! (`Keeper::take` refuses, NATIVE-004).
 use std::{
     ffi::c_void,
     ptr::null_mut,
@@ -117,9 +123,17 @@ pub struct Snapshot {
     formats: Vec<(u32, Vec<u8>)>,
     pub sequence: u32,
 }
+/// Why the clipboard cannot be kept whole: another application holds it open, or it holds what
+/// cannot be duplicated in memory (a metafile beside an Office copy, a GDI object, a private or
+/// owner-rendered format, a block that cannot be read or is too large).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Unkept {
+    Busy,
+    Unkeepable,
+}
 impl Snapshot {
-    pub fn capture() -> Result<Self, String> {
-        let _open = Open::new(null_mut())?;
+    pub fn capture() -> Result<Self, Unkept> {
+        let _open = Open::new(null_mut()).map_err(|_| Unkept::Busy)?;
         let mut formats = Vec::new();
         let mut format = 0;
         let mut total = 0usize;
@@ -131,7 +145,7 @@ impl Snapshot {
             format = unsafe { EnumClipboardFormats(format) };
             if format == 0 {
                 if unsafe { GetLastError() } != 0 {
-                    return Err("Inventaire du presse-papiers indisponible.".into());
+                    return Err(Unkept::Unkeepable);
                 }
                 break;
             }
@@ -143,20 +157,20 @@ impl Snapshot {
             // Metafiles, enhanced metafiles, GDI objects and private formats live with
             // their owner: they cannot be duplicated in memory.
             if matches!(format, 3 | 14 | 0x80..=0x8e | 0x200..=0x2ff) {
-                return Err("Ce format du presse-papiers ne peut pas être conservé.".into());
+                return Err(Unkept::Unkeepable);
             }
             let handle = unsafe { GetClipboardData(format) };
             if handle.is_null() {
-                return Err("Un format du presse-papiers est indisponible.".into());
+                return Err(Unkept::Unkeepable);
             }
             let size = unsafe { GlobalSize(handle) };
             total = total.saturating_add(size);
             if size == 0 || total > LIMIT {
-                return Err("Le presse-papiers ne peut pas être sauvegardé sans perte.".into());
+                return Err(Unkept::Unkeepable);
             }
             let pointer = unsafe { GlobalLock(handle) };
             if pointer.is_null() {
-                return Err("Le presse-papiers ne peut pas être sauvegardé sans perte.".into());
+                return Err(Unkept::Unkeepable);
             }
             let bytes = unsafe { std::slice::from_raw_parts(pointer.cast::<u8>(), size).to_vec() };
             unsafe {
@@ -165,7 +179,7 @@ impl Snapshot {
             formats.push((format, bytes));
         }
         if bitmap && !formats.iter().any(|(f, _)| matches!(f, 8 | 17)) {
-            return Err("L’image du presse-papiers ne peut pas être conservée.".into());
+            return Err(Unkept::Unkeepable);
         }
         Ok(Self {
             formats,
@@ -174,29 +188,17 @@ impl Snapshot {
     }
 }
 
-/// What to put back after our own clipboard traffic: the whole snapshot when Windows
-/// let us take one, else the previous text alone (an owner-rendered format, an Excel
-/// range for instance, cannot be duplicated: the capture and the paste still work, only
-/// the text is restored, as before 0.4.0).
-pub enum Keeper {
-    Full(Snapshot),
-    TextOnly { text: Option<String>, sequence: u32 },
-}
+/// What to put back after our own clipboard traffic: every format of the clipboard. A clipboard
+/// that cannot be kept whole is never touched (NATIVE-004, Lucas 10/10): no copy and no paste
+/// goes over it. Until then the previous text alone was kept, and an Office picture beside it
+/// was lost without a word.
+pub struct Keeper(Snapshot);
 impl Keeper {
-    pub fn take(previous_text: impl FnOnce() -> Option<String>) -> Self {
-        match Snapshot::capture() {
-            Ok(snapshot) => Self::Full(snapshot),
-            Err(_) => Self::TextOnly {
-                text: previous_text(),
-                sequence: unsafe { GetClipboardSequenceNumber() },
-            },
-        }
+    pub fn take() -> Result<Self, Unkept> {
+        Snapshot::capture().map(Self)
     }
     pub fn sequence(&self) -> u32 {
-        match self {
-            Self::Full(s) => s.sequence,
-            Self::TextOnly { sequence, .. } => *sequence,
-        }
+        self.0.sequence
     }
     /// Writes our text, only while the clipboard is still the one this keeper saw.
     pub fn put_text(&self, text: &str) -> Result<u32, String> {
@@ -205,24 +207,15 @@ impl Keeper {
             Proof::Sequence(self.sequence()),
         )
     }
-    /// What goes back on the clipboard (None: nothing could be kept, nothing is put back).
-    fn formats(&self) -> Option<Vec<(u32, Vec<u8>)>> {
-        match self {
-            Self::Full(snapshot) => Some(snapshot.formats.clone()),
-            Self::TextOnly {
-                text: Some(text), ..
-            } => Some(vec![(CF_UNICODETEXT, utf16(text))]),
-            Self::TextOnly { text: None, .. } => None,
-        }
+    /// What goes back on the clipboard.
+    fn formats(&self) -> &[(u32, Vec<u8>)] {
+        &self.0.formats
     }
     /// After `put_text`: puts back what was there, as long as the clipboard is still ours
     /// (nobody wrote it since: a newer copy of the user's stays). Waits for a clipboard held
     /// open by the application that reads our paste.
     pub fn restore_ours(&self) -> Result<(), String> {
-        let Some(formats) = self.formats() else {
-            return Ok(());
-        };
-        write_formats(&formats, Proof::Ours).map(|_| ())
+        write_formats(self.formats(), Proof::Ours).map(|_| ())
     }
 }
 
@@ -241,13 +234,40 @@ pub enum Copied {
         text: Option<String>,
         restored: bool,
     },
+    /// The clipboard was written by another application than the source (NATIVE-003): nothing
+    /// was read, and nothing is put back over that newer copy.
+    Foreign,
+}
+
+/// Whether the clipboard's writer is the source (NATIVE-003): the window that owns the
+/// clipboard belongs to one of the source's processes (`sources`). A copy written without an
+/// owner window, or by any other process, is never taken for the source's: in doubt, the copy
+/// is refused, never attributed.
+pub fn from_source(owner: Option<u32>, sources: &[u32]) -> bool {
+    owner.is_some_and(|pid| pid != 0 && sources.contains(&pid))
+}
+/// The process of the window that owns the clipboard (None: no owner window).
+fn owner_process() -> Option<u32> {
+    let owner = unsafe { GetClipboardOwner() };
+    if owner.is_null() {
+        return None;
+    }
+    let mut pid = 0u32;
+    unsafe {
+        windows::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId(
+            windows::Win32::Foundation::HWND(owner),
+            Some(&mut pid),
+        );
+    }
+    (pid != 0).then_some(pid)
 }
 
 /// After a copy chord sent while the counter was `before`: waits at most `timeout` for the
-/// clipboard to change, lets the copy finish (the counter rests), then reads its text and puts
-/// the kept clipboard back within the same clipboard session. Whatever the source wrote, in
-/// however many steps, the user's clipboard comes back.
-pub fn take_copy(keeper: &Keeper, before: u32, timeout: Duration) -> Copied {
+/// clipboard to change, lets the copy finish (the counter rests), then, when the source's own
+/// processes (`sources`) wrote it, reads its text and puts the kept clipboard back within the
+/// same clipboard session. Whatever the source wrote, in however many steps, the user's
+/// clipboard comes back; what another application wrote is neither read nor overwritten.
+pub fn take_copy(keeper: &Keeper, before: u32, timeout: Duration, sources: &[u32]) -> Copied {
     let deadline = Instant::now() + timeout;
     while unsafe { GetClipboardSequenceNumber() } == before {
         if Instant::now() >= deadline {
@@ -255,13 +275,13 @@ pub fn take_copy(keeper: &Keeper, before: u32, timeout: Duration) -> Copied {
         }
         std::thread::sleep(Duration::from_millis(5));
     }
-    settle_and_swap(keeper)
+    settle_and_swap(keeper, sources)
 }
 
-fn settle_and_swap(keeper: &Keeper) -> Copied {
+fn settle_and_swap(keeper: &Keeper, sources: &[u32]) -> Copied {
     let started = Instant::now();
     // Allocated before anything is emptied: a failure leaves the copy where it is.
-    let prepared = keeper.formats().map(|formats| prepare(&formats));
+    let prepared = prepare(keeper.formats());
     let owner = owner_window().unwrap_or(null_mut());
     loop {
         let last_chance = started.elapsed() >= COPY_SETTLE_MAX;
@@ -286,6 +306,11 @@ fn settle_and_swap(keeper: &Keeper) -> Copied {
         if unsafe { GetClipboardSequenceNumber() } != rested && !last_chance {
             continue;
         }
+        // NATIVE-003: checked under our session, right before the read: the last writer of the
+        // clipboard is the source, or its copy is not ours to read nor to undo.
+        if !from_source(owner_process(), sources) {
+            return Copied::Foreign;
+        }
         // The text is not there yet (emptied, to be set in a second session): wait for it.
         let has_text = unsafe { IsClipboardFormatAvailable(CF_UNICODETEXT) } != 0;
         if !has_text && !last_chance {
@@ -296,8 +321,8 @@ fn settle_and_swap(keeper: &Keeper) -> Copied {
         // Reading renders a delayed format (OLE): the source writes it now, under our session.
         let text = if has_text { read_text_locked() } else { None };
         let restored = match prepared {
-            Some(Ok(memory)) => !owner.is_null() && put_locked(memory).is_ok(),
-            _ => false,
+            Ok(memory) => !owner.is_null() && put_locked(memory).is_ok(),
+            Err(_) => false,
         };
         return Copied::Taken { text, restored };
     }
@@ -334,6 +359,8 @@ struct Late {
     before: u32,
     tick: u32,
     until: Instant,
+    /// The source's processes: only their copy is undone (NATIVE-003).
+    sources: Vec<u32>,
 }
 static LATE: std::sync::Mutex<Option<Late>> = std::sync::Mutex::new(None);
 const LATE_WINDOW: Duration = Duration::from_millis(2_500);
@@ -352,19 +379,27 @@ fn settle(late: &Late, input_tick: impl Fn() -> u32) -> bool {
         return false;
     }
     if late_copy_is_ours(late.before, sequence, late.tick, input_tick()) {
-        let _ = settle_and_swap(&late.keeper);
+        let _ = settle_and_swap(&late.keeper, &late.sources);
     }
     true
 }
-/// Keeps watching for the copy `take_copy` did not see: when it lands within 2.5 s and the
-/// user did nothing meanwhile, the kept clipboard is put back. `tick`: the session's last
-/// input when the wait ended; `input_tick` reads it again.
-pub fn watch_late(keeper: Keeper, before: u32, tick: u32, input_tick: fn() -> u32) {
+/// Keeps watching for the copy `take_copy` did not see: when it lands within 2.5 s, the user
+/// did nothing meanwhile and the source's processes (`sources`) wrote it, the kept clipboard is
+/// put back. `tick`: the session's last input when the wait ended; `input_tick` reads it again.
+/// Another application's copy in that time is left alone (NATIVE-003).
+pub fn watch_late(
+    keeper: Keeper,
+    before: u32,
+    tick: u32,
+    input_tick: fn() -> u32,
+    sources: Vec<u32>,
+) {
     *lock_late() = Some(Late {
         keeper,
         before,
         tick,
         until: Instant::now() + LATE_WINDOW,
+        sources,
     });
     let _ = std::thread::Builder::new()
         .name("clipboard-late".into())
@@ -645,7 +680,7 @@ mod tests {
     #[test]
     fn our_text_is_put_and_the_previous_clipboard_comes_back_unless_it_changed() {
         let Some(_desktop) = desktop() else { return };
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         let sequence = keeper.put_text("flowtranslate sentinel ✓").expect("put");
         assert_ne!(sequence, keeper.sequence());
         // Our own text travels with the three opt-outs: read back from the real clipboard, it is
@@ -683,8 +718,9 @@ mod tests {
         }
         read_text_locked()
     }
-    /// Writes `text` as another application would: its own window owns the clipboard.
-    fn foreign_write(steps: &[Option<&str>], pause: Duration) {
+    /// Writes `text` as another application would: its own window owns the clipboard, kept
+    /// `linger` after the last step (an application keeps the window that owns its copy).
+    fn foreign_write(steps: &[Option<&str>], pause: Duration, linger: Duration) {
         use windows::{
             core::w,
             Win32::UI::WindowsAndMessaging::{
@@ -734,19 +770,27 @@ mod tests {
             }
             std::thread::sleep(pause);
         }
+        std::thread::sleep(linger);
         unsafe {
             let _ = DestroyWindow(hwnd);
         }
     }
     fn user_copies(text: &str) {
-        foreign_write(&[Some(text)], Duration::ZERO);
+        foreign_write(&[Some(text)], Duration::ZERO, Duration::ZERO);
+    }
+    /// The source's copy, from a window that outlives the read (NATIVE-003: a copy whose owner
+    /// window is already gone has no provenance), on its own thread.
+    fn source_copies(text: &'static str) -> std::thread::JoinHandle<()> {
+        std::thread::spawn(move || {
+            foreign_write(&[Some(text)], Duration::ZERO, Duration::from_millis(700))
+        })
     }
 
     #[test]
     fn the_users_clipboard_comes_back_after_a_copy_made_in_several_steps() {
         let Some(_desktop) = desktop() else { return };
         user_copies("sentinelle de l'utilisateur");
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
         // The source empties, sets a first text, then its final text 40 ms later: the sample
         // taken right after the first change is long outdated when the copy ends (0.5.1 then
@@ -755,9 +799,10 @@ mod tests {
             foreign_write(
                 &[None, Some("premier jet"), Some("texte sélectionné")],
                 Duration::from_millis(20),
+                Duration::from_millis(600),
             )
         });
-        let copied = take_copy(&keeper, before, Duration::from_millis(800));
+        let copied = take_copy(&keeper, before, Duration::from_millis(800), &ours());
         source.join().unwrap();
         assert_eq!(
             copied,
@@ -768,35 +813,156 @@ mod tests {
         );
         assert_eq!(text_now().as_deref(), Some("sentinelle de l'utilisateur"));
         // Nothing copied in time: nothing is read, nothing is touched.
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         assert_eq!(
-            take_copy(&keeper, keeper.sequence(), Duration::from_millis(60)),
+            take_copy(
+                &keeper,
+                keeper.sequence(),
+                Duration::from_millis(60),
+                &ours()
+            ),
             Copied::Nothing
         );
         assert_eq!(text_now().as_deref(), Some("sentinelle de l'utilisateur"));
+    }
+
+    /// The test's own windows play the source: its process is the source's.
+    fn ours() -> Vec<u32> {
+        vec![std::process::id()]
+    }
+
+    #[test]
+    fn another_applications_copy_is_neither_read_nor_undone() {
+        // NATIVE-003: the owner of the clipboard must be one of the source's processes; no owner
+        // window, or an unknown source, is a doubt, and a doubt is never attributed.
+        assert!(from_source(Some(10), &[10, 12]) && from_source(Some(12), &[10, 12]));
+        assert!(!from_source(Some(11), &[10, 12]));
+        assert!(!from_source(None, &[10]) && !from_source(Some(0), &[0]));
+        assert!(!from_source(Some(10), &[]));
+        let Some(_desktop) = desktop() else { return };
+        // The source is another process (pid 4, the system's); the writer is this test's window.
+        user_copies("sentinelle de l'utilisateur");
+        let keeper = Keeper::take().expect("keepable clipboard");
+        let before = keeper.sequence();
+        let writer = std::thread::spawn(|| {
+            std::thread::sleep(Duration::from_millis(30));
+            user_copies("copie d’une autre application");
+        });
+        assert_eq!(
+            take_copy(&keeper, before, Duration::from_millis(800), &[4]),
+            Copied::Foreign
+        );
+        writer.join().unwrap();
+        assert_eq!(
+            text_now().as_deref(),
+            Some("copie d’une autre application"),
+            "neither read as the selection nor overwritten by the restoration"
+        );
+        // The same writer after the wait, the user idle: its copy is left alone too.
+        user_copies("sentinelle tardive");
+        let keeper = Keeper::take().expect("keepable clipboard");
+        let before = keeper.sequence();
+        watch_late(keeper, before, 77, || 77, vec![4]);
+        std::thread::sleep(Duration::from_millis(100));
+        user_copies("copie tardive d’une autre application");
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(
+            text_now().as_deref(),
+            Some("copie tardive d’une autre application")
+        );
     }
 
     #[test]
     fn our_paste_is_undone_on_the_clipboard_unless_somebody_wrote_it_since() {
         let Some(_desktop) = desktop() else { return };
         user_copies("avant le collage");
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         keeper.put_text("résultat collé").expect("put");
         assert_eq!(text_now().as_deref(), Some("résultat collé"));
         // The target read the clipboard (the counter may move with rendered formats): still ours.
         keeper.restore_ours().expect("restore");
         assert_eq!(text_now().as_deref(), Some("avant le collage"));
         // The user copies while our text is on the clipboard: his copy stays.
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         keeper.put_text("résultat collé").expect("put");
         user_copies("copie plus récente");
         assert!(keeper.restore_ours().is_err());
         assert_eq!(text_now().as_deref(), Some("copie plus récente"));
         // A keeper taken before a change never writes over it.
-        let stale = Keeper::take(|| None);
+        let stale = Keeper::take().expect("keepable clipboard");
         user_copies("encore une copie");
         assert!(stale.put_text("résultat").is_err());
         assert_eq!(text_now().as_deref(), Some("encore une copie"));
+    }
+
+    #[test]
+    fn a_clipboard_that_cannot_be_kept_whole_is_never_taken() {
+        let Some(_desktop) = desktop() else { return };
+        // NATIVE-004: a private format (0x200..=0x2FF) lives with its owner, as the metafile of an
+        // Office copy does: it cannot be duplicated, so nothing may be written over it.
+        let window = test_window();
+        {
+            let _open = Open::within(window, Duration::from_secs(2)).expect("open");
+            unsafe {
+                EmptyClipboard();
+            }
+            Memory::new(&utf16("texte et image"))
+                .unwrap()
+                .put(CF_UNICODETEXT)
+                .unwrap();
+            Memory::new(&[1, 2, 3, 4]).unwrap().put(0x200).unwrap();
+        }
+        assert_eq!(Keeper::take().err(), Some(Unkept::Unkeepable));
+        assert_eq!(text_now().as_deref(), Some("texte et image"));
+        assert_ne!(unsafe { IsClipboardFormatAvailable(0x200) }, 0, "untouched");
+        // Held open by another application past our patience: busy, not unkeepable.
+        let (held, release) = (
+            std::sync::Arc::new(std::sync::Barrier::new(2)),
+            std::sync::Arc::new(std::sync::Barrier::new(2)),
+        );
+        let holder = {
+            let (held, release) = (held.clone(), release.clone());
+            std::thread::spawn(move || {
+                let window = test_window();
+                let _open = Open::within(window, Duration::from_secs(2)).expect("open");
+                held.wait();
+                release.wait();
+            })
+        };
+        held.wait();
+        assert_eq!(Keeper::take().err(), Some(Unkept::Busy));
+        release.wait();
+        holder.join().unwrap();
+        user_copies("presse-papiers ordinaire");
+        assert!(Keeper::take().is_ok());
+    }
+
+    /// A message-only window of the test's own, as another application's.
+    fn test_window() -> Handle {
+        use windows::{
+            core::w,
+            Win32::UI::WindowsAndMessaging::{
+                CreateWindowExW, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE,
+            },
+        };
+        unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("STATIC"),
+                w!(""),
+                WINDOW_STYLE::default(),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                None,
+                None,
+            )
+        }
+        .expect("window")
+        .0
     }
 
     #[test]
@@ -815,31 +981,36 @@ mod tests {
         let Some(_desktop) = desktop() else { return };
         // The source answers 150 ms after we stopped waiting: the user's clipboard comes back.
         user_copies("sentinelle tardive");
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
         assert_eq!(
-            take_copy(&keeper, before, Duration::from_millis(30)),
+            take_copy(&keeper, before, Duration::from_millis(30), &ours()),
             Copied::Nothing
         );
-        watch_late(keeper, before, 77, || 77);
+        watch_late(keeper, before, 77, || 77, ours());
         std::thread::sleep(Duration::from_millis(150));
-        user_copies("copie lente de la source");
+        let source = source_copies("copie lente de la source");
         std::thread::sleep(Duration::from_millis(400));
         assert_eq!(text_now().as_deref(), Some("sentinelle tardive"));
+        source.join().unwrap();
         // The same, but the user typed meanwhile: his clipboard is left alone.
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
-        watch_late(keeper, before, 77, || 78);
+        watch_late(keeper, before, 77, || 78, ours());
         user_copies("copie de l'utilisateur");
         std::thread::sleep(Duration::from_millis(300));
         assert_eq!(text_now().as_deref(), Some("copie de l'utilisateur"));
         // A new transaction settles the watch at once instead of racing with it.
-        let keeper = Keeper::take(|| None);
+        let keeper = Keeper::take().expect("keepable clipboard");
         let before = keeper.sequence();
-        watch_late(keeper, before, 77, || 77);
-        user_copies("copie lente, encore");
+        watch_late(keeper, before, 77, || 77, ours());
+        let source = source_copies("copie lente, encore");
+        while unsafe { GetClipboardSequenceNumber() } == before {
+            std::thread::sleep(Duration::from_millis(1));
+        }
         settle_late(|| 77);
         assert_eq!(text_now().as_deref(), Some("copie de l'utilisateur"));
         assert!(lock_late().is_none());
+        source.join().unwrap();
     }
 }

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { bottomReserve, glass, halo } from '../src/layout';
 import type { Indicator, Settings } from '../src/types';
 
-// Lot 8 (docs/DA-PLAN.md): under uiVersion 'ilot', the wait is a glass pill of 44 × 28 (52 × 28
+// Lot 8 (docs/DA-PLAN.md): the wait is a glass pill of 44 × 28 (52 × 28
 // for the Ruban), radius 14, holding the chosen indicator centred; the orb shows after 250 ms, the
 // pill never grows, the orb stands still in reduced motion, the Nébuleuse and the Ruban blend in
 // screen on the dark theme. Measured in the browser through the IPC fixture, as the lab measures
@@ -27,8 +27,6 @@ async function openIlot(page: Page, next: Partial<Settings>) {
   });
   await page.goto('/?window=overlay&fixture=1');
   await expect(page.locator('.glass-overlay')).toBeVisible();
-  // The Îlot is the fixture's default, as it is Rust's: only the test's own settings are sent.
-  await expect(page.locator('html')).toHaveAttribute('data-ui', 'ilot');
   await page.evaluate((next) => (window as any).nativeFixture.settings(next), next);
 }
 const lastGeometry = (page: Page) =>
@@ -139,9 +137,8 @@ for (const theme of ['light', 'dark'] as const) {
           .locator('.working-orb')
           .evaluate((el) => [getComputedStyle(el).animationName, getComputedStyle(el).animationDuration]),
       ).toEqual(['working-orb-in', '0.15s']);
-      await expect(page.locator('.wait-pill')).toHaveCount(0);
 
-      // The hit-test region is the new pill, where the wait pill stood (upper right of the glass to come).
+      // The hit-test region is the pill, at the upper right of the glass to come.
       const regions = (await lastGeometry(page)).regions as Region[];
       expect(regions).toEqual([
         { x: halo.x + glass.shortWidth - glass.pillInset - width, y: halo.top, width, height: 28, radius: 14 },
@@ -314,33 +311,7 @@ test('the loops rest while the page is hidden and run again when it shows', asyn
   expect(await states()).toEqual(['running', 'running']);
 });
 
-test('the 0.4 journey keeps its spinner pill', async ({ page }) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  await page.setViewportSize({ width: 640, height: 480 });
-  await page.route('**/?window=overlay&fixture=1*', async (route) => {
-    const response = await route.fetch();
-    await route.fulfill({ response, body: (await response.text()).replace('/src/main.tsx', '/e2e/native-fixture.ts') });
-  });
-  await page.goto('/?window=overlay&fixture=1&ui=v4');
-  await expect(page.locator('html')).toHaveAttribute('data-ui', 'v4');
-  await expect(page.locator('.wait-pill')).toBeVisible();
-  await page.waitForTimeout(400);
-  await expect(page.locator('.working-pill')).toHaveCount(0);
-  await expect(page.locator('.ldr')).toHaveCount(0);
-  expect(await page.locator('.wait-pill').evaluate((el: HTMLElement) => [el.offsetWidth, el.offsetHeight])).toEqual([
-    60, 28,
-  ]);
-  expect(await page.locator('.wait-pill svg').evaluate((el) => getComputedStyle(el).animationName)).toBe('wait-spin');
-});
-
-test('Settings: the indicator row shows in the Îlot journey only and saves the choice', async ({ page }) => {
-  // The 0.4 journey, asked for: its spinner has no indicator to choose.
-  await page.goto('/lab-frame.html?scenario=settings&theme=light&motion=reduce&ui=v4');
-  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
-  await expect(page.getByRole('radiogroup', { name: 'Theme', exact: true })).toBeVisible();
-  await expect(page.getByRole('radiogroup', { name: 'Indicator', exact: true })).toHaveCount(0);
-
-  // The Îlot, the lab's default as it is the app's.
+test('Settings: the indicator row saves the choice', async ({ page }) => {
   await page.goto('/lab-frame.html?scenario=settings&theme=light&motion=reduce');
   await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
   const row = page.getByRole('radiogroup', { name: 'Indicator', exact: true });

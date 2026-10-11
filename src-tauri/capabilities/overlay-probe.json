@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay-probe",
+  "description": "What the WebView2 probe (scripts/probe-native-ui.mjs, through the overlay page) calls and the page never does: the windows' geometry and visibility, a capture of the demo selection, the menu capture of the demo (demo_menu.rs: a demo process under the probe only) and the cursor override (honoured only with FLOWTRANSLATE_CDP_URL set).",
+  "windows": [
+    "overlay"
+  ],
+  "permissions": [
+    "core:window:allow-is-visible",
+    "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "allow-capture-text",
+    "allow-demo-menu-capture",
+    "allow-override-cursor"
+  ]
+}

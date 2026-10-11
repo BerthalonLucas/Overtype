@@ -5,6 +5,7 @@ use crate::types::{
     TargetIdentity,
 };
 use arboard::Clipboard;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use uiautomation::{
     patterns::UIValuePattern,
@@ -38,6 +39,9 @@ const ANCHOR_DRIFT: f64 = 2.;
 /// How much of a document UI Automation is asked for (UTF-16 units). A text that fills it was
 /// cut there: what lies beyond was not read.
 const FIELD_CAP: usize = 200_000;
+/// The UI Automation framework id of Chromium's content (Edge, Chrome, Electron), measured
+/// on Edge 155 (11/10): its targets get the witness copy at the paste (QA-03-A).
+const CHROMIUM_FRAMEWORK: &str = "Chrome";
 /// The longest text sent (Lucas, 2026-10-08; 6,000 before): a translation spends the context
 /// twice, the text then about as much again, so this fits a context of 131k tokens.
 pub(crate) const MAX_CHARS: usize = 200_000;
@@ -63,6 +67,83 @@ pub(crate) fn ui_automation() -> Result<UIAutomation, ()> {
     })
 }
 
+/// The focused element as UI Automation answers it now (None: it does not answer).
+pub(crate) fn focused_element() -> Option<UIElement> {
+    #[cfg(test)]
+    if faults::uia_unanswered() {
+        return None;
+    }
+    ui_automation().ok()?.get_focused_element().ok()
+}
+
+/// NATIVE-006: the epoch of the deliveries. The emergency exit (`force_close`) bumps it before it
+/// waits for the state lock, which a paste in flight may hold: every ticket taken before that is
+/// dead, whoever holds the lock.
+static DELIVERY_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// The right of a bubble's session to send keys into its source (a paste, an undo), taken when
+/// its capture is stored. Read again by the paste and the undo right before each key they send,
+/// without any lock: a revoked ticket sends nothing more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ticket(u64);
+
+impl Ticket {
+    pub fn current() -> Self {
+        Self(DELIVERY_EPOCH.load(Ordering::SeqCst))
+    }
+    /// No emergency exit since it was taken.
+    pub fn live(self) -> bool {
+        DELIVERY_EPOCH.load(Ordering::SeqCst) == self.0
+    }
+}
+
+/// Every ticket taken so far is dead (the emergency exit). Any thread, never a lock.
+pub fn revoke_deliveries() {
+    DELIVERY_EPOCH.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Unit tests that take a ticket and the one that revokes run one at a time (the epoch is global).
+#[cfg(test)]
+pub(crate) static EPOCH_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// What a revoked ticket answers: the bubble was closed, nothing is sent.
+pub(crate) fn revoked() -> AppError {
+    AppError::new(
+        ErrorKind::Cancelled,
+        "La bulle a été fermée : rien n’a été collé.",
+    )
+    .because("delivery revoked")
+}
+
+/// Faults the real replacement bench injects (scripts/test-replacement-windows.mjs). Test
+/// builds only, per thread: the shipped application has no such switch, and no environment
+/// variable reaches it.
+#[cfg(test)]
+pub(crate) mod faults {
+    use std::cell::Cell;
+    use std::time::Duration;
+    thread_local! {
+        static SILENT: Cell<bool> = const { Cell::new(false) };
+        static STALL: Cell<Option<Duration>> = const { Cell::new(None) };
+    }
+    /// From now on, on this thread, UI Automation gives no focused element (a provider that
+    /// stopped answering).
+    pub fn silence_uia(silent: bool) {
+        SILENT.with(|s| s.set(silent));
+    }
+    /// The next focused-element request of this thread takes `delay` before it answers (a
+    /// provider that hangs for a while).
+    pub fn stall_next_uia(delay: Duration) {
+        STALL.with(|s| s.set(Some(delay)));
+    }
+    pub(super) fn uia_unanswered() -> bool {
+        if let Some(delay) = STALL.with(Cell::take) {
+            std::thread::sleep(delay);
+        }
+        SILENT.with(Cell::get)
+    }
+}
+
 /// What `selection` answers when the control is readable but holds no selection (none,
 /// or collapsed to the caret by a click or an arrow key).
 const NO_SELECTION: &str = "Aucune sélection active.";
@@ -73,12 +154,11 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
     let pattern = element
         .get_pattern::<UITextPattern>()
         .map_err(|_| "La sélection n’est pas accessible par UI Automation.".to_string())?;
-    let range = pattern
-        .get_selection()
-        .map_err(|_| "La sélection n’est pas accessible par UI Automation.".to_string())?
-        .into_iter()
-        .next()
-        .ok_or_else(|| NO_SELECTION.to_string())?;
+    let range = selected_range(
+        pattern
+            .get_selection()
+            .map_err(|_| "La sélection n’est pas accessible par UI Automation.".to_string())?,
+    )?;
     let text = range
         .get_text(MAX_CHARS as i32 + 1)
         .map_err(|_| "Impossible de lire la sélection.".to_string())?;
@@ -96,6 +176,23 @@ pub(crate) fn selection(element: &UIElement) -> Result<(String, Vec<Rect>, usize
         .is_some_and(|v| !v);
     let rects = range_rects(&range);
     Ok((text, rects, selection_len, range_editable))
+}
+
+/// What `selection` answers for a selection in several disjoint parts (Ctrl+drag in Word, the
+/// Add mode of Writer): never replaced (NATIVE-012).
+const MULTIPLE_SELECTION: &str = "La sélection compte plusieurs plages; remplacement impossible.";
+
+/// The range a capture acts on, among those `GetSelection` gives (one per disjoint part of the
+/// selection): the only one. A selection in several ranges is refused, at the capture and at the
+/// revalidation (NATIVE-012: its first range used to be taken for the whole of it, and the paste
+/// wrote over that part alone).
+pub(crate) fn selected_range<R>(ranges: Vec<R>) -> Result<R, String> {
+    let mut ranges = ranges.into_iter();
+    let range = ranges.next().ok_or_else(|| NO_SELECTION.to_string())?;
+    if ranges.next().is_some() {
+        return Err(MULTIPLE_SELECTION.into());
+    }
+    Ok(range)
 }
 
 /// The visible runs of a range, physical, as `GetBoundingRectangles` gives them (none when
@@ -294,12 +391,15 @@ fn too_long() -> AppError {
 }
 
 /// Whether a paste can replace what was captured (0.4.0, decided at the capture): the
-/// selection UI Automation gave in an editable control, or the selection the synthetic
-/// copy proved (a copy needs one). A copy the user made himself guarantees no selection;
-/// a console never replaces its selection on Ctrl+V; a password field is never written.
+/// selection UI Automation gave in an editable control (`writable`), or a synthetic copy whose
+/// selection UI Automation proved (`writable`: `copy_proved`). A copy alone proves nothing
+/// (NATIVE-002, reproduced on VS Code: without a selection Ctrl+Insert copies the whole line,
+/// and the paste then inserted at the caret); a copy the user made himself guarantees no
+/// selection; a console never replaces its selection on Ctrl+V; a password field is never
+/// written.
 pub fn replaceable(
     origin: CaptureOrigin,
-    editable: bool,
+    writable: bool,
     window_class: &str,
     password: bool,
 ) -> bool {
@@ -307,10 +407,22 @@ pub fn replaceable(
         return false;
     }
     match origin {
-        CaptureOrigin::Uia => editable,
-        CaptureOrigin::Copy => true,
+        CaptureOrigin::Uia | CaptureOrigin::Copy => writable,
         CaptureOrigin::Fresh | CaptureOrigin::Replay | CaptureOrigin::Demo => false,
     }
+}
+
+/// NATIVE-002 (Lucas, 10/10): whether UI Automation proves that a synthetic copy came from a
+/// selection: the focused element's selection is one non-empty range that reads as the copied
+/// text (line endings and editor spaces aside). Without that proof the copy is the source of the
+/// action, never a selection to paste over: Copy only. No editor-specific proof is trusted.
+fn copy_proved(copied: &str) -> bool {
+    focused_element()
+        .and_then(|element| selection(&element).ok())
+        .is_some_and(|(selected, ..)| proves_copy(&selected, copied))
+}
+fn proves_copy(selected: &str, copied: &str) -> bool {
+    !selected.is_empty() && canonical(selected) == canonical(copied)
 }
 
 pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture, AppError> {
@@ -418,6 +530,10 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                         crate::host::focused_control(source_window).map_or(0, |(handle, _)| handle);
                     let can_replace =
                         replaceable(CaptureOrigin::Uia, editable, &source_class, false);
+                    // QA-03-A: one property read now, the witness copy at the paste only.
+                    let copy_witness = element
+                        .get_framework_id()
+                        .is_ok_and(|framework| framework == CHROMIUM_FRAMEWORK);
                     let public = Capture {
                         id: Uuid::new_v4().to_string(),
                         text: text.clone(),
@@ -440,6 +556,7 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                         selection_len,
                         editable,
                         check: TargetCheck::Uia,
+                        copy_witness,
                     });
                     ensure_source_unchanged(source_window)?;
                     return Ok(StoredCapture {
@@ -452,6 +569,9 @@ pub fn capture_current(demo: bool, source_window: isize) -> Result<StoredCapture
                 Err(message) if message == UIA_TOO_LONG => {
                     return Err(AppError::new(ErrorKind::TooLong, message))
                 }
+                // NATIVE-012: a selection in several ranges is never replaced. The synthetic copy
+                // may still give its text (Word copies every part), for Copy only: UI Automation
+                // proves no single range there (`copy_proved`), never a replaceable copy.
                 Err(_) => {}
             }
         }
@@ -478,9 +598,13 @@ fn read_clipboard() -> Option<String> {
 }
 
 /// Without a UIA selection: copies for the user (synthetic Ctrl+Insert), else accepts a
-/// copy he made himself in the last three seconds, else nothing to translate. A copy
-/// that worked proves a selection: it can be pasted over (origin `copy`).
-fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredCapture, AppError> {
+/// copy he made himself in the last three seconds, else nothing to translate. A copy that
+/// worked can be pasted over (origin `copy`) only when UI Automation proves its selection
+/// (`copy_proved`, NATIVE-002); otherwise its result is for Copy only.
+pub(crate) fn clipboard_capture(
+    source_window: isize,
+    source_class: &str,
+) -> Result<StoredCapture, AppError> {
     let pressed_at = crate::host::now_ms();
     let changed_at = crate::host::clipboard_changed_at();
     // The user's own fresh copy may serve as the source (decision B, 01/10), never one a
@@ -492,12 +616,21 @@ fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredC
     let copied = synthetic_copy(source_window);
     let (text, origin) = match &copied {
         Ok(text) => (Some(text.clone()), CaptureOrigin::Copy),
+        // Another application wrote the clipboard meanwhile: what it holds now is not the
+        // user's own copy either (NATIVE-003).
+        Err(FOREIGN_WRITE) => (None, CaptureOrigin::Fresh),
         Err(_) => (
             usable_copy.then(read_clipboard).flatten(),
             CaptureOrigin::Fresh,
         ),
     };
     let text = copied_text(text).map_err(|mut error| {
+        // NATIVE-004: the copy was never sent, the user's clipboard could not be kept whole.
+        if error.kind == ErrorKind::NoSelection
+            && matches!(copied, Err(CLIPBOARD_UNKEEPABLE | CLIPBOARD_BUSY))
+        {
+            error = unkeepable_capture();
+        }
         // For the real capture matrix only (FLOWTRANSLATE_CAPTURE_TRACE): which step of
         // the synthetic copy gave up and how old the user's last copy is. Never any text.
         if error.kind == ErrorKind::NoSelection
@@ -514,7 +647,8 @@ fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredC
         error.because(copied.as_ref().err().copied().unwrap_or(""))
     })?;
     ensure_source_unchanged(source_window)?;
-    let can_replace = replaceable(origin, true, source_class, false);
+    let proved = origin == CaptureOrigin::Copy && copy_proved(&text);
+    let can_replace = replaceable(origin, proved, source_class, false);
     let target = can_replace.then(|| TargetIdentity {
         runtime_id: ui_automation()
             .ok()
@@ -527,6 +661,8 @@ fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredC
         selection_len: text.chars().count(),
         editable: true,
         check: TargetCheck::Copy,
+        // A copy target already gets its control copy before the paste.
+        copy_witness: false,
     });
     let public = Capture {
         id: Uuid::new_v4().to_string(),
@@ -549,12 +685,46 @@ fn clipboard_capture(source_window: isize, source_class: &str) -> Result<StoredC
     })
 }
 
+/// The steps of a synthetic copy that give up before any key is sent (NATIVE-004): the user's
+/// clipboard cannot be kept whole (a copy would lose the rest of it), or another application
+/// holds it open.
+const CLIPBOARD_UNKEEPABLE: &str = "clipboard unkeepable";
+const CLIPBOARD_BUSY: &str = "clipboard busy";
+
+/// The capture's notice when the clipboard cannot be kept whole: nothing was copied, nothing
+/// lost; the user copies the text himself, then presses the shortcut again (Lucas, 10/10).
+fn unkeepable_capture() -> AppError {
+    AppError::new(
+        ErrorKind::ClipboardUnkeepable,
+        "Le presse-papiers ne peut pas être conservé en entier : rien n’a été copié ni perdu. \
+         Copiez le texte vous-même, puis relancez.",
+    )
+}
+
+/// The paste's refusal when the clipboard cannot be kept whole (nothing is written over it:
+/// Copy result is the user's own choice), or is held open by another application.
+fn unkept_paste(unkept: crate::clipboard_guard::Unkept) -> AppError {
+    match unkept {
+        crate::clipboard_guard::Unkept::Unkeepable => AppError::new(
+            ErrorKind::ClipboardUnkeepable,
+            "Le presse-papiers ne peut pas être conservé en entier : rien n’a été remplacé ni \
+             perdu; utilisez Copier.",
+        )
+        .because(CLIPBOARD_UNKEEPABLE),
+        crate::clipboard_guard::Unkept::Busy => AppError::new(
+            ErrorKind::PasteBlocked,
+            "Le presse-papiers est occupé : rien n’a été remplacé; utilisez Copier.",
+        )
+        .because(CLIPBOARD_BUSY),
+    }
+}
+
 /// Sends the copy chord to the source window, reads what it copied and puts the previous
-/// clipboard back (every format when Windows lets us keep them, else the text), within one
-/// clipboard session once the copy has finished: whatever the source wrote, in however many
-/// steps, the user's clipboard comes back (0.6: it used not to, see clipboard_guard.rs). A
-/// copy that lands after the wait is still undone, as long as the user did nothing meanwhile.
-/// The error names the step that gave up, for the matrix and the journal.
+/// clipboard back (every format), within one clipboard session once the copy has finished:
+/// whatever the source wrote, in however many steps, the user's clipboard comes back (0.6: it
+/// used not to, see clipboard_guard.rs). A copy that lands after the wait is still undone, as
+/// long as the user did nothing meanwhile. A clipboard that cannot be kept whole is never
+/// copied over. The error names the step that gave up, for the matrix and the journal.
 fn synthetic_copy(source_window: isize) -> Result<String, &'static str> {
     if source_window == 0 || crate::host::foreground() != source_window {
         return Err("source window lost");
@@ -570,24 +740,70 @@ fn synthetic_copy(source_window: isize) -> Result<String, &'static str> {
         .ok_or("copied nothing readable")
 }
 
+/// The clipboard changed, but another application than the source wrote it (NATIVE-003).
+const FOREIGN_WRITE: &str = "foreign clipboard write";
+
+/// The processes that may write the copy of the window in front (NATIVE-003): its own, its
+/// focused control's and the focused UI Automation element's (a frame and its content may live
+/// in two processes); never ours.
+fn source_processes() -> Vec<u32> {
+    let window = crate::host::foreground();
+    let control = crate::host::focused_control(window).map(|(handle, _)| handle);
+    let element = focused_element().and_then(|element| element.get_process_id().ok());
+    let own = std::process::id();
+    let mut pids: Vec<u32> = [
+        Some(crate::host::window_process(window)),
+        control.map(crate::host::window_process),
+        element,
+    ]
+    .into_iter()
+    .flatten()
+    .filter(|&pid| pid != 0 && pid != own)
+    .collect();
+    pids.sort_unstable();
+    pids.dedup();
+    pids
+}
+
 /// One copy chord to the window in front: what it copied (None: a copy without text), the
-/// clipboard put back; `Err`: nothing was copied in time (watched a little longer).
+/// clipboard put back; `Err`: nothing was copied in time (watched a little longer), another
+/// application wrote the clipboard (neither read nor undone), or the clipboard could not be
+/// kept whole and no key was sent.
 fn copy_and_restore() -> Result<Option<String>, &'static str> {
-    use crate::clipboard_guard::{self, Copied, Keeper};
+    use crate::clipboard_guard::{self, Copied, Keeper, Unkept};
     clipboard_guard::settle_late(crate::host::last_input_tick);
-    let keeper = Keeper::take(read_clipboard);
+    let keeper = Keeper::take().map_err(|unkept| match unkept {
+        Unkept::Unkeepable => CLIPBOARD_UNKEEPABLE,
+        Unkept::Busy => CLIPBOARD_BUSY,
+    })?;
+    let sources = source_processes();
     crate::host::suppress_clipboard_tracking(OWN_TRAFFIC);
     let before = crate::host::clipboard_sequence();
-    crate::host::send_copy_chord().map_err(|_| "SendInput refused")?;
-    match clipboard_guard::take_copy(&keeper, before, COPY_SETTLE) {
+    let watch_late = |keeper, sources| {
+        clipboard_guard::watch_late(
+            keeper,
+            before,
+            crate::host::last_input_tick(),
+            crate::host::last_input_tick,
+            sources,
+        )
+    };
+    if let Err(sent) = crate::host::send_copy_chord() {
+        // QA-03-C: Ctrl+Insert copies on its key down, so a chord cut part-way may still have
+        // copied the selection. The user's clipboard comes back as after any copy of ours (it
+        // used to stay overwritten); what was copied is not taken: the chord did not go through.
+        if sent > 0
+            && clipboard_guard::take_copy(&keeper, before, COPY_SETTLE, &sources) == Copied::Nothing
+        {
+            watch_late(keeper, sources);
+        }
+        return Err("SendInput refused");
+    }
+    match clipboard_guard::take_copy(&keeper, before, COPY_SETTLE, &sources) {
         Copied::Taken { text, .. } => Ok(text),
+        Copied::Foreign => Err(FOREIGN_WRITE),
         Copied::Nothing => {
-            clipboard_guard::watch_late(
-                keeper,
-                before,
-                crate::host::last_input_tick(),
-                crate::host::last_input_tick,
-            );
+            watch_late(keeper, sources);
             Err("no clipboard change")
         }
     }
@@ -595,8 +811,10 @@ fn copy_and_restore() -> Result<Option<String>, &'static str> {
 
 /// The identity check before a paste and for the watcher: the source window is still in
 /// front, its focused control is the same and, when UI Automation gave the selection,
-/// the focused element and its selection are unchanged. A UIA that stopped answering is
-/// not a change (the paste goes to the same control).
+/// the focused element and its selection are unchanged (a UIA target compares its selection
+/// even without a drawable anchor: review n°1); a copy target's selection still reads as the
+/// copied text (NATIVE-002). A UIA that stopped answering proves nothing: `target_unverified`,
+/// the replacement is refused (NATIVE-001).
 pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
     // `reason`: which check saw the change, for the journal (a fixed word, never a text).
     let changed = |message: &str, reason: &'static str| {
@@ -611,24 +829,48 @@ pub fn validate_target(target: &TargetIdentity) -> Result<(), AppError> {
     {
         return changed("Le champ actif a changé; remplacement refusé.", "control");
     }
+    // NATIVE-002: a copy target was replaceable only because UI Automation read its selection as
+    // the copied text, and it must still read so. Collapsed by a click, the control copy of VS
+    // Code would give back its whole line (the very text captured when that line was selected),
+    // and the paste would insert at the caret.
+    if target.check == TargetCheck::Copy {
+        if !copy_proved(&target.selected_text) {
+            return changed(
+                "La sélection a changé; remplacement refusé.",
+                "copy unproved",
+            );
+        }
+        return Ok(());
+    }
+    // NATIVE-001 (decision 1, Lucas 10/10): from here on a UIA target, which UI Automation alone
+    // proves. One that no longer answers (no focused element, no runtime id, a selection it
+    // cannot read) proves nothing: the replacement is refused, the result is for Copy. A silent
+    // UIA used to count as no change, and the paste went wherever the selection had moved.
+    let unverified = |reason: &'static str| {
+        Err(AppError::new(
+            ErrorKind::TargetUnverified,
+            "La sélection ne peut plus être vérifiée; remplacement refusé, utilisez Copier.",
+        )
+        .because(reason))
+    };
     let Some(runtime_id) = &target.runtime_id else {
-        return Ok(());
+        return unverified("no runtime id");
     };
-    let Some(element) = ui_automation()
-        .ok()
-        .and_then(|a| a.get_focused_element().ok())
-    else {
-        return Ok(());
+    let Some(element) = focused_element() else {
+        return unverified("uia silent");
     };
-    if element_changed(
-        target.check,
-        runtime_id,
-        element.get_runtime_id().ok().as_deref(),
-    ) {
+    let Ok(now) = element.get_runtime_id() else {
+        return unverified("runtime id unreadable");
+    };
+    if element_changed(target.check, runtime_id, Some(&now)) {
         return changed("La cible a changé; remplacement refusé.", "element");
     }
-    if let Some(reason) = text_changed(target, || selection(&element)) {
+    let selection = selection(&element);
+    if let Some(reason) = selection_changed(target, &selection) {
         return changed("La sélection a changé; remplacement refusé.", reason);
+    }
+    if selection.is_err() {
+        return unverified("selection unreadable");
     }
     Ok(())
 }
@@ -642,38 +884,60 @@ fn element_changed(check: TargetCheck, captured: &[i32], now: Option<&[i32]>) ->
     check == TargetCheck::Uia && now.is_some_and(|id| id != captured)
 }
 
-/// Whether the target's text is no longer what was captured, as far as UI Automation can tell
-/// (and which part of it changed): a UIA target compares its selection even without a drawable
-/// anchor (review n°1: it used to skip that comparison); a copy target is checked by
-/// `control_copy` at the paste, never here.
-fn text_changed(
-    target: &TargetIdentity,
-    now: impl FnOnce() -> Result<(String, Vec<Rect>, usize, bool), String>,
-) -> Option<&'static str> {
-    if target.check != TargetCheck::Uia {
-        return None;
-    }
-    selection_changed(target, &now())
-}
-
 /// Review n°1: a text only a synthetic copy gave (VS Code's Monaco has no text pattern) is
 /// copied again right before the paste, once the target is revalidated and the keys are up:
 /// the paste goes on only when the source copies exactly the captured text again. Nothing
 /// selected any more makes VS Code copy its whole line: never « contains », always « equals ».
-/// The clipboard is put back as after the capture's own copy.
+/// The clipboard is put back as after the capture's own copy. QA-03-A: a Chromium UIA target
+/// (`copy_witness`) gets the same copy, held to `same_witness`.
 fn control_copy(target: &TargetIdentity) -> Result<(), AppError> {
-    let copied = match copy_and_restore() {
-        Ok(copied) => copied,
-        Err("SendInput refused") => {
-            return Err(AppError::new(
+    let copied =
+        match copy_and_restore() {
+            Ok(copied) => copied,
+            Err("SendInput refused") => {
+                return Err(AppError::new(
+                    ErrorKind::PasteBlocked,
+                    "La vérification de la sélection a été bloquée; remplacement refusé.",
+                )
+                .because("control copy refused"))
+            }
+            Err(CLIPBOARD_UNKEEPABLE) => {
+                return Err(unkept_paste(crate::clipboard_guard::Unkept::Unkeepable))
+            }
+            Err(CLIPBOARD_BUSY) => return Err(unkept_paste(crate::clipboard_guard::Unkept::Busy)),
+            Err(FOREIGN_WRITE) => return Err(AppError::new(
                 ErrorKind::PasteBlocked,
-                "La vérification de la sélection a été bloquée; remplacement refusé.",
+                "Une autre application a écrit le presse-papiers pendant la vérification de la \
+                 sélection; remplacement refusé.",
             )
-            .because("control copy refused"))
-        }
-        Err(_) => None,
+            .because(FOREIGN_WRITE)),
+            Err(_) => None,
+        };
+    if target.check == TargetCheck::Copy {
+        same_copy(copied.as_deref(), &target.selected_text)
+    } else {
+        same_witness(copied.as_deref(), &target.selected_text)
+    }
+}
+
+/// The witness copy of a Chromium UIA target must give the text UI Automation read, line endings
+/// and non-breaking spaces aside (`canonical`: the two write them apart). Another text: UI
+/// Automation read past the selection (QA-03-A, measured on Edge 155: a selection bounded by its
+/// element read with the text of the next one) or the selection moved, and nothing is pasted.
+fn same_witness(copied: Option<&str>, captured: &str) -> Result<(), AppError> {
+    let refused = |reason| {
+        Err(AppError::new(
+            ErrorKind::TargetChanged,
+            "La sélection copiée ne correspond pas au texte lu; remplacement refusé, utilisez \
+             Copier.",
+        )
+        .because(reason))
     };
-    same_copy(copied.as_deref(), &target.selected_text)
+    match copied {
+        Some(text) if !text.is_empty() && canonical(text) == canonical(captured) => Ok(()),
+        Some(text) if !text.is_empty() => refused("witness copy differs"),
+        _ => refused("witness copy empty"),
+    }
 }
 
 /// The control copy of a copy target must give back exactly the captured text.
@@ -719,37 +983,82 @@ fn selection_changed(
         Ok((_, rects, _, _)) if anchor_moved(target.anchor, anchor_of(rects)) => Some("anchor"),
         Ok(_) => None,
         Err(message) if message == NO_SELECTION => Some("collapsed"),
+        Err(message) if message == MULTIPLE_SELECTION => Some("multiple"),
         Err(_) => None,
     }
 }
 
-/// How a paste ended: the field read the result back (`confirmed`), or the chord went
-/// through and nothing could read the field (assumed, like Wispr Flow).
+/// How a paste ended: the field read back proves it (`confirmed`), or the chord went through
+/// and nothing proves it (assumed, like Wispr Flow: nothing could read the field, or it reads
+/// no change that proves the paste).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Delivery {
     pub confirmed: bool,
 }
 
 /// Line endings and the non-breaking spaces Chromium makes of boundary spaces in a
-/// contenteditable: the readback proof only, never the identity checks.
+/// contenteditable: the readback and copy proofs only, never the identity checks.
 pub fn canonical(text: &str) -> String {
     text.replace("\r\n", "\n")
         .replace('\r', "\n")
         .replace('\u{a0}', " ")
 }
 
-/// Whether a field's readback shows the pasted value (None: nothing readable).
-pub fn readback_confirms(field_text: Option<&str>, value: &str) -> Option<bool> {
-    field_text.map(|text| canonical(text).contains(&canonical(value)))
+/// Whether the field's readback proves the paste (NATIVE-010). None: nothing can read the field
+/// now. True only when the field reads otherwise than before the paste, and the difference is the
+/// captured selection turned into the result in one place: the text before and after it as it
+/// was. The result found anywhere in the field proved nothing (it may have been there already,
+/// beside a paste the page blocked); a field that could not be read before proves nothing either.
+pub fn readback_confirms(
+    before: Option<&str>,
+    after: Option<&str>,
+    replaced: &str,
+    value: &str,
+) -> Option<bool> {
+    let after: Vec<char> = canonical(after?).chars().collect();
+    let Some(before) = before else {
+        return Some(false);
+    };
+    let before: Vec<char> = canonical(before).chars().collect();
+    let replaced: Vec<char> = canonical(replaced).chars().collect();
+    let value: Vec<char> = canonical(value).chars().collect();
+    Some(replaced_in_place(&before, &after, &replaced, &value))
+}
+
+/// Whether `after` is `before` with `replaced` turned into `value` at one place `s`: the same
+/// text before `s`, `replaced` then `value` at `s`, the same text after them. `s` can only lie
+/// between the end of the common tail and the end of the common head: a few places in a real
+/// text. A text so repetitive that thousands of places remain proves nothing (assumed).
+fn replaced_in_place(before: &[char], after: &[char], replaced: &[char], value: &[char]) -> bool {
+    const PLACES: usize = 4_096;
+    if before == after
+        || replaced.len() > before.len()
+        || after.len() + replaced.len() != before.len() + value.len()
+    {
+        return false;
+    }
+    let head = before.iter().zip(after).take_while(|(b, a)| b == a).count();
+    let tail = before
+        .iter()
+        .rev()
+        .zip(after.iter().rev())
+        .take_while(|(b, a)| b == a)
+        .count();
+    // after[..s] == before[..s] needs s <= head; after[s + value..] == before[s + replaced..]
+    // needs the common tail to cover what follows the result.
+    let first = after.len().saturating_sub(tail + value.len());
+    let last = head.min(before.len() - replaced.len());
+    if first > last || last - first >= PLACES {
+        return false;
+    }
+    (first..=last)
+        .any(|s| before[s..s + replaced.len()] == *replaced && after[s..s + value.len()] == *value)
 }
 
 /// Reads the focused field: UI Automation first (its value, else its document), then
 /// WM_GETTEXT on a Win32 Edit/RichEdit control. None when nothing can read it.
 pub(crate) fn field_text(window: isize) -> Option<String> {
-    if let Some(element) = ui_automation()
-        .ok()
-        .and_then(|a| a.get_focused_element().ok())
-    {
+    if let Some(element) = focused_element() {
         if let Ok(value) = element
             .get_pattern::<UIValuePattern>()
             .and_then(|p| p.get_value())
@@ -781,8 +1090,18 @@ pub(crate) fn field_text(window: isize) -> Option<String> {
 /// identity, waits for the shortcut chord to be released, keeps the clipboard, writes
 /// the result, sends one Ctrl+V, then reads the field back when something can read it
 /// and puts the clipboard back while it still holds our write. `reactivate` (the menu
-/// of the glass) brings the source window back to the front first.
-pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<Delivery, AppError> {
+/// of the glass) brings the source window back to the front first. `ticket` is the session's
+/// (NATIVE-006): read again before each step that acts on the source, and last right before the
+/// chord; revoked, nothing more is sent and the clipboard comes back.
+pub fn paste(
+    target: &TargetIdentity,
+    value: &str,
+    reactivate: bool,
+    ticket: Ticket,
+) -> Result<Delivery, AppError> {
+    if !ticket.live() {
+        return Err(revoked());
+    }
     paste_preflight(target, value)?;
     // Windows would drop our keys (the window was started as administrator): nothing is sent.
     if crate::host::window_protected(target.native_window) {
@@ -807,18 +1126,28 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     validate_target(target)?;
     released(crate::host::wait_modifiers_released(CHORD_RELEASE))?;
     validate_target(target)?;
-    if target.check == TargetCheck::Copy {
+    // A copy target, and a Chromium UIA target whose selection UI Automation may misread
+    // (QA-03-A), are copied once more: the paste goes on only on the captured text.
+    if target.check == TargetCheck::Copy || target.copy_witness {
+        if !ticket.live() {
+            return Err(revoked());
+        }
         control_copy(target)?;
     }
     // What the field reads before the paste: a field that reads exactly the same afterwards
     // was not written (0.6: a PDF in a browser used to end on the check of a success).
     let before = field_text(target.native_window);
     crate::clipboard_guard::settle_late(crate::host::last_input_tick);
-    let mut keeper = crate::clipboard_guard::Keeper::take(read_clipboard);
+    if !ticket.live() {
+        return Err(revoked());
+    }
+    // NATIVE-004: a clipboard that cannot be kept whole is never written over (nothing pasted).
+    let take = || crate::clipboard_guard::Keeper::take().map_err(unkept_paste);
+    let mut keeper = take()?;
     crate::host::suppress_clipboard_tracking(Duration::from_secs(4));
     if keeper.put_text(value).is_err() {
         // Written between the snapshot and our text (a clipboard manager): taken again, once.
-        keeper = crate::clipboard_guard::Keeper::take(read_clipboard);
+        keeper = take()?;
         keeper.put_text(value).map_err(|message| {
             AppError::new(ErrorKind::PasteBlocked, message).because("clipboard busy")
         })?;
@@ -828,6 +1157,12 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     if let Err(error) = validate_target(target) {
         let _ = keeper.restore_ours();
         return Err(error);
+    }
+    // The last look before the chord: an emergency exit since then, even under the state lock
+    // this paste holds, and no Ctrl+V leaves (NATIVE-006).
+    if !ticket.live() {
+        let _ = keeper.restore_ours();
+        return Err(revoked());
     }
     if let Err(sent) = crate::host::send_paste_chord() {
         // A part of the chord left: the target may still read the clipboard for a moment.
@@ -843,16 +1178,24 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     }
     let started = Instant::now();
     let mut readable = true;
+    // NATIVE-010: only a change proves the paste. Nothing read before it, or a result that is
+    // the replaced text itself, can prove nothing: no long wait for a proof that cannot come.
+    let provable = before.is_some() && canonical(&target.selected_text) != canonical(value);
     let mut after;
     let confirmed = loop {
         after = field_text(target.native_window);
-        match readback_confirms(after.as_deref(), value) {
+        match readback_confirms(
+            before.as_deref(),
+            after.as_deref(),
+            &target.selected_text,
+            value,
+        ) {
             Some(true) => break true,
             Some(false) => {}
             None => readable = false,
         }
         let elapsed = started.elapsed();
-        if (!readable && elapsed >= PASTE_SETTLE) || elapsed >= PASTE_CONFIRM {
+        if ((!readable || !provable) && elapsed >= PASTE_SETTLE) || elapsed >= PASTE_CONFIRM {
             break false;
         }
         std::thread::sleep(Duration::from_millis(40));
@@ -1003,6 +1346,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn an_emergency_exit_kills_the_tickets_taken_before_it_only() {
+        let _epoch = EPOCH_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let before = Ticket::current();
+        assert!(before.live());
+        revoke_deliveries();
+        assert!(!before.live());
+        let after = Ticket::current();
+        assert!(after.live());
+        assert_ne!(before, after);
+    }
+
+    #[test]
     fn the_first_line_of_a_document_loses_the_margin_its_rectangle_included() {
         let r = |x: f64, y: f64, w: f64, h: f64| Rect {
             x,
@@ -1052,19 +1407,20 @@ mod tests {
             selection_len: 5,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         assert_eq!(
-            text_changed(&target, || Ok(("bloc B".into(), Vec::new(), 6, true))),
+            selection_changed(&target, &Ok(("bloc B".into(), Vec::new(), 6, true))),
             Some("text"),
             "another selection in the same element"
         );
         assert_eq!(
-            text_changed(&target, || Err(NO_SELECTION.into())),
+            selection_changed(&target, &Err(NO_SELECTION.into())),
             Some("collapsed"),
             "collapsed to the caret"
         );
         assert_eq!(
-            text_changed(&target, || Ok(("mot A".into(), Vec::new(), 5, true))),
+            selection_changed(&target, &Ok(("mot A".into(), Vec::new(), 5, true))),
             None
         );
         // 0.6: the rectangles a Chromium `<input>` only gives later are not a change (0.5.1
@@ -1076,19 +1432,11 @@ mod tests {
             height: 18.,
         };
         assert_eq!(
-            text_changed(&target, || Ok(("mot A".into(), vec![line], 5, true))),
+            selection_changed(&target, &Ok(("mot A".into(), vec![line], 5, true))),
             None
         );
-        // A copy target is not read through UI Automation: its control copy decides.
-        let copy = TargetIdentity {
-            check: TargetCheck::Copy,
-            runtime_id: None,
-            ..target
-        };
-        assert_eq!(
-            text_changed(&copy, || panic!("a copy target is never read through UIA")),
-            None
-        );
+        // A copy target is not compared with UIA's selection: UIA must prove it (`copy_proved`,
+        // NATIVE-002), then its control copy decides.
         assert!(same_copy(Some("mot A"), "mot A").is_ok());
         for copied in [
             None,
@@ -1250,6 +1598,7 @@ mod tests {
             selection_len: 11,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         let same: Result<(String, Vec<Rect>, usize, bool), String> = Ok((
             "Deux lignes".into(),
@@ -1290,7 +1639,47 @@ mod tests {
                 &Err("La sélection n’est pas accessible par UI Automation.".into())
             ),
             None,
-            "a control that stopped answering is not a change"
+            "a control that stopped answering is not a change (validate_target refuses it as \
+             unverified: NATIVE-001)"
+        );
+    }
+
+    #[test]
+    fn a_uia_target_ui_automation_no_longer_answers_for_is_refused_as_unverified() {
+        // NATIVE-001 (decision 1): the target's window is in front, UI Automation gives no
+        // focused element (the bench's fault, this thread only): nothing proves the selection.
+        let target = TargetIdentity {
+            runtime_id: Some(vec![42]),
+            native_window: crate::host::foreground(),
+            control: 0,
+            selected_text: "x".into(),
+            anchor: None,
+            selection_len: 1,
+            editable: true,
+            check: TargetCheck::Uia,
+            copy_witness: false,
+        };
+        faults::silence_uia(true);
+        let silent = validate_target(&target);
+        faults::silence_uia(false);
+        let silent = silent.unwrap_err();
+        assert_eq!(
+            (silent.kind, silent.reason),
+            (ErrorKind::TargetUnverified, "uia silent")
+        );
+        // A UIA target without the element's id has nothing to be proved with either.
+        let anonymous = TargetIdentity {
+            runtime_id: None,
+            ..target
+        };
+        let refused = validate_target(&anonymous).unwrap_err();
+        assert_eq!(
+            (refused.kind, refused.reason),
+            (ErrorKind::TargetUnverified, "no runtime id")
+        );
+        assert_eq!(
+            serde_json::to_value(ErrorKind::TargetUnverified).unwrap(),
+            "target_unverified"
         );
     }
 
@@ -1309,6 +1698,21 @@ mod tests {
             false
         ));
         assert!(replaceable(CaptureOrigin::Copy, true, "Notepad", false));
+        // NATIVE-002: a copy UI Automation does not prove is for Copy only (VS Code without a
+        // selection copies its whole line: the paste inserted at the caret).
+        assert!(!replaceable(CaptureOrigin::Copy, false, "Notepad", false));
+        assert!(proves_copy("mot A", "mot A"));
+        assert!(
+            proves_copy("a\r\nb\u{a0}c", "a\nb c"),
+            "line endings, editor spaces"
+        );
+        for (selected, copied) in [
+            ("", "seconde ligne à garder\n"),
+            ("mot", "ligne entière avec mot\n"),
+            ("delta", "alpha\ndelta"),
+        ] {
+            assert!(!proves_copy(selected, copied), "{selected:?} / {copied:?}");
+        }
         assert!(!replaceable(
             CaptureOrigin::Copy,
             true,
@@ -1333,19 +1737,86 @@ mod tests {
 
     #[test]
     fn the_readback_proof_tolerates_line_endings_and_editor_spaces_only() {
+        let proof = |before: &str, after: &str, replaced: &str, value: &str| {
+            readback_confirms(Some(before), Some(after), replaced, value)
+        };
         assert_eq!(
-            readback_confirms(Some("Début\u{a0}équipe\r\nfin"), "Début équipe\nfin"),
+            proof(
+                "Début café\r\nfin",
+                "Début\u{a0}équipe\r\nfin",
+                "café",
+                "équipe"
+            ),
             Some(true)
         );
         assert_eq!(
-            readback_confirms(Some("avant équipe après"), "équipe"),
+            proof("avant café après", "avant équipe après", "café", "équipe"),
             Some(true)
         );
         assert_eq!(
-            readback_confirms(Some("deux  espaces"), "deux espaces"),
+            proof("deux  espaces", "deux  espaces!", "espaces", "espaces!"),
+            Some(true),
+            "a result that starts like what it replaced"
+        );
+        assert_eq!(
+            proof("a café b", "a équipe b", "café", "deux  équipe"),
+            Some(false),
+            "two spaces are not one"
+        );
+        assert_eq!(readback_confirms(None, None, "x", "y"), None);
+    }
+
+    #[test]
+    fn a_paste_is_confirmed_only_by_a_change_in_place_never_by_a_result_found_elsewhere() {
+        let proof = |before: &str, after: &str, replaced: &str, value: &str| {
+            readback_confirms(Some(before), Some(after), replaced, value)
+        };
+        // NATIVE-010: the result was already in the field and the page blocked the paste.
+        let blocked = "équipe 🚀 — Début 🚀 café 😀 fin";
+        assert_eq!(proof(blocked, blocked, "café 😀", "équipe 🚀"), Some(false));
+        // The same paste that went through: proved.
+        assert_eq!(
+            proof(
+                blocked,
+                "équipe 🚀 — Début 🚀 équipe 🚀 fin",
+                "café 😀",
+                "équipe 🚀"
+            ),
+            Some(true)
+        );
+        // Inserted at the caret instead of replacing (VS Code without a selection): not proved.
+        assert_eq!(
+            proof(
+                "seconde ligne à garder",
+                "secondeRÉSULTAT ligne à garder",
+                "seconde ligne à garder\n",
+                "RÉSULTAT"
+            ),
             Some(false)
         );
-        assert_eq!(readback_confirms(None, "x"), None);
+        assert_eq!(
+            proof("Début café fin", "Début équipecafé fin", "café", "équipe"),
+            Some(false),
+            "the result beside the selection, which is still there"
+        );
+        // Something else changed, the result nowhere in place.
+        assert_eq!(
+            proof("Début café fin", "Début cafe fin", "café", "équipe"),
+            Some(false)
+        );
+        // Nothing read before the paste: nothing to compare with, assumed.
+        assert_eq!(
+            readback_confirms(None, Some("Début équipe fin"), "café", "équipe"),
+            Some(false)
+        );
+        // The result is the text it replaced: no change can prove it.
+        assert_eq!(proof("a café b", "a café b", "café", "café"), Some(false));
+        // A result whose head and tail repeat around it (the place is found all the same).
+        assert_eq!(proof("Pxab", "Pxaab", "x", "xa"), Some(true));
+        assert_eq!(proof("aaaa", "aaaaa", "a", "aa"), Some(true));
+        // A text so repetitive that thousands of places remain: assumed, never confirmed.
+        let long = "a".repeat(10_000);
+        assert_eq!(proof(&long, &format!("{long}a"), "a", "aa"), Some(false));
     }
 
     #[test]
@@ -1390,6 +1861,7 @@ mod tests {
             selection_len: 1,
             editable: true,
             check: TargetCheck::Uia,
+            copy_witness: false,
         };
         assert_eq!(
             paste_preflight(&target, "a\0b").unwrap_err().kind,
@@ -1410,16 +1882,66 @@ mod tests {
         assert!(paste_preflight(&target, "ok").is_ok());
         assert_eq!(released(false).unwrap_err().kind, ErrorKind::KeysHeld);
         assert!(released(true).is_ok());
+        // NATIVE-004: a clipboard that cannot be kept whole refuses the copy and the paste with
+        // its own code (a busy one blocks the paste, as before).
+        use crate::clipboard_guard::Unkept;
+        assert_eq!(unkeepable_capture().kind, ErrorKind::ClipboardUnkeepable);
+        assert_eq!(
+            unkept_paste(Unkept::Unkeepable).kind,
+            ErrorKind::ClipboardUnkeepable
+        );
+        assert_eq!(unkept_paste(Unkept::Busy).kind, ErrorKind::PasteBlocked);
+        assert_eq!(unkept_paste(Unkept::Busy).reason, "clipboard busy");
         assert_eq!(
             validate_target(&target).unwrap_err().kind,
             ErrorKind::TargetChanged,
             "window 1 is never the foreground"
         );
         assert_eq!(
-            paste(&target, "ok", false).unwrap_err().kind,
+            {
+                let _epoch = EPOCH_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+                paste(&target, "ok", false, Ticket::current())
+                    .unwrap_err()
+                    .kind
+            },
             ErrorKind::TargetChanged,
             "refused before any key or clipboard"
         );
+    }
+
+    /// NATIVE-012 (Elio audit): a selection in several ranges (a simulated provider giving two)
+    /// is refused, never cut down to its first range; at the revalidation it is a change. The
+    /// real bench says the same (`selection-multiple-uia-simulee`).
+    #[test]
+    fn a_selection_in_several_ranges_is_refused() {
+        assert_eq!(selected_range(vec!["bloc"]), Ok("bloc"));
+        assert_eq!(
+            selected_range(Vec::<&str>::new()),
+            Err(NO_SELECTION.to_string())
+        );
+        assert_eq!(
+            selected_range(vec!["premier bloc", "second bloc"]),
+            Err(MULTIPLE_SELECTION.to_string()),
+            "NATIVE-012: the first of two selected ranges was taken for the whole selection"
+        );
+        let target = TargetIdentity {
+            runtime_id: Some(vec![1]),
+            native_window: 1,
+            control: 0,
+            selected_text: "premier bloc".into(),
+            anchor: None,
+            selection_len: 12,
+            editable: true,
+            check: TargetCheck::Uia,
+            copy_witness: false,
+        };
+        assert_eq!(
+            selection_changed(&target, &Err(MULTIPLE_SELECTION.into())),
+            Some("multiple"),
+            "a second range added since the capture"
+        );
+        // Never proved for a copy either (the copy of Word gives every part).
+        assert!(!proves_copy("", "premier bloc\nsecond bloc"));
     }
 
     #[test]

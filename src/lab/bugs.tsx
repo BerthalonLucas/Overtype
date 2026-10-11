@@ -143,12 +143,12 @@ const defects = [
     steps: [
       'Lancer une traduction dont le moteur ne répond pas.',
       'Une pilule de verre seule de 44 × 28 (52 × 28 pour le Ruban), là où la pilule d’actions se posera : vide pendant 250 ms, puis l’indicateur choisi dans les Réglages (la Perle par défaut) ; rien de textuel, la pilule ne grandit jamais.',
-      'Échap annule. Le parcours 0.4 (réglage caché uiVersion « v4 ») garde sa pilule de 60 × 28 et le spinner de shadcn, avec un trait de progression après 1,5 s.',
+      'Échap annule.',
     ],
     cause:
       'Le verre n’existe plus avant le résultat : la pilule d’attente est publiée seule à Rust, qui ancre l’empreinte du futur verre (frame) et non la pilule ; le verre court s’ouvre depuis cette ligne (clip-path 260 ms), la bande monte de 8 px en fondu. Depuis l’Îlot (lot 8), cette pilule est la pilule de travail.',
     boundary:
-      'La pilule et son indicateur se voient ici ; le parcours 0.4 dans le même cadre avec ui=v4. La réservation de la fenêtre native et l’ouverture sans second placement se vérifient par le pont IPC.',
+      'La pilule et son indicateur se voient ici. La réservation de la fenêtre native et l’ouverture sans second placement se vérifient par le pont IPC.',
     scenario: 'pending',
   },
   {

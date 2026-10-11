@@ -37,8 +37,6 @@ import {
 import { ilotReserve } from '../src/layout';
 import { resetFrom } from '../src/settings/reset';
 
-// The Îlot, as Rust's default (UiVersion::Ilot); `&ui=v4` in the URL starts in the 0.4 journey,
-// for the tests that ask for it.
 let settings: Settings = {
   defaultActionId,
   actions: structuredClone(defaultActions),
@@ -47,7 +45,6 @@ let settings: Settings = {
   autostart: false,
   textSize: 'normal',
   autoClose: 'normal',
-  uiVersion: new URLSearchParams(location.search).get('ui') === 'v4' ? 'v4' : 'ilot',
   language: 'en',
   theme: 'system',
   motion: 'system',
@@ -68,7 +65,7 @@ let settings: Settings = {
   changedWordsStyle: 'encre',
 };
 // A fresh install's settings (Rust's Settings::default), for `reset_settings`.
-const freshSettings: Settings = { ...structuredClone(settings), uiVersion: 'ilot' };
+const freshSettings: Settings = structuredClone(settings);
 // What `suggest_shortcut` answers (Rust's first free proposal; null: none free).
 let suggestion: string | null = 'Ctrl+Alt+Shift+Space';
 // canReplace is false here; a test raises it with `target` (Rust knows it at the capture since 0.4.0).
@@ -619,8 +616,8 @@ Object.assign(window, {
     target: (captureId: string, canReplace: boolean) => emit('capture-target', { captureId, canReplace }),
     notice: (message: string, code?: ErrorCode) => emit('capture-notice', { message, ...(code ? { code } : {}) }),
     // The watcher dropped the selection (lot 10: code target_changed).
-    invalidate: (anchorLost = false, captureId = currentCapture.id) =>
-      emit('target-invalidated', { captureId, anchorLost, message: 'La sélection a changé.', code: 'target_changed' }),
+    invalidate: (captureId = currentCapture.id) =>
+      emit('target-invalidated', { captureId, message: 'La sélection a changé.', code: 'target_changed' }),
     // Lot 10: what Windows answered for each binding; sent as `shortcut-status` when `emitNow`.
     shortcutStates: (states: Record<string, BindingState>, emitNow = true) => {
       shortcutStates = states;

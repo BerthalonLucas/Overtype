@@ -106,8 +106,7 @@ export function ConnectionForm({
         : probe.status === 'ok'
           ? model && !listed
             ? null
-            : t(count === 1 ? 'conn.modelCountOne' : 'conn.modelCountOther', { count }) +
-              (probe.hidden ? ` ${t('conn.modelHidden')}` : '')
+            : t('conn.modelCountOther', { count }) + (probe.hidden ? ` ${t('conn.modelHidden')}` : '')
           : t('conn.modelAuto');
   const modelProblem = probe.status === 'ok' && model && !listed ? t('conn.modelAbsent', { model }) : null;
 

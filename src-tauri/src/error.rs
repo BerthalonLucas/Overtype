@@ -1,7 +1,7 @@
 //! Error codes (« Îlot », lot 10 of docs/DA-PLAN.md): what failed, as a code the frontend
 //! turns into a short text in the interface language and one gesture: open the exact field
 //! of the Settings, Try again, or Copy the result. The French message of 0.4 travels beside
-//! it for the v4 journey. Neither ever carries the server's answer, a key, a URL path or any
+//! it for the glass of a direct shortcut. Neither ever carries the server's answer, a key, a URL path or any
 //! text of the user: the server's body only serves to classify, here, and goes no further.
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +31,10 @@ pub enum ErrorKind {
     PasteBlocked,
     /// The selection, the field or the window changed: nothing was replaced.
     TargetChanged,
+    /// UI Automation no longer answers for the captured selection (no focused element, no
+    /// runtime id, a selection it cannot read): nothing proves it is still there, so nothing was
+    /// replaced (NATIVE-001). The result exists: Copy result.
+    TargetUnverified,
     /// The field cannot be written (read-only, a console, a copy without a known selection).
     NotEditable,
     /// The paste went out and changed nothing: the text is read-only (a PDF in a browser).
@@ -59,6 +63,11 @@ pub enum ErrorKind {
     SetupOpen,
     /// The tray's « Revoir la dernière traduction » with no result of the last ten minutes.
     NothingRecent,
+    /// The clipboard holds what cannot be kept whole (the picture beside an Office copy, a
+    /// format its owner renders): nothing was copied or pasted over it, nothing was lost
+    /// (NATIVE-004). A capture notice (copy the text yourself, then try again) and a refusal of
+    /// the paste (Copy result).
+    ClipboardUnkeepable,
     /// Anything unexpected on our side.
     Internal,
 }
@@ -171,6 +180,8 @@ mod tests {
             (ErrorKind::ReadOnly, "read_only"),
             (ErrorKind::ProtectedWindow, "protected_window"),
             (ErrorKind::SetupOpen, "setup_open"),
+            (ErrorKind::ClipboardUnkeepable, "clipboard_unkeepable"),
+            (ErrorKind::TargetUnverified, "target_unverified"),
         ];
         for (kind, name) in codes {
             assert_eq!(serde_json::to_value(kind).unwrap(), serde_json::json!(name));

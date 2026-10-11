@@ -106,6 +106,16 @@ const dictionary = {
     en: 'Administrator window — can’t be read',
     fr: 'Fenêtre administrateur, lecture impossible',
   },
+  // Lot C (NATIVE-001): UI Automation no longer answers for the selection; nothing was replaced.
+  'result.error.target_unverified': {
+    en: 'Can’t check selection — not replaced',
+    fr: 'Sélection invérifiable, rien remplacé',
+  },
+  // Lot C (NATIVE-004): the clipboard cannot be kept whole; nothing was written over it.
+  'result.error.clipboard_unkeepable': {
+    en: 'Can’t save clipboard — not replaced',
+    fr: 'Presse-papiers non sauvegardable, rien remplacé',
+  },
   'result.error.too_long': {
     en: 'Selection too long (max 200,000 characters)',
     fr: 'Sélection trop longue (200 000 caractères max)',
@@ -121,6 +131,11 @@ const dictionary = {
   // A capture Rust refused (capture-notice), where the request's words would mislead: the source
   // window changed during the capture, nothing was tried (src/result/errors.ts, source 'capture').
   'result.notice.target_changed': { en: 'Window changed — try again', fr: 'Fenêtre changée, réessayez' },
+  // The synthetic copy was never sent (lot C, NATIVE-004): the user copies, then presses again.
+  'result.notice.clipboard_unkeepable': {
+    en: 'Can’t save clipboard — copy, then retry',
+    fr: 'Presse-papiers non sauvegardable : copiez, puis relancez',
+  },
   'init.connection': { en: 'The connection to {app} is unavailable.', fr: 'La connexion à {app} est indisponible.' },
   'init.close': { en: 'Closing failed. Try again.', fr: 'La fermeture a échoué. Réessayez.' },
   'init.restart': {
@@ -203,10 +218,6 @@ const dictionary = {
     en: 'Select some text, then press these keys: the menu opens beside it.',
     fr: 'Sélectionnez du texte, puis appuyez sur ces touches : le menu s’ouvre à côté.',
   },
-  'settings.menuShortcutHelpV4': {
-    en: 'Runs the default action on the selected text.',
-    fr: 'Lance l’action par défaut sur le texte sélectionné.',
-  },
   'settings.menuShortcutOff': {
     en: 'Off. Record a combination to turn it on.',
     fr: 'Désactivé. Enregistrez une combinaison pour l’activer.',
@@ -216,7 +227,6 @@ const dictionary = {
     en: 'The menu starts on the last action used in each app, or on this one.',
     fr: 'Le menu propose la dernière action utilisée dans chaque application, sinon celle-ci.',
   },
-  'settings.defaultActionHelpV4': { en: 'What the shortcut runs.', fr: 'Ce que lance le raccourci.' },
   'settings.bubble': { en: 'Result bubble', fr: 'Bulle de résultat' },
   'settings.bubbleIntro': {
     en: 'When a shortcut shows the result, or a paste fails.',
@@ -438,9 +448,25 @@ export type Translate = (key: MessageKey, params?: Params) => string;
 
 export const languages: readonly Language[] = ['en', 'fr'];
 export const locales: Record<Language, string> = { en: 'en-US', fr: 'fr-FR' };
+// Each language by its own name, whatever the interface's language.
+export const languageNames: Record<Language, string> = { en: 'English', fr: 'Français' };
 
 // The app's name is never written in a message: `{app}` reads it from src/brand.ts.
-export function translate(language: Language, key: MessageKey, params?: Params): string {
+// A message in a pair `…One` / `…Other` given a numeric `count` takes the form the language's
+// plural rules choose (Intl.PluralRules): in French 0 and 1 are singular, in English only 1.
+const pluralRules: Record<Language, Intl.PluralRules> = {
+  en: new Intl.PluralRules(locales.en),
+  fr: new Intl.PluralRules(locales.fr),
+};
+function pluralKey(language: Language, key: MessageKey, count: unknown): MessageKey {
+  const pair = /^(.*)(One|Other)$/.exec(key);
+  if (!pair || typeof count !== 'number') return key;
+  const chosen = `${pair[1]}${pluralRules[language].select(count) === 'one' ? 'One' : 'Other'}`;
+  return chosen in dictionary ? (chosen as MessageKey) : key;
+}
+
+export function translate(language: Language, asked: MessageKey, params?: Params): string {
+  const key = pluralKey(language, asked, params?.count);
   const text = dictionary[key][language] ?? dictionary[key].en;
   if (!params && !text.includes('{')) return text;
   return text.replace(/\{(\w+)\}/g, (whole, name: string) =>

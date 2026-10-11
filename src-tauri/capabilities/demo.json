@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "demo",
+  "description": "The setup's demo window (/?window=setup&stage=demo): it tells Rust how it ended. Its page is a setup page and asks glass_frame once, which Rust answers false for this window (no real glass).",
+  "windows": [
+    "demo"
+  ],
+  "permissions": [
+    "allow-close-demo",
+    "allow-glass-frame"
+  ]
+}

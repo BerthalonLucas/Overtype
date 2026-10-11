@@ -67,16 +67,13 @@ pub struct Execution {
     pub delivered: bool,
 }
 impl Execution {
-    /// A direct capture. A `menu` binding reaches here only under the 0.4 interface
-    /// (`uiVersion: v4`): it runs the default action and replaces the selection.
+    /// A direct capture: an `action` binding's action and output mode, or the default action
+    /// shown when there is no binding. A `menu` binding never comes here: it opens the Îlot.
     pub fn snapshot(
         settings: &Settings,
         binding: Option<&ShortcutBinding>,
     ) -> Result<Self, String> {
         let (id, output_mode) = match binding {
-            Some(b) if b.kind == BindingKind::Menu => {
-                (settings.default_action_id.as_str(), OutputMode::Replace)
-            }
             Some(b) => (b.action_id.as_str(), b.output_mode),
             None => (settings.default_action_id.as_str(), OutputMode::Display),
         };
@@ -239,8 +236,7 @@ pub fn defaults() -> Vec<ActionDefinition> {
 pub fn default_menu_action_ids() -> Vec<String> {
     DEFAULTS.iter().map(|(id, ..)| (*id).to_string()).collect()
 }
-/// A fresh install has one shortcut: the Îlot menu on Ctrl+Alt+Space. Under the 0.4
-/// interface (`uiVersion: v4`) it runs the default action and replaces the selection.
+/// A fresh install has one shortcut: the Îlot menu on Ctrl+Alt+Space.
 pub fn default_bindings() -> Vec<ShortcutBinding> {
     vec![menu_binding("menu".into())]
 }
@@ -1067,36 +1063,25 @@ mod tests {
                 enabled: true
             }]
         );
-        assert_eq!(
-            settings.ui_version,
-            crate::types::UiVersion::Ilot,
-            "a fresh install opens the Îlot"
-        );
         assert!(validate(&settings).is_ok());
     }
     #[test]
-    fn under_the_0_4_interface_a_menu_shortcut_runs_the_default_action_and_replaces() {
+    fn a_direct_shortcut_runs_its_own_action_and_output_mode() {
         let settings = Settings {
             default_action_id: "translate".into(),
             ..Settings::default()
         };
-        let menu = settings.shortcut_bindings[0].clone();
-        let run = Execution::snapshot(&settings, Some(&menu)).unwrap();
-        assert_eq!(
-            (run.info.action_id.as_str(), run.info.output_mode),
-            ("translate", OutputMode::Replace),
-            "not the binding's own action id"
-        );
         let direct = ShortcutBinding {
             kind: BindingKind::Action,
             action_id: "shorten".into(),
             output_mode: OutputMode::Display,
-            ..menu
+            ..settings.shortcut_bindings[0].clone()
         };
         let run = Execution::snapshot(&settings, Some(&direct)).unwrap();
         assert_eq!(
             (run.info.action_id.as_str(), run.info.output_mode),
-            ("shorten", OutputMode::Display)
+            ("shorten", OutputMode::Display),
+            "not the default action"
         );
     }
     #[test]

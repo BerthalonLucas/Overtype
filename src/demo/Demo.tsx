@@ -1098,24 +1098,22 @@ function MailWindow({
       <div ref={refs.body} className="dm-mail-body">
         <p>{t('demo2.mail.hello')}</p>
         <div className="dm-para">
-          <p ref={refs.oldP} className="dm-text" style={{ visibility: scene.pasted ? 'hidden' : 'visible' }}>
+          <p ref={refs.oldP} style={{ visibility: scene.pasted ? 'hidden' : 'visible' }}>
             {before}
           </p>
-          <p ref={refs.newP} className="dm-text dm-new" style={{ visibility: scene.pasted ? 'visible' : 'hidden' }}>
+          <p ref={refs.newP} className="dm-new" style={{ visibility: scene.pasted ? 'visible' : 'hidden' }}>
             {after}
           </p>
           {/* The changed words take the app's ink themselves (.halo-lit): the new text drawn again
             exactly over itself, only those words visible; in after 380 ms, out in 900 ms, as the
             halo's marks. */}
           {scene.glow !== 'off' && (
-            <p className="dm-text dm-new dm-lit" data-state={scene.glow} aria-hidden="true">
+            <p className="dm-new dm-lit" data-state={scene.glow} aria-hidden="true">
               {lit}
             </p>
           )}
         </div>
-        <p ref={refs.byeP} className="dm-bye">
-          {t('demo2.mail.bye')}
-        </p>
+        <p ref={refs.byeP}>{t('demo2.mail.bye')}</p>
         <p>{t('demo2.mail.name')}</p>
       </div>
       {/* Windows' selection (one band per line) and the caret, in the stage's pixels. */}

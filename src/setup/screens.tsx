@@ -12,7 +12,7 @@ import { useDuration } from '../connection/Check';
 import { ConnectionForm, type ConnectionValue } from '../connection/ConnectionForm';
 import { useTryModel } from '../connection/useTryModel';
 import { hostOf, shortModel } from '../connection/endpoint';
-import { useT, type MessageKey } from '../i18n';
+import { languageNames, useT, type MessageKey } from '../i18n';
 import { ShortcutRecorder, shortcutKeys } from '../settings/ShortcutRecorder';
 import type { Registrations } from '../settings/registrations';
 import type { Language, ProbeProblem, Settings, Theme } from '../types';
@@ -140,8 +140,8 @@ export function LookScreen({
           value={language}
           onChange={onLanguage}
           options={[
-            { value: 'en', label: 'English' },
-            { value: 'fr', label: 'Français' },
+            { value: 'en', label: languageNames.en },
+            { value: 'fr', label: languageNames.fr },
           ]}
         />
       </div>

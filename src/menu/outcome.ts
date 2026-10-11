@@ -1,6 +1,6 @@
 import type { TranslationState } from '../reducer';
 import { errorCodeOf, errorFamily, type ErrorSource } from '../result/errors';
-import type { AfterReplace, Capture, ErrorCode, Settings, UndoStatus } from '../types';
+import type { AfterReplace, Capture, ErrorCode, UndoStatus } from '../types';
 
 /*
  * What the Îlot's surface shows once an action was chosen (lots 9 and 10 wired into lot 7). Pure:
@@ -24,13 +24,10 @@ import type { AfterReplace, Capture, ErrorCode, Settings, UndoStatus } from '../
  * `replace_result`, which revalidates the target after bringing the source back (BRIDGE, Îlot).
  */
 
-// The Îlot's journey: a menu capture under uiVersion 'ilot'. The whole of it, from the menu to the
-// check or the error pill, lives on the Îlot's surface; the glass never opens for it.
-export function ilotJourney(
-  settings: Pick<Settings, 'uiVersion'> | null | undefined,
-  capture: Pick<Capture, 'menu'> | null | undefined,
-): boolean {
-  return settings?.uiVersion === 'ilot' && Boolean(capture?.menu);
+// The Îlot's journey: a menu capture. The whole of it, from the menu to the check or the error
+// pill, lives on the Îlot's surface; the glass never opens for it.
+export function ilotJourney(capture: Pick<Capture, 'menu'> | null | undefined): boolean {
+  return Boolean(capture?.menu);
 }
 
 // The frontend's own paste of a retried result; a refusal carries Rust's code (`replace_result`

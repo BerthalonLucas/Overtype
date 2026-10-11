@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core windows: the overlay, the halo, the settings, and the setup and its demo (created on demand)",
+  "description": "What every window does (NATIVE-011): read the settings (keys only for settings and setup, see get_settings), follow the Windows theme and motion, hear the events Rust sends it. No core:default: no menu, tray, path, image or resource command for the pages.",
   "windows": [
     "overlay",
     "halo",
@@ -10,7 +10,10 @@
     "demo"
   ],
   "permissions": [
-    "core:default",
-    "core:window:allow-close"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-get-settings",
+    "allow-system-theme",
+    "allow-system-motion"
   ]
 }

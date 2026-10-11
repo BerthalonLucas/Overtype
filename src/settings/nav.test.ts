@@ -29,25 +29,9 @@ const chord = (over: Partial<Parameters<typeof isDiagnosticsChord>[0]> = {}) => 
 describe('the pages of the Settings window', () => {
   afterEach(() => saveDiagnosticsShown(false));
 
-  it('shows one page per topic in order; After replacing only in the Îlot, Diagnostic only once revealed', () => {
-    expect(visiblePages({ uiVersion: 'ilot' }, false)).toEqual([
-      'general',
-      'shortcuts',
-      'actions',
-      'after',
-      'appearance',
-      'server',
-      'data',
-    ]);
-    expect(visiblePages({ uiVersion: 'v4' }, false)).toEqual([
-      'general',
-      'shortcuts',
-      'actions',
-      'appearance',
-      'server',
-      'data',
-    ]);
-    expect(visiblePages({ uiVersion: 'ilot' }, true).at(-1)).toBe('diagnostic');
+  it('shows one page per topic in order, Diagnostic only once revealed', () => {
+    expect(visiblePages(false)).toEqual(['general', 'shortcuts', 'actions', 'after', 'appearance', 'server', 'data']);
+    expect(visiblePages(true).at(-1)).toBe('diagnostic');
     for (const page of allPages) {
       expect(messageKeys).toContain(pageTitle(page));
       expect(messageKeys).toContain(pageAbout(page));
@@ -55,8 +39,7 @@ describe('the pages of the Settings window', () => {
   });
 
   it('falls back to General when the page went away, and reads the page asked by the URL', () => {
-    const pages = visiblePages({ uiVersion: 'v4' }, false);
-    expect(pageOr('after', pages)).toBe('general');
+    const pages = visiblePages(false);
     expect(pageOr('diagnostic', pages)).toBe('general');
     expect(pageOr('server', pages)).toBe('server');
     expect(pageFromLocation('?window=settings&page=server')).toBe('server');

@@ -28,13 +28,11 @@ function Workbench() {
   const [run, setRun] = useState(0);
   const [width, height] = size.split('x').map(Number);
   const selected = labScenarioFrom(scenario);
-  // The frame opens in the Îlot, the app's default; a state of the 0.4 journey asks for it (`ui`).
   const query = new URLSearchParams({
     scenario,
     theme,
     motion: reduced ? 'reduce' : 'full',
     ...(preset === 'bouncy' ? { preset } : {}),
-    ...('ui' in selected ? { ui: selected.ui } : {}),
   });
   const src = `/lab-frame.html?${query}`;
   function remember(next: Record<string, string>) {

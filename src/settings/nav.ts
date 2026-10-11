@@ -1,17 +1,15 @@
 import type { MessageKey } from '../i18n';
-import { settingsPages, type Settings, type SettingsPage } from '../types';
+import { settingsPages, type SettingsPage } from '../types';
 
 // The pages of the Settings window, in sidebar order (design-lab/reglages/src/settings/
-// SettingsWindow.jsx). « After replacing » exists only in the Îlot journey; « Diagnostic » only
-// once revealed (Ctrl+Shift+M, or five clicks on the version).
+// SettingsWindow.jsx). « Diagnostic » only once revealed (Ctrl+Shift+M, or five clicks on the
+// version).
 export const allPages = settingsPages;
 export type PageId = SettingsPage;
 export const isPage = (value: unknown): value is PageId => (allPages as readonly unknown[]).includes(value);
 
-export function visiblePages(settings: Pick<Settings, 'uiVersion'>, diagnostics: boolean): PageId[] {
-  return allPages.filter(
-    (page) => (page !== 'after' || settings.uiVersion === 'ilot') && (page !== 'diagnostic' || diagnostics),
-  );
+export function visiblePages(diagnostics: boolean): PageId[] {
+  return allPages.filter((page) => page !== 'diagnostic' || diagnostics);
 }
 export const pageTitle = (page: PageId): MessageKey => `nav.${page}`;
 export const pageAbout = (page: PageId): MessageKey => `page.${page}.about`;

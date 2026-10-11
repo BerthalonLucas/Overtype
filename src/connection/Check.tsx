@@ -5,7 +5,15 @@ import { bridge } from '../bridge';
 import { locales, useLanguage, useT } from '../i18n';
 import { Button, ICON, Notice, StatusDot, cx, type StatusState } from '../components/controls';
 import { useReduced, useTx } from '../components/motion';
-import type { ModelInfo, NormalizedEndpoint, ProbeProblem, ProbeResult, ProbeStep, ProbeStepEvent } from '../types';
+import {
+  probeStepIds,
+  type ModelInfo,
+  type NormalizedEndpoint,
+  type ProbeProblem,
+  type ProbeResult,
+  type ProbeStep,
+  type ProbeStepEvent,
+} from '../types';
 import { causeText, describeProblem, stepName, stepText } from './causes';
 import { normalizeEndpoint, shortModel, textModels } from './endpoint';
 import './connection.css';
@@ -69,8 +77,8 @@ export const watchdogMs = 15_000;
 // Rust runs one check per window: a newer one cancels the older. Two servers of the same window
 // therefore take turns here instead of cancelling each other.
 let turn: Promise<unknown> = Promise.resolve();
-let serial = 0;
-const newRun = () => `check-${Date.now().toString(36)}-${(serial++).toString(36)}`;
+// A run id Rust accepts (letters, digits, - and _, 64 at most), like useTryModel's.
+const newRun = () => `check-${crypto.randomUUID()}`;
 // Where a key goes: scheme, host and port. A path typed after it changes nothing to who receives it.
 export const keyOrigin = (read: NormalizedEndpoint): string | null =>
   read.ok ? `${read.secure ? 'https' : 'http'}://${read.host}` : null;
@@ -164,9 +172,7 @@ export function useProbe({
           previous.steps.find((step) => step.state === 'waiting')?.id ??
           'reach';
         const steps: ProbeStep[] = (
-          previous.steps.length
-            ? previous.steps
-            : (['address', 'reach', 'key', 'models'] as const).map((id) => ({ id, state: 'waiting' as const }))
+          previous.steps.length ? previous.steps : probeStepIds.map((id) => ({ id, state: 'waiting' as const }))
         ).map((step) =>
           step.id === running
             ? { id: step.id, state: 'error' }
@@ -382,7 +388,7 @@ export function CheckLine({
     const count = probe.models.length;
     parts = [
       t('conn.connected'),
-      model ? shortModel(model) : t(count === 1 ? 'conn.modelsOne' : 'conn.modelsOther', { count }),
+      model ? shortModel(model) : t('conn.modelsOther', { count }),
       duration(probe.totalMs),
     ];
   } else if (probe.status === 'error') {

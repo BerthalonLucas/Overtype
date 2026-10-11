@@ -204,6 +204,17 @@ pub fn is_console_class(class: &str) -> bool {
         "ConsoleWindowClass" | "CASCADIA_HOSTING_WINDOW_CLASS"
     )
 }
+/// The process that owns a window (0: none, the window is gone).
+pub fn window_process(handle: isize) -> u32 {
+    if handle == 0 {
+        return 0;
+    }
+    let mut pid = 0u32;
+    unsafe {
+        GetWindowThreadProcessId(HWND(handle as *mut _), Some(&mut pid));
+    }
+    pid
+}
 /// The control that has the keyboard focus in the thread of `source`, with its class.
 pub fn focused_control(source: isize) -> Option<(isize, String)> {
     let thread = unsafe { GetWindowThreadProcessId(HWND(source as *mut _), None) };
@@ -792,9 +803,12 @@ pub fn executable_name(path: &str) -> Option<String> {
     (!name.is_empty() && name.len() <= 260 && !name.chars().any(char::is_control)).then_some(name)
 }
 
-/// The low-level keyboard hook, on the main thread. It stays minimal (LowLevelHooksTimeout):
-/// a few atomics, the async state of the modifiers and, for a letter while the menu is
-/// open over the source, one ToUnicodeEx. `on_menu_key` runs on its own thread.
+/// The low-level keyboard hook, on a thread of its own that only pumps its messages
+/// (NATIVE-005): Windows calls the hook on the thread that installed it, and silently removes a
+/// hook that answers late (LowLevelHooksTimeout), so it never waits behind the main thread (a
+/// command waiting for the state lock). It stays minimal: a few atomics, the async state of the
+/// modifiers and, for a letter while the menu is open over the source, one ToUnicodeEx.
+/// `on_menu_key` runs on its own thread. Answers once the hook is installed, or why it is not.
 pub fn install_keyboard_hook(
     on_menu_key: impl Fn(MenuKey) + Send + 'static,
     on_typed: impl Fn(Typed) + Send + 'static,
@@ -803,8 +817,8 @@ pub fn install_keyboard_hook(
         Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM},
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            CallNextHookEx, SetWindowsHookExW, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, WM_KEYDOWN,
-            WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+            CallNextHookEx, GetMessageW, PeekMessageW, SetWindowsHookExW, KBDLLHOOKSTRUCT, MSG,
+            PM_NOREMOVE, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
         },
     };
     unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -966,13 +980,30 @@ pub fn install_keyboard_hook(
             }
         })
         .map_err(|_| "La gestion du clavier est indisponible.".to_string())?;
-    unsafe {
-        let module =
-            GetModuleHandleW(None).map_err(|_| "Module clavier indisponible.".to_string())?;
-        SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), Some(HINSTANCE(module.0)), 0)
-            .map_err(|_| "La gestion d’Échap est indisponible.".to_string())?;
-    }
-    Ok(())
+    // The hook's own thread, for the whole life of the application: the hook installed there,
+    // then its messages pumped (the hook is called from that loop). Setup waits for the outcome.
+    let (installed, outcome) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
+    std::thread::Builder::new()
+        .name("keyboard-hook".into())
+        .spawn(move || unsafe {
+            let mut message = MSG::default();
+            let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+            let hooked = GetModuleHandleW(None)
+                .map_err(|_| "Module clavier indisponible.".to_string())
+                .and_then(|module| {
+                    SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), Some(HINSTANCE(module.0)), 0)
+                        .map_err(|_| "La gestion d’Échap est indisponible.".to_string())
+                });
+            let pump = hooked.is_ok();
+            let _ = installed.send(hooked.map(|_| ()));
+            if pump {
+                while GetMessageW(&mut message, None, 0, 0).0 > 0 {}
+            }
+        })
+        .map_err(|_| "La gestion du clavier est indisponible.".to_string())?;
+    outcome
+        .recv()
+        .map_err(|_| "La gestion du clavier est indisponible.".to_string())?
 }
 
 // After an Îlot choice (lot 3) the overlay is a pill the user may click (Undo, later) and
@@ -1677,17 +1708,76 @@ fn key_input(key: VIRTUAL_KEY, extended: bool, up: bool) -> INPUT {
     }
 }
 
-/// Sends Ctrl+Insert to the foreground window: the copy chord, never SIGINT.
-pub fn send_copy_chord() -> Result<(), String> {
+/// One batch of a chord: how many of `inputs` Windows took.
+fn send_chord(inputs: &[INPUT]) -> u32 {
+    #[cfg(test)]
+    if let Some(taken) = faults::take_input_budget() {
+        let taken = taken.min(inputs.len());
+        if taken == 0 {
+            return 0;
+        }
+        return unsafe { SendInput(&inputs[..taken], std::mem::size_of::<INPUT>() as i32) };
+    }
+    unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) }
+}
+
+/// Faults the real replacement bench injects (scripts/test-replacement-windows.mjs). Test
+/// builds only, per thread: never in the shipped application.
+#[cfg(test)]
+pub(crate) mod faults {
+    use std::cell::Cell;
+    thread_local! {
+        /// (whole chords still let through, inputs the cut one keeps)
+        static INPUT_BUDGET: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
+    }
+    /// The next chord of this thread is cut after `taken` inputs, as when SendInput stops
+    /// part-way (UIPI, a desktop switch): the rest of that batch never leaves.
+    pub fn cut_next_chord(taken: usize) {
+        cut_chord_after(0, taken);
+    }
+    /// The same cut on the chord that follows `skip` whole ones (the paste chord after the
+    /// control copy of a paste).
+    pub fn cut_chord_after(skip: usize, taken: usize) {
+        INPUT_BUDGET.with(|b| b.set(Some((skip, taken))));
+    }
+    /// A cut no chord used (the paste stopped before its chord) never reaches a later one.
+    pub fn clear_cut() {
+        INPUT_BUDGET.with(Cell::take);
+    }
+    pub(super) fn take_input_budget() -> Option<usize> {
+        INPUT_BUDGET.with(|b| match b.take() {
+            Some((0, taken)) => Some(taken),
+            Some((skip, taken)) => {
+                b.set(Some((skip - 1, taken)));
+                None
+            }
+            None => None,
+        })
+    }
+}
+
+/// Sends Ctrl+Insert to the foreground window: the copy chord, never SIGINT. On a partial
+/// injection the keys already pressed are released, as after the paste chord (NATIVE-007: Ctrl
+/// and Insert used to stay down), and the count sent is returned.
+pub fn send_copy_chord() -> Result<(), u32> {
     let inputs = [
         key_input(VK_CONTROL, false, false),
         key_input(VK_INSERT, true, false),
         key_input(VK_INSERT, true, true),
         key_input(VK_CONTROL, false, true),
     ];
-    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    let sent = send_chord(&inputs);
     if sent as usize != inputs.len() {
-        return Err("La copie synthétique a été bloquée.".into());
+        if sent > 0 {
+            let release = [
+                key_input(VK_INSERT, true, true),
+                key_input(VK_CONTROL, false, true),
+            ];
+            unsafe {
+                SendInput(&release, std::mem::size_of::<INPUT>() as i32);
+            }
+        }
+        return Err(sent);
     }
     Ok(())
 }
@@ -1702,7 +1792,7 @@ pub fn send_paste_chord() -> Result<(), u32> {
         key_input(VK_V, false, true),
         key_input(VK_CONTROL, false, true),
     ];
-    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    let sent = send_chord(&inputs);
     if sent as usize != inputs.len() {
         if sent > 0 {
             let release = [

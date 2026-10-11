@@ -28,7 +28,7 @@ type Fixture = {
   done: (text?: string) => Promise<void>;
   deliver: (status: 'applied' | 'fallback', confirmed?: boolean, message?: string, code?: string) => Promise<void>;
   notice: (message: string, code?: string) => Promise<void>;
-  invalidate: (anchorLost?: boolean) => Promise<void>;
+  invalidate: () => Promise<void>;
   refuseReplace: (message?: string | null, code?: string) => void;
   requestId: () => string;
   workAreaAt: (x: number, y: number, width: number, height: number) => void;
@@ -66,8 +66,6 @@ async function openIlot(page: Page, settings: Record<string, unknown> = {}) {
   });
   await page.goto('/?window=overlay&fixture=1');
   await expect(page.locator('.glass-overlay')).toBeVisible();
-  // The Îlot is the fixture's default, as it is Rust's: only the test's own settings are sent.
-  await expect(page.locator('html')).toHaveAttribute('data-ui', 'ilot');
   await page.evaluate(
     (next) => (window as unknown as { nativeFixture: Fixture }).nativeFixture.settings(next),
     settings,
@@ -564,25 +562,16 @@ test('a capture Rust refuses under the Îlot reads as its error pill, in the int
   await expect(page.locator('.notice-root').getByRole('alert')).toHaveText('Aucune traduction récente');
   await on(page, (f) => f.notice('La capture est refusée dans un champ protégé.', 'protected_field'));
   await expect(page.locator('.notice-root').getByRole('alert')).toHaveText('Champ protégé, rien lu');
-
-  // The 0.4 journey keeps Rust's message in its own pill.
-  await on(page, (f) => f.settings({ uiVersion: 'v4', language: 'en' }));
-  await on(page, (f) => f.notice('Rien à traduire dans la fenêtre active.', 'no_selection'));
-  await expect(page.locator('.notice-pill')).toHaveText('Rien à traduire dans la fenêtre active.');
-  await expect(page.locator('.result-error')).toHaveCount(0);
 });
 
-test('under v4 the codes change nothing: an error and a refused paste still open the glass with Rust’s message', async ({
-  page,
-}) => {
+test('a direct capture keeps the glass: an error and a refused paste show Rust’s message', async ({ page }) => {
   await openIlot(page);
-  await on(page, (f) => f.settings({ uiVersion: 'v4' }));
-  await on(page, (f) => f.captureReplace('v4-error'));
-  await expect(page.locator('.glass-overlay[data-capture-id="v4-error"]')).toBeVisible();
+  await on(page, (f) => f.captureReplace('direct-error'));
+  await expect(page.locator('.glass-overlay[data-capture-id="direct-error"]')).toBeVisible();
   await on(page, (f) => f.error('unauthorized', 'Clé API refusée.'));
   await expect(page.locator('.error-copy')).toContainText('Clé API refusée.');
   await expect(page.locator('.result-error, [data-ilot]')).toHaveCount(0);
-  await on(page, (f) => f.captureReplace('v4-paste'));
+  await on(page, (f) => f.captureReplace('direct-paste'));
   await on(page, (f) => f.done('Résultat synthétique'));
   await on(page, (f) =>
     f.deliver('fallback', false, 'La fenêtre source a changé; remplacement refusé.', 'target_changed'),

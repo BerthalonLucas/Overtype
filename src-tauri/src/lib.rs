@@ -403,13 +403,11 @@ impl Inner {
         {
             return Some(Watched::Delivering);
         }
-        Some(
-            if self.settings.ui_version == UiVersion::Ilot && capture.public.menu.is_some() {
-                Watched::Pill
-            } else {
-                Watched::Reading
-            },
-        )
+        Some(if capture.public.menu.is_some() {
+            Watched::Pill
+        } else {
+            Watched::Reading
+        })
     }
     /// The state that outlived its limit at `now`, and for how long it has been silent.
     /// `near`: how long ago the pointer last rested on the bubble (the user is reading it, or
@@ -646,11 +644,9 @@ impl Inner {
     }
     /// The watcher found the target of `capture_id` changed: nothing can be replaced any more.
     /// A menu still waiting closes (review n°6: nothing left to act on; a choice in flight is
-    /// refused). Under the Îlot the window keeps its place, anchor and side (the working pill,
-    /// then the error pill, stay where the user looks; review of da-ilot 3e678ff); under v4 the
-    /// glass loses its anchor and docks at the bottom, as in 0.4.
+    /// refused). Otherwise the window keeps its place, anchor and side (the working pill, then
+    /// the error pill, stay where the user looks; review of da-ilot 3e678ff).
     fn invalidate(&mut self, capture_id: &str) -> Invalidated {
-        let ilot = self.settings.ui_version == UiVersion::Ilot;
         let Some(capture) = self
             .capture
             .as_mut()
@@ -671,12 +667,7 @@ impl Inner {
             menu.invalidated = true;
             return Invalidated::CloseMenu;
         }
-        if ilot {
-            return Invalidated::Stay;
-        }
-        capture.public.anchor = None;
-        self.side = None;
-        Invalidated::Redock
+        Invalidated::Stay
     }
     /// `replace_result` under the state lock: the completed result's target, spent once (the
     /// capture can no longer be replaced afterwards: `spent`, the frontend is told). Refused
@@ -1182,11 +1173,7 @@ fn store_capture(
         i.notice_generation = i.notice_generation.wrapping_add(1);
         i.side = None;
         // The menu shows its selection at three levels while it waits (Lucas, 25/09).
-        menu_scene = if is_menu {
-            halo_scene(&i.settings, &captured)
-        } else {
-            None
-        };
+        menu_scene = if is_menu { halo_scene(&captured) } else { None };
         i.capture = Some(captured);
         i.delivery = capture::Ticket::current();
         i.menu = menu;
@@ -1425,7 +1412,7 @@ fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, S
         .map_err(String::from)?
         .ok_or_else(|| "Sélectionnez un texte dans une autre application.".into())
 }
-/// What a shortcut opens: one action at once, or (a `menu` binding under the Îlot) the
+/// What a shortcut opens: one action at once, or (a `menu` binding) the Îlot's
 /// menu beside the selection, with the settings of the moment frozen for the choice.
 enum Opening {
     Direct(Box<Execution>),
@@ -1531,8 +1518,7 @@ fn capture_with_binding(
         // Nothing is ever queued: the shortcut spammed opens one bubble and runs one request.
         let menu = binding
             .as_ref()
-            .is_some_and(|binding| binding.kind == BindingKind::Menu)
-            && i.settings.ui_version == UiVersion::Ilot;
+            .is_some_and(|binding| binding.kind == BindingKind::Menu);
         let repeat = binding
             .as_ref()
             .filter(|_| menu)
@@ -1829,10 +1815,8 @@ enum Invalidated {
     Stale,
     /// A menu still waiting: it closes.
     CloseMenu,
-    /// Under the Îlot: `target-invalidated`, the window stays where it is.
+    /// `target-invalidated`, the window stays where it is.
     Stay,
-    /// Under v4: `target-invalidated`, then the glass docks at the bottom.
-    Redock,
 }
 /// What the scope becomes when a menu press opened it and got no capture: the scope of what
 /// is still shown, never a menu scope left open over nothing (the hook would keep the keys).
@@ -2024,7 +2008,7 @@ fn translate(
         actions::validate_template(&run.action.prompt_template)?;
         let instruction = run.action.prompt_template.clone();
         let execution_info = run.info.clone();
-        let halo_scene = halo_scene(&i.settings, captured);
+        let halo_scene = halo_scene(captured);
         let captured_replaceable = captured.public.can_replace
             && !captured.invalidated
             && run.info.output_mode == OutputMode::Replace;
@@ -2264,15 +2248,12 @@ fn translate(
     Ok(())
 }
 /// What the halo shows of a selection while the menu waits and while an action works (lot 6,
-/// « mise en valeur »): under the Îlot only, for a UIA selection that still has its anchor (the
-/// watcher removes it once the selection moved): its exact text, its whole lines, its text box
-/// and the ground under it, as the capture read them.
-fn halo_scene(settings: &Settings, captured: &StoredCapture) -> Option<halo::Scene> {
+/// « mise en valeur »): for a UIA selection that still has its anchor (the watcher removes it
+/// once the selection moved): its exact text, its whole lines, its text box and the ground
+/// under it, as the capture read them.
+fn halo_scene(captured: &StoredCapture) -> Option<halo::Scene> {
     let capture = &captured.public;
-    (settings.ui_version == UiVersion::Ilot
-        && capture.anchor.is_some()
-        && !capture.selection_rects.is_empty())
-    .then(|| halo::Scene {
+    (capture.anchor.is_some() && !capture.selection_rects.is_empty()).then(|| halo::Scene {
         lines: capture.selection_rects.clone(),
         full: captured.levels.full_lines.clone(),
         text_box: captured.levels.text_box,
@@ -2362,10 +2343,10 @@ fn schedule_auto_delivery(app: &AppHandle) {
                 }
             })
             .and_then(|target| capture::paste(target, &result.translated_text, true, i.delivery));
-        // Under the Îlot (lot 9): the pasted text is found at once, still under the lock (no
-        // new capture in between), for the pill's place, the marks and Undo.
+        // Lot 9: the pasted text is found at once, still under the lock (no new capture in
+        // between), for the pill's place, the marks and Undo.
         let applied = match (&outcome, &target) {
-            (Ok(_), Some(target)) if i.settings.ui_version == UiVersion::Ilot => {
+            (Ok(_), Some(target)) => {
                 let located = locate_pasted(&result.translated_text, target.native_window);
                 let old = i
                     .capture
@@ -4804,13 +4785,7 @@ fn watch_context(app: AppHandle) {
                         a.located.clone(),
                     )
                 });
-                (
-                    i.source_window,
-                    i.source_rect,
-                    i.capture.clone(),
-                    i.size,
-                    applied,
-                )
+                (i.source_window, i.source_rect, i.capture.clone(), applied)
             };
             let fg = host::foreground();
             // By the handles kept at startup: a window getter would wait for the main thread,
@@ -4843,7 +4818,7 @@ fn watch_context(app: AppHandle) {
             // move must not leave it over other text for long.
             // After a paste under the Îlot (lot 9) too: the pill and the marks stand on the
             // new text.
-            let period = if halo::visible() || snapshot.4.is_some() {
+            let period = if halo::visible() || snapshot.3.is_some() {
                 3
             } else {
                 12
@@ -4851,7 +4826,7 @@ fn watch_context(app: AppHandle) {
             if (!ticks.is_multiple_of(period) && suspected.is_none()) || state.demo {
                 continue;
             }
-            if let Some((request_id, window, window_rect, located)) = snapshot.4 {
+            if let Some((request_id, window, window_rect, located)) = snapshot.3 {
                 // The caret after the pasted text is normal and keeps the pill; the window
                 // moving, another application in front, or the text scrolling or reflowing
                 // (its rectangles changed) hide pill and marks. The text no longer before the
@@ -4889,7 +4864,7 @@ fn watch_context(app: AppHandle) {
             // A capture without anchor (a copy, a selection without drawable rectangle) has no
             // place to lose; its target is still checked while the source is in front (review n°1).
             let anchored = captured.public.anchor.is_some();
-            // Once invalidated, a capture is not checked again (under the Îlot it keeps its anchor).
+            // Once invalidated, a capture is not checked again (it keeps its anchor).
             if captured.invalidated || (!anchored && captured.target.is_none()) {
                 suspected = None;
                 continue;
@@ -4936,28 +4911,23 @@ fn watch_context(app: AppHandle) {
                     .detail(why),
                 );
             }
-            let redock = match outcome {
+            match outcome {
                 Invalidated::Stale => continue,
                 Invalidated::CloseMenu => {
                     let _ = dismiss(&app, &state);
                     continue;
                 }
-                Invalidated::Stay => false,
-                Invalidated::Redock => true,
-            };
+                Invalidated::Stay => {}
+            }
             let _ = app.emit_to(
                 "overlay",
                 "target-invalidated",
                 TargetInvalidated {
                     capture_id: id,
-                    anchor_lost: redock && anchored,
                     message: "La sélection a changé. Utilisez Copier.".into(),
                     code: ErrorKind::TargetChanged,
                 },
             );
-            if redock {
-                let _ = position(&app, &state, snapshot.3 .0, snapshot.3 .1, None);
-            }
         }
     });
 }
@@ -5327,6 +5297,7 @@ mod tests {
     fn cancel_revokes_automatic_delivery_even_after_inference_finishes() {
         let settings = Settings::default();
         let mut binding = settings.shortcut_bindings[0].clone();
+        binding.kind = BindingKind::Action;
         binding.output_mode = OutputMode::Replace;
         let mut i = Inner::new(settings.clone());
         let mut run = Execution::snapshot(&settings, Some(&binding)).unwrap();
@@ -6031,26 +6002,19 @@ mod tests {
         );
     }
     #[test]
-    fn an_invalidated_capture_keeps_its_place_under_the_ilot_and_docks_under_v4() {
+    fn an_invalidated_capture_keeps_its_place() {
         let anchor = Rect {
             x: 10.,
             y: 20.,
             width: 30.,
             height: 16.,
         };
-        let chosen = |ui: UiVersion| {
-            let mut i = Inner::new(Settings {
-                ui_version: ui,
-                ..Settings::default()
-            });
-            menu_capture(&mut i, "c");
-            i.capture.as_mut().unwrap().public.anchor = Some(anchor);
-            i.side = Some(PlacementSide::Below);
-            i.choose("c", "correct", None).unwrap();
-            i
-        };
-        // The working pill under the Îlot: it stays where it is, anchor and side kept.
-        let mut i = chosen(UiVersion::Ilot);
+        let mut i = Inner::new(Settings::default());
+        menu_capture(&mut i, "c");
+        i.capture.as_mut().unwrap().public.anchor = Some(anchor);
+        i.side = Some(PlacementSide::Below);
+        i.choose("c", "correct", None).unwrap();
+        // The working pill: it stays where it is, anchor and side kept.
         assert_eq!(i.invalidate("c"), Invalidated::Stay);
         let c = i.capture.as_ref().unwrap();
         assert_eq!(
@@ -6064,13 +6028,6 @@ mod tests {
         );
         assert_eq!(i.side, Some(PlacementSide::Below));
         assert_eq!(i.invalidate("c"), Invalidated::Stale, "checked once");
-        // Under v4 the glass loses its anchor and docks at the bottom, as in 0.4.
-        let mut i = chosen(UiVersion::V4);
-        assert_eq!(i.invalidate("c"), Invalidated::Redock);
-        assert_eq!(
-            (i.capture.as_ref().unwrap().public.anchor, i.side),
-            (None, None)
-        );
         // A menu still waiting closes; another capture is stale.
         let mut i = Inner::new(Settings::default());
         menu_capture(&mut i, "m");
@@ -6517,7 +6474,7 @@ mod tests {
         assert!(!i.current("new"));
     }
     #[test]
-    fn the_halo_shows_only_an_anchored_uia_selection_under_the_ilot_at_its_three_levels() {
+    fn the_halo_shows_only_an_anchored_uia_selection_at_its_three_levels() {
         let line = Rect {
             x: 10.,
             y: 20.,
@@ -6560,17 +6517,7 @@ mod tests {
             invalidated: false,
             levels: levels.clone(),
         };
-        let mut settings = Settings {
-            ui_version: UiVersion::V4,
-            ..Settings::default()
-        };
-        assert_eq!(
-            halo_scene(&settings, &stored(capture.clone())),
-            None,
-            "the 0.4 journey has no halo"
-        );
-        settings.ui_version = UiVersion::Ilot;
-        let scene = halo_scene(&settings, &stored(capture.clone())).expect("a scene");
+        let scene = halo_scene(&stored(capture.clone())).expect("a scene");
         assert_eq!(
             (scene.lines, scene.full, scene.text_box, scene.ground),
             (
@@ -6592,7 +6539,7 @@ mod tests {
             invalidated: false,
             levels: HaloLevels::default(),
         };
-        let scene = halo_scene(&settings, &bare).expect("a scene");
+        let scene = halo_scene(&bare).expect("a scene");
         assert_eq!(
             (scene.lines, scene.full.len(), scene.text_box, scene.ground),
             (vec![line], 0, None, None)
@@ -6602,7 +6549,7 @@ mod tests {
             ..capture.clone()
         };
         assert_eq!(
-            halo_scene(&settings, &stored(moved)),
+            halo_scene(&stored(moved)),
             None,
             "an invalidated selection is not shown"
         );
@@ -6614,7 +6561,7 @@ mod tests {
             ..capture
         };
         assert_eq!(
-            halo_scene(&settings, &stored(copied)),
+            halo_scene(&stored(copied)),
             None,
             "the copy paths have no rectangles"
         );

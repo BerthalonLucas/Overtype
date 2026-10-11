@@ -462,19 +462,6 @@ pub enum AutoClose {
     Never,
 }
 
-/// Hidden switch of the « Îlot » art direction (docs/DA-PLAN.md, lot 0): `v4` keeps the
-/// 0.4 journey (a shortcut runs its action at once, the waiting pill, the glass),
-/// `ilot` the new one (the menu beside the selection, the pill, the check and Undo). Not
-/// shown in the settings window. The Îlot is the default since jalon B (0.5.0), a 0.4 file
-/// included (it has no `uiVersion`); `v4` stays reachable by editing settings.json.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum UiVersion {
-    V4,
-    #[default]
-    Ilot,
-}
-
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -487,8 +474,6 @@ pub struct Settings {
     pub text_size: TextSize,
     #[serde(default)]
     pub auto_close: AutoClose,
-    #[serde(default)]
-    pub ui_version: UiVersion,
     #[serde(default)]
     pub language: Language,
     #[serde(default)]
@@ -535,7 +520,6 @@ impl Default for Settings {
             autostart: false,
             text_size: TextSize::Normal,
             auto_close: AutoClose::Normal,
-            ui_version: UiVersion::default(),
             language: Language::default(),
             theme: Theme::default(),
             motion: MotionPreference::default(),
@@ -632,7 +616,6 @@ pub struct HistoryEntry {
 #[serde(rename_all = "camelCase")]
 pub struct TargetInvalidated {
     pub capture_id: String,
-    pub anchor_lost: bool,
     pub message: String,
     /// Always `target_changed` (lot 10).
     pub code: ErrorKind,

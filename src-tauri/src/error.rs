@@ -1,7 +1,7 @@
 //! Error codes (« Îlot », lot 10 of docs/DA-PLAN.md): what failed, as a code the frontend
 //! turns into a short text in the interface language and one gesture: open the exact field
 //! of the Settings, Try again, or Copy the result. The French message of 0.4 travels beside
-//! it for the v4 journey. Neither ever carries the server's answer, a key, a URL path or any
+//! it for the glass of a direct shortcut. Neither ever carries the server's answer, a key, a URL path or any
 //! text of the user: the server's body only serves to classify, here, and goes no further.
 use serde::{Deserialize, Serialize};
 

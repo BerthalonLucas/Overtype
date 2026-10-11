@@ -1428,8 +1428,13 @@ fn replay_last(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 // Off the main thread (`async`, NATIVE-005): a whole capture (UI Automation, a synthetic copy).
+// Test hook, honoured only under the WebView2 probe (`FLOWTRANSLATE_CDP_URL`, as for
+// `override_cursor`): no page calls it, and no window should start a capture by IPC.
 #[tauri::command(async)]
 fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, String> {
+    if std::env::var_os("FLOWTRANSLATE_CDP_URL").is_none() {
+        return Err("Indisponible hors test.".into());
+    }
     capture_with_binding(app, &state, None)
         .map_err(String::from)?
         .ok_or_else(|| "Sélectionnez un texte dans une autre application.".into())
@@ -5242,7 +5247,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn_blocking(move || {
                     let state = handle.state::<AppState>();
-                    let _ = capture_text(handle.clone(), state);
+                    let _ = capture_with_binding(handle.clone(), &state, None);
                 });
             }
             let settings_asked = args.iter().any(|a| a == "--settings");

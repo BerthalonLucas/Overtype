@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { freeMenuId, promptError } from '../actionDefaults';
 import { bridge } from '../bridge';
-import { t as tNow, type MessageKey } from '../i18n';
 import { shareSettings } from '../useSettings';
 import type { HistoryEntry, Settings, ShortcutBinding } from '../types';
 import type { Probe } from '../connection/Check';
@@ -9,14 +8,15 @@ import type { DiagnosticsLanding } from '../connection/DiagnosticsPanel';
 import type { ProbeProblem } from '../types';
 import type { PageId } from './nav';
 import type { Registrations } from './registrations';
+import { saveProblem, type SaveProblem } from './messages';
 
 // The Settings window's copy of the settings and its way of saving them, as it was in 0.5
 // (src/App.tsx): every change is saved, at once for a switch or a choice, 300 ms after typing;
 // saves go through one queue; a refused save is said and can be retried; a change made elsewhere
 // (`settings-changed`) is adopted only when nothing is being typed or saved here.
 export type SaveStatus = 'saved' | 'just-saved' | 'saving' | 'error';
-// Why a save failed: one of our messages, or Rust's refusal (shown translated when known).
-export type SaveProblem = { key: MessageKey } | { text: string };
+// Why a save failed: one of our messages, or Rust's refusal by its code (src/settings/messages.ts).
+export type { SaveProblem };
 export const typingDelayMs = 300;
 
 export type SettingsStore = {
@@ -29,7 +29,7 @@ export type SettingsStore = {
   persist: (next: Settings, immediate: boolean) => void;
   // A chord is saved at once and enables its binding; refused, the previous one comes back.
   // id null: the menu has no binding yet, one is added. Resolves null once saved, else the refusal.
-  recordShortcut: (id: string | null, shortcut: string) => Promise<string | null>;
+  recordShortcut: (id: string | null, shortcut: string) => Promise<SaveProblem | null>;
   recording: boolean;
   resetToDefaults: () => Promise<Settings>;
   // Saves what is still waiting; false when Rust refused it (the window then stays open).
@@ -164,12 +164,7 @@ export function useSettingsStore(): SettingsStore {
       settle();
       return true;
     } catch (error) {
-      lastError.current =
-        typeof error === 'string'
-          ? { text: error }
-          : error && typeof error === 'object' && 'key' in error
-            ? (error as SaveProblem)
-            : { key: 'settings.notSaved' };
+      lastError.current = saveProblem(error, 'settings.notSaved');
       if (latest.current === next) {
         setSaveError(lastError.current);
         setSaveStatus('error');
@@ -193,7 +188,7 @@ export function useSettingsStore(): SettingsStore {
   const retry = () => {
     if (latest.current) void commit(latest.current);
   };
-  const recordShortcut = async (id: string | null, shortcut: string): Promise<string | null> => {
+  const recordShortcut = async (id: string | null, shortcut: string): Promise<SaveProblem | null> => {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = 0;
     const previous = latest.current!;
@@ -225,7 +220,7 @@ export function useSettingsStore(): SettingsStore {
           setSaveError(null);
         }
       }
-      return 'key' in lastError.current ? tNow(lastError.current.key) : lastError.current.text;
+      return lastError.current;
     } finally {
       setRecording(false);
     }

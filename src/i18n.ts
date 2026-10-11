@@ -9,8 +9,8 @@ import { appName } from './brand';
 
 // The interface language (docs/DA-PLAN.md, lot 1): English by default, French complete.
 // No dependency: one typed dictionary, `t(key, params)`, and a hook that follows
-// settings.language. Action names are user data and never pass through here; the
-// French messages Rust sends stay as they are until the error codes of lot 10.
+// settings.language. Action names are user data and never pass through here; Rust's French
+// messages never show: its codes do (src/result/errors.ts, src/settings/messages.ts).
 const dictionary = {
   ...setupMessages,
   ...connectionMessages,
@@ -96,6 +96,9 @@ const dictionary = {
   'result.error.stream_broken': { en: 'Answer interrupted', fr: 'Réponse interrompue' },
   'result.error.length': { en: 'Answer cut off, not replaced', fr: 'Réponse tronquée, rien remplacé' },
   'result.error.internal': { en: 'Something went wrong', fr: 'Un problème est survenu' },
+  // ARCH-05: a choice of the Îlot refused by Rust (choose_action).
+  'result.error.capture_gone': { en: 'Menu closed — select again', fr: 'Menu fermé, resélectionnez' },
+  'result.error.instruction_invalid': { en: 'Instruction empty or too long', fr: 'Consigne vide ou trop longue' },
   'result.error.paste_blocked': { en: 'Can’t edit this app’s text', fr: 'Impossible de modifier ce texte' },
   'result.error.target_changed': { en: 'Text changed — not replaced', fr: 'Texte modifié, rien remplacé' },
   'result.error.not_editable': { en: 'Read-only text, not replaced', fr: 'Texte non modifiable, rien remplacé' },

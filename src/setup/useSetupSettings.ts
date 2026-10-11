@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { bridge } from '../bridge';
+import { saveProblem, type SaveProblem } from '../settings/messages';
 import type { Settings } from '../types';
 import { shareSettings } from '../useSettings';
 import { withShortcut } from './model';
@@ -15,21 +16,24 @@ export type SetupSettings = {
   settings: Settings | null;
   loadError: boolean;
   load: () => void;
-  saveError: boolean;
+  // The last save refused: Rust's refusal by its code, or the setup's own « not saved »; null when saved.
+  saveError: SaveProblem | null;
   retry: () => void;
   persist: (next: Settings, immediate: boolean) => void;
   // What waits is saved now; false when the last save failed.
   flush: () => Promise<boolean>;
   // A recorded chord, saved at once; null once saved, else Rust's refusal (the previous chord is back).
-  record: (shortcut: string) => Promise<string | null>;
+  record: (shortcut: string) => Promise<SaveProblem | null>;
   recording: boolean;
 };
 export const TYPING_PAUSE_MS = 400;
 
-export function useSetupSettings(notSaved: () => string): SetupSettings {
+const notSaved = (): SaveProblem => ({ key: 'setup.notSaved' });
+
+export function useSetupSettings(): SetupSettings {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [saveError, setSaveError] = useState(false);
+  const [saveError, setSaveError] = useState<SaveProblem | null>(null);
   const [recording, setRecording] = useState(false);
   const latest = useRef<Settings | null>(null);
   // What Rust is known to hold: loaded, adopted from `settings-changed`, or saved by us.
@@ -104,11 +108,11 @@ export function useSetupSettings(notSaved: () => string): SetupSettings {
       () => {
         inFlight.current -= 1;
         synced.current = next;
-        if (alive.current && latest.current === next) setSaveError(false);
+        if (alive.current && latest.current === next) setSaveError(null);
       },
       (error) => {
         inFlight.current -= 1;
-        if (alive.current && latest.current === next) setSaveError(true);
+        if (alive.current && latest.current === next) setSaveError(saveProblem(error, 'setup.notSaved'));
         throw error;
       },
     );
@@ -150,7 +154,7 @@ export function useSetupSettings(notSaved: () => string): SetupSettings {
     if (latest.current) save(latest.current).catch(() => undefined);
   }, [save]);
   const record = useCallback(
-    async (shortcut: string): Promise<string | null> => {
+    async (shortcut: string): Promise<SaveProblem | null> => {
       const previous = latest.current;
       if (!previous) return notSaved();
       window.clearTimeout(timer.current);
@@ -165,15 +169,15 @@ export function useSetupSettings(notSaved: () => string): SetupSettings {
         // Refused (the chord is taken, or reserved): the chord that worked comes back.
         if (latest.current === next) {
           show(previous);
-          setSaveError(false);
+          setSaveError(null);
           save(previous).catch(() => undefined);
         }
-        return typeof error === 'string' ? error : notSaved();
+        return saveProblem(error, 'setup.notSaved');
       } finally {
         if (alive.current) setRecording(false);
       }
     },
-    [show, save, notSaved],
+    [show, save],
   );
   return { settings, loadError, load, saveError, retry, persist, flush, record, recording };
 }

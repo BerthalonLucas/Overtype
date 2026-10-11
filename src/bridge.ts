@@ -33,6 +33,7 @@ import type {
   ProbeResult,
   Rect,
   Refusal,
+  RefusalCode,
   Server,
   Settings,
   SettingsField,
@@ -192,11 +193,10 @@ const azertyAltGr: Record<string, string> = {
   equal: '}',
 };
 
-// A `{message, code}` refusal (replace_result) read as its message, for the callers of 0.4.
-function refusalMessage(reason: unknown): unknown {
-  return typeof reason === 'object' && reason !== null && typeof (reason as Refusal).message === 'string'
-    ? (reason as Refusal).message
-    : reason;
+// The preview refuses as Rust does (ARCH-05): `{message, code}`, the French message for the
+// journal only, the code for the interface.
+function refusal(code: RefusalCode, message: string): Refusal {
+  return { code, message };
 }
 
 async function command<T>(name: string, args?: Record<string, unknown>): Promise<T> {
@@ -218,7 +218,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
       };
     });
     if (next.servers.some((server) => server.endpoint !== '' && !normalizeEndpoint(server.endpoint).ok))
-      throw 'L’adresse du serveur est invalide.';
+      throw refusal('address', 'L’adresse du serveur est invalide.');
     demoSettings = next;
     emit('settings-changed', demoSettings);
     return undefined as T;
@@ -265,7 +265,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
       downloaded: 0,
       total: null,
     } as T;
-  if (name === 'install_update') throw 'Aperçu : pas de mise à jour.';
+  if (name === 'install_update') throw refusal('internal', 'Aperçu : pas de mise à jour.');
   if (name === 'get_history') return structuredClone(demoHistory) as T;
   if (name === 'delete_history') {
     const id = args?.id as string | null;
@@ -331,7 +331,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
         actionId === instructionActionId
           ? instructionError(instruction)
           : 'La consigne libre ne correspond pas à l’action demandée.';
-      if (error) throw error;
+      if (error) throw refusal('instruction_invalid', error);
       return {
         actionId,
         actionName: instructionActionName,
@@ -340,7 +340,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
       } as T;
     }
     const action = demoSettings.actions.find((item) => item.id === actionId);
-    if (!action) throw 'L’action n’existe plus.';
+    if (!action) throw refusal('internal', 'L’action n’existe plus.');
     return {
       actionId,
       actionName: action.name,
@@ -378,7 +378,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
     return undefined as T;
   }
   // Lot 9: the preview pastes nothing, so there is no text to stand under or to mark; Undo has nothing to read back.
-  if (name === 'result_pill') throw 'Aperçu : aucun texte collé.';
+  if (name === 'result_pill') throw refusal('internal', 'Aperçu : aucun texte collé.');
   if (name === 'highlight_changes') return { ranges: 0, lines: 0 } satisfies HighlightResult as T;
   if (name === 'undo_result')
     return {
@@ -440,10 +440,6 @@ export const bridge = {
   translate: (request: TranslationRequest) => command<void>('translate', { request }),
   cancel: (requestId: string) => command<void>('cancel_translation', { requestId }),
   copy: (requestId: string) => command<void>('copy_result', { requestId }),
-  replace: (requestId: string) =>
-    command<void>('replace_result', { requestId }).catch((reason: unknown) => {
-      throw refusalMessage(reason);
-    }),
   dismiss: () => command<void>('dismiss_overlay'),
   completeDismiss: (captureId: string) => command<void>('complete_overlay_dismiss', { captureId }),
   // field (lot 10): the Settings open on that field; page (0.6): on that page. Rust ignores an
@@ -588,10 +584,10 @@ export const bridge = {
     command<HighlightResult>('highlight_changes', { requestId, ranges }),
   // Lot 9: undo a pasted result, once, after revalidation (`undo_result` → UndoOutcome). Read its
   // status: a resolved promise may be a refusal (`refused`: nothing was sent; `failed`: sent, the
-  // original did not read back); a rejection is a French string (the result no longer current).
+  // original did not read back); a rejection is a Refusal (the result no longer current).
   undoResult: (requestId: string) => command<UndoOutcome>('undo_result', { requestId }),
   // `replace_result` with its refusal as Rust sends it, `{message, code}` (Refusal): the code says
-  // why (target_changed, keys_held, not_editable, paste_blocked); `replace` keeps the message only,
-  // for the glass of 0.4. The Îlot's own paste of a retried result reads the code (IlotStage).
+  // why (target_changed, keys_held, not_editable, paste_blocked). The glass's « Replace » and the
+  // Îlot's own paste of a retried result read the code (GlassOverlay, IlotStage), never the message.
   replaceResult: (requestId: string) => command<void>('replace_result', { requestId }),
 };

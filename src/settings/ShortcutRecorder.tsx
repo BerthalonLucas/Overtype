@@ -6,7 +6,7 @@ import { useTx } from '../components/motion';
 import { bridge } from '../bridge';
 import { useT, type MessageKey, type Translate } from '../i18n';
 import type { BindingState, ShortcutConflict } from '../types';
-import { describeRefusal } from './messages';
+import { describeProblem, type SaveProblem } from './messages';
 
 // The keys of a keydown the recorder reads (a React or a DOM KeyboardEvent).
 export type RecordedKey = Pick<
@@ -76,15 +76,16 @@ function useAltGrConflict(shortcut: string, enabled: boolean): ShortcutConflict 
   return enabled && conflict?.shortcut === shortcut && conflict.value?.altGr ? conflict.value : null;
 }
 
-// A notice is one of ours (a message key, shown in the current language) or Rust's refusal.
-type Notice = { key: MessageKey } | { text: string } | null;
+// A notice is one of ours (a message key) or Rust's refusal by its code, both shown in the
+// current language.
+type Notice = SaveProblem | null;
 type Props = {
   shortcut: string;
   enabled: boolean;
   label: string;
   busy: boolean;
   // Saves the chord (enabling its binding); null once saved, else Rust's refusal.
-  record: (shortcut: string) => Promise<string | null>;
+  record: (shortcut: string) => Promise<SaveProblem | null>;
   // What Windows answered for this chord (lot 10, `shortcut_status`): 'taken' when another
   // application holds it, 'failed' for any other refusal. Unknown: nothing is said.
   registration?: BindingState;
@@ -175,7 +176,7 @@ export function ShortcutRecorder({
     setCapturing(false);
     setNotice(null);
     const error = await record(value);
-    setNotice(error === null ? { key: 'shortcuts.saved' } : { text: error });
+    setNotice(error ?? { key: 'shortcuts.saved' });
   };
   const captureKey = async (event: KeyboardEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -202,7 +203,7 @@ export function ShortcutRecorder({
     event.preventDefault();
     setHeld(heldModifiers(event));
   };
-  const noticeText = notice === null ? '' : 'key' in notice ? t(notice.key) : describeRefusal(notice.text, t);
+  const noticeText = notice === null ? '' : describeProblem(notice, t);
   const saved = notice !== null && 'key' in notice && notice.key === 'shortcuts.saved';
   const key = shortcut.split('+').at(-1) ?? '';
   const invalid = capturing && notice !== null && !saved;

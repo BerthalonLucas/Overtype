@@ -23,7 +23,7 @@ import { indicatorOf } from '../loaders/pill';
 import { useMotionPreset, useReducedMotionSetting } from '../motion/MotionPreferences';
 import { animateCorner, fadeCorner, type CornerMove, type CornerOffset } from '../motion/surface';
 import { checkOnlyMs, Countdown, resultTiming } from '../result/countdown';
-import { errorCodeOf, refusalCode, type ErrorAction } from '../result/errors';
+import { describeError, errorCodeOf, refusalCode, type ErrorAction } from '../result/errors';
 import { changedRanges } from '../result/highlight';
 import { resultContent, type ActionAnswer, type ResultStage } from '../result/ResultPill';
 import type {
@@ -440,7 +440,8 @@ export function IlotStage({ controller, capture }: { controller: TranslationCont
     choose(actionId, instruction).catch((reason: unknown) => {
       if (!alive.current) return;
       setChoosing(false);
-      setRefusal(typeof reason === 'string' ? reason : t('error.startFailed'));
+      // Rust's code, in the interface language (never its French message).
+      setRefusal(t(describeError(refusalCode(reason)).message));
     });
   };
 

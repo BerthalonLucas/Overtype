@@ -69,6 +69,8 @@ type Entry = { family: ErrorFamily; field?: ProfileField };
 //   too_long, no_selection, protected_field, settings_open, setup_open, nothing_recent: nothing
 //                    was read or sent: content, ✕ only (the last three are capture notices, no
 //                    button at all; setup_open, 0.6: the same press over the first-run setup).
+//   capture_gone, instruction_invalid  ARCH-05: a choice of the Îlot refused (the menu closed, the
+//                    free instruction empty or too long): nothing was sent: content, ✕ only.
 //   cancelled        the user's own Escape: silent.
 const table: Record<ErrorCode, Entry> = {
   unreachable: { family: 'config', field: 'endpoint' },
@@ -95,14 +97,17 @@ const table: Record<ErrorCode, Entry> = {
   settings_open: { family: 'content' },
   setup_open: { family: 'content' },
   nothing_recent: { family: 'content' },
+  capture_gone: { family: 'content' },
+  instruction_invalid: { family: 'content' },
   cancelled: { family: 'silent' },
 };
 
 export function errorCodeOf(value: unknown): ErrorCode {
   return (errorCodes as readonly unknown[]).includes(value) ? (value as ErrorCode) : 'internal';
 }
-// A command refused with its code (`replace_result` since the review of da-ilot: `{message, code}`).
-// The message is Rust's French sentence for the glass: never read here.
+// A command refused with its code (every command since ARCH-05: `{message, code}`). The message
+// is Rust's French sentence for the journal: never read here. A code of the Settings' list
+// (src/settings/messages.ts) reads as 'internal' here.
 export function refusalCode(reason: unknown): ErrorCode {
   return errorCodeOf(typeof reason === 'object' && reason !== null ? (reason as { code?: unknown }).code : undefined);
 }

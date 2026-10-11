@@ -44,6 +44,7 @@ import { WorkingPill } from './loaders/WorkingPill';
 import { indicatorOf } from './loaders/pill';
 import { IlotNotice, IlotStage, SIDE_WAIT_MS } from './menu/IlotStage';
 import { ilotJourney } from './menu/outcome';
+import { describeError, refusalCode } from './result/errors';
 import type { Form, HitRegion, Presentation, Screen, TextSize } from './types';
 import type { TranslationController } from './useTranslation';
 
@@ -725,7 +726,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
     const requestId = state.requestId;
     const stillCurrent = () => active.current.requestId === requestId && !active.current.closing;
     try {
-      await (action === 'copy' ? bridge.copy(requestId) : bridge.replace(requestId));
+      await (action === 'copy' ? bridge.copy(requestId) : bridge.replaceResult(requestId));
       if (!stillCurrent()) return;
       if (action === 'copy') setCopied(true);
       else setFeedback(t('feedback.pasted'));
@@ -734,9 +735,8 @@ function GlassSession({ controller }: { controller: TranslationController }) {
         setFeedback(
           action === 'copy'
             ? t('feedback.copyRefused')
-            : typeof error === 'string'
-              ? error
-              : t('feedback.replaceUnavailable'),
+            : // Rust's code in the interface language (src/result/errors.ts), never its French message.
+              t(describeError(refusalCode(error)).message),
         );
     }
   };

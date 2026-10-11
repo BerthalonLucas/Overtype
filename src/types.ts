@@ -227,8 +227,52 @@ export const errorCodes = [
   // Lot C (NATIVE-001): UI Automation no longer answers for the selection at the paste: nothing
   // proves it, nothing is replaced.
   'target_unverified',
+  // ARCH-05: a refused `choose_action`: the capture is no longer the one shown, no longer waits
+  // for a choice or already has one (the menu has closed); the free instruction is empty, over
+  // 1,000 characters or holds a NUL.
+  'capture_gone',
+  'instruction_invalid',
 ] as const;
 export type ErrorCode = (typeof errorCodes)[number];
+// ARCH-05: why the Settings or the setup could not save, or a window called what it may not
+// (Rust's SettingsRefusal, in the order of its `ALL`). Never the same word as an ErrorCode:
+// src/settings/messages.ts gives each its text in the interface language.
+export const settingsRefusalCodes = [
+  'undo_seconds',
+  'words_seconds',
+  'servers',
+  'server_model',
+  'server_name',
+  'server_key',
+  'address',
+  'address_credentials',
+  'address_scheme',
+  'actions',
+  'action_id',
+  'action_name',
+  'action_prompt',
+  'action_short_name',
+  'action_icon',
+  'action_letter',
+  'grid_too_many',
+  'grid_action',
+  'default_action',
+  'shortcuts',
+  'shortcut_id',
+  'shortcut_action',
+  'shortcut_duplicate',
+  'shortcut_too_long',
+  'shortcut_windows_key',
+  'shortcut_f12',
+  'shortcut_needs_modifier',
+  'shortcut_reserved',
+  'shortcut_unknown',
+  'shortcut_taken',
+  'autostart_unavailable',
+  'storage_failed',
+  'window_refused',
+] as const;
+export type SettingsRefusalCode = (typeof settingsRefusalCodes)[number];
 // Lot 10: whether each binding's chord works (`shortcut_status`, event `shortcut-status`); taken: another application holds it.
 export type BindingState = 'registered' | 'taken' | 'failed' | 'disabled';
 export type ShortcutStatus = { bindingId: string; shortcut: string; state: BindingState };
@@ -251,9 +295,11 @@ export type UndoOutcome = {
 // Lot 9, event `undo-state`: Undo withdrawn; typed: a key reached the source; undo_key: the user's own Ctrl+Z; caret_moved: the text is no longer before the caret.
 export type UndoLoss = 'typed' | 'undo_key' | 'caret_moved';
 export type UndoState = { requestId: string; available: false; reason: UndoLoss };
-// Since the review of da-ilot, `replace_result` rejects with its code beside the French message of
-// 0.4: target_changed, keys_held, not_editable, paste_blocked (bridge.replaceResult keeps it).
-export type Refusal = { message: string; code: ErrorCode };
+// ARCH-05: every command rejects with `{message, code}` (Rust's Refusal): a code of either list,
+// shown in the interface language; `message` is Rust's French sentence for the journal and
+// debugging, never shown. `replace_result`: target_changed, keys_held, not_editable, paste_blocked.
+export type RefusalCode = ErrorCode | SettingsRefusalCode;
+export type Refusal = { message: string; code: RefusalCode };
 
 // ——— The connection of 0.6 (docs/PLAN-0.6.md §2; Rust: src-tauri/src/probe.rs, diagnostics.rs) ———
 // Rust sends codes, never sentences: the interface translates a StepDetail and a ProbeCause.

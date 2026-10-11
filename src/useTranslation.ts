@@ -113,14 +113,15 @@ export function useTranslation(readyOnMount = false) {
           serverId,
           actionId: capture.execution?.actionId ?? settingsRef.current?.defaultActionId ?? defaultActionId,
         })
-        .catch((error: unknown) => {
+        .catch(() => {
           if (requestRef.current === id)
             dispatch({
               type: 'STREAM',
               event: {
                 requestId: id,
                 kind: 'error',
-                message: typeof error === 'string' ? error : t('error.startFailed'),
+                // Rust refuses with a code (`{message, code}`): its French message never shows.
+                message: t('error.startFailed'),
               },
             });
         });

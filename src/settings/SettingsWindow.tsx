@@ -27,7 +27,7 @@ import { useProbe } from '../connection/Check';
 import { DiagnosticsPanel, type DiagnosticsLanding } from '../connection/DiagnosticsPanel';
 import type { ProbeProblem, SettingsFocus } from '../types';
 import { fieldFromLocation, pageOfField, resolveField, revealField, serverOfField } from './fields';
-import { describeRefusal } from './messages';
+import { describeProblem } from './messages';
 import {
   clickRun,
   isDiagnosticsChord,
@@ -543,7 +543,7 @@ function SettingsWindowBody({ initialPage = 'general' }: { initialPage?: PageId 
       </main>
     );
 
-  const problemText = (problem: SaveProblem) => ('key' in problem ? t(problem.key) : describeRefusal(problem.text, t));
+  const problemText = (problem: SaveProblem) => describeProblem(problem, t);
   const defaultProbe = probes[settings.defaultServerId] ?? probeA;
   const serverBadge = defaultProbe.status === 'error' ? 'error' : defaultProbe.status === 'running' ? 'running' : null;
   const serverAside = serverBadge ? (

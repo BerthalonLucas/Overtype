@@ -63,8 +63,8 @@ section « Annuler, mots changés et place de la pilule » en tiennent compte.
   Claude desktop, puis faire toute la recette avec cette combinaison. *Preuve* : capture de la
   ligne avec la proposition, combinaison retenue.
 - [ ] Mise à jour depuis une 0.4 installée (pour un exécutable de test : copier le
-  `settings.json` d’une 0.4 dans le dossier jetable avant le premier lancement) → l’Îlot est
-  le parcours par défaut. Retour du 24/09, plus de mélange : une 0.4 jamais modifiée donne
+  `settings.json` d’une 0.4 dans le dossier jetable avant le premier lancement) → l’Îlot
+  s’ouvre. Retour du 24/09, plus de mélange : une 0.4 jamais modifiée donne
   exactement les cinq actions anglaises d’une installation neuve, sans « Traduire en français »
   ni `Ctrl+Alt+T` en « Afficher le résultat ». Une action modifiée ou créée est gardée telle
   quelle (une consigne de « Corriger » changée : « Corriger » reste « Corriger ») ; une traduction
@@ -308,24 +308,14 @@ Ces lignes ne servent qu’à voir l’essai.
 - [ ] Installateur puis redémarrage : app disponible, pas de lancement automatique sans
   accord.
 
-## Parcours 0.4 derrière `uiVersion: "v4"`
+## Ancien parcours 0.4 (retiré le 10/10/2026)
 
-Gardé pour dépanner et comparer. Pour y revenir : quitter Overtype, mettre
-`"uiVersion": "v4"` dans `settings.json`, relancer. Pour revenir à l’Îlot : `"ilot"` ou retirer
-la clé. Le réglage n’apparaît jamais dans les Réglages.
+L’Îlot est la seule interface. L’ancien réglage caché qui ramenait le parcours 0.4 n’existe
+plus.
 
-- [ ] Le raccourci du menu lance directement Menu › Default action et remplace la sélection :
-  ni Îlot, ni balayage.
-- [ ] Pilule avec l’ancien indicateur tournant, collage, ✓, puis plus rien. Si le collage
-  échoue, le verre s’ouvre avec la raison (en français, comme en 0.4) et Copier.
-- [ ] Liaison en mode « Afficher le résultat » : verre court ou bande de lecture, comme en
-  0.4.0, dans la nouvelle matière claire ou sombre.
-- [ ] Erreurs : le message français de la 0.4, pas les pilules de l’Îlot ni leurs liens vers
-  les Réglages.
-- [ ] Réglages : ni grille, ni After replacing, ni Indicator.
-- [ ] Bloc-notes, remplacement direct : refusé proprement (UI-030), comme en 0.4.
-- [ ] Sélection modifiée, fenêtre changée, presse-papiers modifié pendant l’opération : mêmes
-  garanties qu’en 0.4 (rien de collé ailleurs, presse-papiers jamais restauré par-dessus).
+- [ ] Un `settings.json` qui porte encore l’ancienne clé de version d’interface (`"v4"` ou
+  `"ilot"`) se charge sans erreur ni mise de côté (aucun `settings.illisible-*.json`) ; le
+  raccourci du menu ouvre l’Îlot ; à la sauvegarde suivante, la clé a disparu du fichier.
 
 ## Historique : recette de la bulle graphite (0.1.x à 0.4.0)
 

@@ -803,9 +803,12 @@ pub fn executable_name(path: &str) -> Option<String> {
     (!name.is_empty() && name.len() <= 260 && !name.chars().any(char::is_control)).then_some(name)
 }
 
-/// The low-level keyboard hook, on the main thread. It stays minimal (LowLevelHooksTimeout):
-/// a few atomics, the async state of the modifiers and, for a letter while the menu is
-/// open over the source, one ToUnicodeEx. `on_menu_key` runs on its own thread.
+/// The low-level keyboard hook, on a thread of its own that only pumps its messages
+/// (NATIVE-005): Windows calls the hook on the thread that installed it, and silently removes a
+/// hook that answers late (LowLevelHooksTimeout), so it never waits behind the main thread (a
+/// command waiting for the state lock). It stays minimal: a few atomics, the async state of the
+/// modifiers and, for a letter while the menu is open over the source, one ToUnicodeEx.
+/// `on_menu_key` runs on its own thread. Answers once the hook is installed, or why it is not.
 pub fn install_keyboard_hook(
     on_menu_key: impl Fn(MenuKey) + Send + 'static,
     on_typed: impl Fn(Typed) + Send + 'static,
@@ -814,8 +817,8 @@ pub fn install_keyboard_hook(
         Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM},
         System::LibraryLoader::GetModuleHandleW,
         UI::WindowsAndMessaging::{
-            CallNextHookEx, SetWindowsHookExW, KBDLLHOOKSTRUCT, WH_KEYBOARD_LL, WM_KEYDOWN,
-            WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
+            CallNextHookEx, GetMessageW, PeekMessageW, SetWindowsHookExW, KBDLLHOOKSTRUCT, MSG,
+            PM_NOREMOVE, WH_KEYBOARD_LL, WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP,
         },
     };
     unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -977,13 +980,30 @@ pub fn install_keyboard_hook(
             }
         })
         .map_err(|_| "La gestion du clavier est indisponible.".to_string())?;
-    unsafe {
-        let module =
-            GetModuleHandleW(None).map_err(|_| "Module clavier indisponible.".to_string())?;
-        SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), Some(HINSTANCE(module.0)), 0)
-            .map_err(|_| "La gestion d’Échap est indisponible.".to_string())?;
-    }
-    Ok(())
+    // The hook's own thread, for the whole life of the application: the hook installed there,
+    // then its messages pumped (the hook is called from that loop). Setup waits for the outcome.
+    let (installed, outcome) = std::sync::mpsc::sync_channel::<Result<(), String>>(1);
+    std::thread::Builder::new()
+        .name("keyboard-hook".into())
+        .spawn(move || unsafe {
+            let mut message = MSG::default();
+            let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+            let hooked = GetModuleHandleW(None)
+                .map_err(|_| "Module clavier indisponible.".to_string())
+                .and_then(|module| {
+                    SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard), Some(HINSTANCE(module.0)), 0)
+                        .map_err(|_| "La gestion d’Échap est indisponible.".to_string())
+                });
+            let pump = hooked.is_ok();
+            let _ = installed.send(hooked.map(|_| ()));
+            if pump {
+                while GetMessageW(&mut message, None, 0, 0).0 > 0 {}
+            }
+        })
+        .map_err(|_| "La gestion du clavier est indisponible.".to_string())?;
+    outcome
+        .recv()
+        .map_err(|_| "La gestion du clavier est indisponible.".to_string())?
 }
 
 // After an Îlot choice (lot 3) the overlay is a pill the user may click (Undo, later) and

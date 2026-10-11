@@ -20,6 +20,10 @@ mod menu_memory;
 mod pasted;
 mod placement;
 mod probe;
+// The real replacement bench's native driver (scripts/test-replacement-windows.mjs): test
+// builds only, its one test ignored by default.
+#[cfg(test)]
+mod replacement_tests;
 mod selection_lines;
 mod settings;
 mod system_motion;
@@ -98,6 +102,9 @@ enum Repeat {
 struct Inner {
     settings: Settings,
     capture: Option<StoredCapture>,
+    /// The right of the capture's session to paste and undo (NATIVE-006), taken when it is
+    /// stored: the emergency exit revokes it without the lock, a paste in flight reads it again.
+    delivery: capture::Ticket,
     menu: Option<MenuSession>,
     menu_press: Option<MenuPress>,
     pending_capture: Option<Capture>,
@@ -300,6 +307,7 @@ impl Inner {
         Self {
             settings,
             capture: None,
+            delivery: capture::Ticket::current(),
             menu: None,
             menu_press: None,
             pending_capture: None,
@@ -779,7 +787,8 @@ fn without_keys(mut settings: Settings) -> Settings {
     }
     settings
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn get_settings(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
@@ -852,7 +861,8 @@ fn emit_shortcut_statuses(app: &AppHandle) {
 }
 /// The state of every binding: the settings window asks at load and follows the
 /// `shortcut-status` event (startup refusals, saves).
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn shortcut_status(state: State<'_, AppState>) -> Result<Vec<ShortcutStatus>, String> {
     current_shortcut_statuses(&state)
 }
@@ -894,7 +904,9 @@ fn register_shortcut_state(app: &AppHandle, value: &str) -> Result<(), (BindingS
             )
         })
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the save lock, the state lock and the disk. Each
+// window queues its saves, so their order holds.
+#[tauri::command(async)]
 fn save_settings(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -1053,7 +1065,8 @@ fn apply_settings(app: &AppHandle, state: &AppState, settings: Settings) -> Resu
 /// application starts over too. When Windows refuses the default menu chord, the menu keeps the
 /// one it had (settings::keep_menu_chord) and everything else is restored. Answers what is now
 /// saved, the keys to the windows that edit the connection only.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): a save (see `save_settings`).
+#[tauri::command(async)]
 fn reset_settings(
     window: tauri::WebviewWindow,
     app: AppHandle,
@@ -1097,7 +1110,8 @@ fn reset_settings(
 /// that Windows gives now (taken, then let go at once). None when Windows gives none of them.
 /// Never Ctrl+Shift+Space: Word types a non-breaking space with it, which French needs.
 const MENU_ALTERNATIVES: [&str; 3] = ["Ctrl+Alt+Shift+Space", "Alt+Shift+Space", "Ctrl+Alt+Home"];
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn suggest_shortcut(app: AppHandle, state: State<'_, AppState>) -> Result<Option<String>, String> {
     let used = state
         .inner
@@ -1174,6 +1188,7 @@ fn store_capture(
             None
         };
         i.capture = Some(captured);
+        i.delivery = capture::Ticket::current();
         i.menu = menu;
         i.execution = execution;
         i.visible = true;
@@ -1403,7 +1418,8 @@ fn replay_last(app: &AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): a whole capture (UI Automation, a synthetic copy).
+#[tauri::command(async)]
 fn capture_text(app: AppHandle, state: State<'_, AppState>) -> Result<Capture, String> {
     capture_with_binding(app, &state, None)
         .map_err(String::from)?
@@ -1942,7 +1958,8 @@ fn capture_opening(
     }
     result.map(Some)
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn frontend_ready(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -1959,6 +1976,9 @@ fn frontend_ready(
     Ok(pending)
 }
 
+// Kept on the main thread although it takes the state lock (NATIVE-005): the page sends it
+// without waiting, and a relaunch right after must start after it (two `async` starts may run in
+// either order, and the older one would then cancel the newer).
 #[tauri::command]
 fn translate(
     app: AppHandle,
@@ -2341,7 +2361,7 @@ fn schedule_auto_delivery(app: &AppHandle) {
                     Ok(target)
                 }
             })
-            .and_then(|target| capture::paste(target, &result.translated_text, true));
+            .and_then(|target| capture::paste(target, &result.translated_text, true, i.delivery));
         // Under the Îlot (lot 9): the pasted text is found at once, still under the lock (no
         // new capture in between), for the pill's place, the marks and Undo.
         let applied = match (&outcome, &target) {
@@ -2506,7 +2526,8 @@ fn last_line(lines: &[Rect]) -> Option<Rect> {
 /// pill's size, logical. The answer is relative to the overlay window as it stands, logical;
 /// `inside` false means the pill would leave the window: `move_overlay` first. Estimated from
 /// the old selection when the pasted text could not be found.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock, released before the window is read.
+#[tauri::command(async)]
 fn result_pill(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2776,6 +2797,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             return Err("Ce résultat n’est plus actif.".into());
         }
         let strategy = i.settings.undo_strategy;
+        let delivery = i.delivery;
         let Some(applied) = i.applied.as_mut().filter(|a| a.request_id == request_id) else {
             return Err("Ce résultat n’est plus actif.".into());
         };
@@ -2810,7 +2832,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             original: &applied.original,
             pasted: &applied.pasted,
         };
-        let undone = pasted::undo(&target, strategy, true);
+        let undone = pasted::undo(&target, strategy, true, delivery);
         i.touch();
         drop(i);
         let outcome = match undone {
@@ -2852,7 +2874,8 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
     .await
     .map_err(|_| "L’annulation a été interrompue.".to_string())?
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock and the clipboard.
+#[tauri::command(async)]
 fn copy_result(state: State<'_, AppState>, request_id: String) -> Result<(), String> {
     let r = result_for(&state, &request_id)?;
     // Our own write must not count as a fresh copy for the next shortcut.
@@ -2893,7 +2916,9 @@ async fn replace_result(
             );
         }
         // Held through the paste, as for the automatic one: nothing commits in between.
-        let pasted = target.and_then(|target| capture::paste(&target, &r.translated_text, true));
+        let ticket = i.delivery;
+        let pasted =
+            target.and_then(|target| capture::paste(&target, &r.translated_text, true, ticket));
         i.touch();
         drop(i);
         match &pasted {
@@ -3019,6 +3044,9 @@ fn force_close(app: &AppHandle, why: &'static str) {
         host::hide_handle(overlay);
     };
     silence();
+    // NATIVE-006: before the lock is asked for. A paste that holds it sends no Ctrl+V after this
+    // (it reads its session's ticket again right before the chord).
+    capture::revoke_deliveries();
     halo::hide(app);
     backdrop::hide(app, "overlay");
     let handle = app.clone();
@@ -3270,7 +3298,8 @@ fn show_settings(
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): it waits for the state lock, which a paste may hold.
+#[tauri::command(async)]
 fn open_settings(
     app: AppHandle,
     field: Option<String>,
@@ -3736,7 +3765,9 @@ fn remembered_process(
 ) -> Option<String> {
     process.filter(|_| !instruction && !simulated)
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock (released before the window is
+// read) and the menu memory on disk. The page waits for its answer before `translate`.
+#[tauri::command(async)]
 fn choose_action(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -3888,6 +3919,9 @@ fn validate_frame(frame: &SurfaceRegion, width: f64, height: f64) -> Result<(), 
 
 /// The reading budget is spent: the frontend dims the glass before it leaves. While it
 /// dims, Escape is the user's again (no scope); an approach re-arms it through `position`.
+// On the main thread on purpose (NATIVE-005 left it there): the page sends it without waiting,
+// and only the main thread keeps two of them in order (a `false` overtaking a later `true` would
+// leave Escape armed while the glass dims). Its lock is brief.
 #[tauri::command]
 fn overlay_dimming(
     app: AppHandle,
@@ -3977,7 +4011,9 @@ fn validate_regions(regions: &[SurfaceRegion], width: f64, height: f64) -> Resul
     }
     Ok(())
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the state lock is never held while the window is
+// read or moved.
+#[tauri::command(async)]
 fn start_drag(
     app: AppHandle,
     window: tauri::WebviewWindow,
@@ -4308,7 +4344,8 @@ async fn try_model(
     Ok(result)
 }
 /// The journal: the 500 last entries, the oldest first. Never a text, never a whole key.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the journal's lock, which a write to disk may hold.
+#[tauri::command(async)]
 fn get_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
@@ -4317,7 +4354,8 @@ fn get_diagnostics(
     Ok(state.diagnostics.list())
 }
 /// Empties the journal, in memory and on disk.
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the journal on disk.
+#[tauri::command(async)]
 fn clear_diagnostics(
     window: tauri::WebviewWindow,
     state: State<'_, AppState>,
@@ -4363,11 +4401,13 @@ fn open_stores(
 fn settings_recovery(state: State<'_, AppState>) -> Option<SettingsRecovery> {
     state.settings_recovery.clone()
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the history on disk (SQLite, DPAPI).
+#[tauri::command(async)]
 fn get_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, String> {
     state.history.list()
 }
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): the history on disk.
+#[tauri::command(async)]
 fn delete_history(state: State<'_, AppState>, id: Option<String>) -> Result<(), String> {
     state.history.delete(id.as_deref())
 }
@@ -5945,6 +5985,7 @@ mod tests {
             selection_len: 5,
             editable: true,
             check: types::TargetCheck::Uia,
+            copy_witness: false,
         };
         let ready = || {
             let mut i = Inner::new(Settings::default());

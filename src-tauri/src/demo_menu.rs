@@ -21,7 +21,8 @@ fn allowed(demo: bool, probe: bool, window: &str, ilot: bool) -> Result<(), &'st
     Ok(())
 }
 
-#[tauri::command]
+// Off the main thread (`async`, NATIVE-005): a capture, under the state lock.
+#[tauri::command(async)]
 pub(crate) fn demo_menu_capture(
     app: AppHandle,
     window: tauri::WebviewWindow,

@@ -350,11 +350,16 @@ pub fn undone_in(before: &str, now: &str, pasted: &str, original: &str) -> bool 
 /// front, checks the target after that, waits for the keys to be up, checks again, then
 /// sends Ctrl+Z (`keystroke`) or selects the pasted text and pastes the original over it
 /// (`repaste`, the clipboard kept as for any paste). Ok(true) when the original reads back.
+/// `ticket` is the session's (NATIVE-006): revoked, no key is sent (refused).
 pub fn undo(
     target: &UndoTarget,
     strategy: UndoStrategy,
     reactivate: bool,
+    ticket: capture::Ticket,
 ) -> Result<bool, UndoFailure> {
+    if !ticket.live() {
+        return Err(UndoFailure::Refused(capture::revoked()));
+    }
     #[cfg(windows)]
     if reactivate && crate::host::foreground() != target.window {
         use windows::Win32::{Foundation::HWND, UI::WindowsAndMessaging::SetForegroundWindow};
@@ -378,6 +383,9 @@ pub fn undo(
         UndoStrategy::Keystroke => {
             // The whole field as it reads with the pasted text: the proof of last resort.
             let before = capture::field_text(target.window);
+            if !ticket.live() {
+                return Err(UndoFailure::Refused(capture::revoked()));
+            }
             crate::host::send_undo_chord().map_err(|sent| {
                 let error = AppError::new(
                     ErrorKind::PasteBlocked,
@@ -448,8 +456,8 @@ pub fn undo(
                 check: TargetCheck::Uia,
             };
             // Every refusal of the paste comes before its chord: nothing was written.
-            let delivery =
-                capture::paste(&identity, target.original, false).map_err(UndoFailure::Refused)?;
+            let delivery = capture::paste(&identity, target.original, false, ticket)
+                .map_err(UndoFailure::Refused)?;
             Ok(delivery.confirmed)
         }
     }
@@ -551,8 +559,11 @@ mod tests {
             original: "Bonjour",
             pasted: "Salut",
         };
+        let _epoch = capture::EPOCH_TESTS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         for strategy in [UndoStrategy::Keystroke, UndoStrategy::Repaste] {
-            match undo(&target, strategy, false) {
+            match undo(&target, strategy, false, capture::Ticket::current()) {
                 Err(UndoFailure::Refused(error)) => {
                     assert_eq!(error.kind, ErrorKind::TargetChanged)
                 }

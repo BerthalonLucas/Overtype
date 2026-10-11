@@ -5,6 +5,7 @@ use crate::types::{
     TargetIdentity,
 };
 use arboard::Clipboard;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use uiautomation::{
     patterns::UIValuePattern,
@@ -70,6 +71,45 @@ pub(crate) fn focused_element() -> Option<UIElement> {
         return None;
     }
     ui_automation().ok()?.get_focused_element().ok()
+}
+
+/// NATIVE-006: the epoch of the deliveries. The emergency exit (`force_close`) bumps it before it
+/// waits for the state lock, which a paste in flight may hold: every ticket taken before that is
+/// dead, whoever holds the lock.
+static DELIVERY_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// The right of a bubble's session to send keys into its source (a paste, an undo), taken when
+/// its capture is stored. Read again by the paste and the undo right before each key they send,
+/// without any lock: a revoked ticket sends nothing more.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ticket(u64);
+
+impl Ticket {
+    pub fn current() -> Self {
+        Self(DELIVERY_EPOCH.load(Ordering::SeqCst))
+    }
+    /// No emergency exit since it was taken.
+    pub fn live(self) -> bool {
+        DELIVERY_EPOCH.load(Ordering::SeqCst) == self.0
+    }
+}
+
+/// Every ticket taken so far is dead (the emergency exit). Any thread, never a lock.
+pub fn revoke_deliveries() {
+    DELIVERY_EPOCH.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Unit tests that take a ticket and the one that revokes run one at a time (the epoch is global).
+#[cfg(test)]
+pub(crate) static EPOCH_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// What a revoked ticket answers: the bubble was closed, nothing is sent.
+pub(crate) fn revoked() -> AppError {
+    AppError::new(
+        ErrorKind::Cancelled,
+        "La bulle a été fermée : rien n’a été collé.",
+    )
+    .because("delivery revoked")
 }
 
 /// Faults the real replacement bench injects (scripts/test-replacement-windows.mjs). Test
@@ -1015,8 +1055,18 @@ pub(crate) fn field_text(window: isize) -> Option<String> {
 /// identity, waits for the shortcut chord to be released, keeps the clipboard, writes
 /// the result, sends one Ctrl+V, then reads the field back when something can read it
 /// and puts the clipboard back while it still holds our write. `reactivate` (the menu
-/// of the glass) brings the source window back to the front first.
-pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<Delivery, AppError> {
+/// of the glass) brings the source window back to the front first. `ticket` is the session's
+/// (NATIVE-006): read again before each step that acts on the source, and last right before the
+/// chord; revoked, nothing more is sent and the clipboard comes back.
+pub fn paste(
+    target: &TargetIdentity,
+    value: &str,
+    reactivate: bool,
+    ticket: Ticket,
+) -> Result<Delivery, AppError> {
+    if !ticket.live() {
+        return Err(revoked());
+    }
     paste_preflight(target, value)?;
     // Windows would drop our keys (the window was started as administrator): nothing is sent.
     if crate::host::window_protected(target.native_window) {
@@ -1042,12 +1092,18 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     released(crate::host::wait_modifiers_released(CHORD_RELEASE))?;
     validate_target(target)?;
     if target.check == TargetCheck::Copy {
+        if !ticket.live() {
+            return Err(revoked());
+        }
         control_copy(target)?;
     }
     // What the field reads before the paste: a field that reads exactly the same afterwards
     // was not written (0.6: a PDF in a browser used to end on the check of a success).
     let before = field_text(target.native_window);
     crate::clipboard_guard::settle_late(crate::host::last_input_tick);
+    if !ticket.live() {
+        return Err(revoked());
+    }
     // NATIVE-004: a clipboard that cannot be kept whole is never written over (nothing pasted).
     let take = || crate::clipboard_guard::Keeper::take().map_err(unkept_paste);
     let mut keeper = take()?;
@@ -1064,6 +1120,12 @@ pub fn paste(target: &TargetIdentity, value: &str, reactivate: bool) -> Result<D
     if let Err(error) = validate_target(target) {
         let _ = keeper.restore_ours();
         return Err(error);
+    }
+    // The last look before the chord: an emergency exit since then, even under the state lock
+    // this paste holds, and no Ctrl+V leaves (NATIVE-006).
+    if !ticket.live() {
+        let _ = keeper.restore_ours();
+        return Err(revoked());
     }
     if let Err(sent) = crate::host::send_paste_chord() {
         // A part of the chord left: the target may still read the clipboard for a moment.
@@ -1245,6 +1307,18 @@ fn control_text(hwnd: isize) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_emergency_exit_kills_the_tickets_taken_before_it_only() {
+        let _epoch = EPOCH_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+        let before = Ticket::current();
+        assert!(before.live());
+        revoke_deliveries();
+        assert!(!before.live());
+        let after = Ticket::current();
+        assert!(after.live());
+        assert_ne!(before, after);
+    }
 
     #[test]
     fn the_first_line_of_a_document_loses_the_margin_its_rectangle_included() {
@@ -1783,7 +1857,12 @@ mod tests {
             "window 1 is never the foreground"
         );
         assert_eq!(
-            paste(&target, "ok", false).unwrap_err().kind,
+            {
+                let _epoch = EPOCH_TESTS.lock().unwrap_or_else(|p| p.into_inner());
+                paste(&target, "ok", false, Ticket::current())
+                    .unwrap_err()
+                    .kind
+            },
             ErrorKind::TargetChanged,
             "refused before any key or clipboard"
         );

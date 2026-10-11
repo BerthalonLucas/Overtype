@@ -200,7 +200,7 @@ impl Bench {
             .unwrap_or(false)
             .then(|| clip::race_after_paste(value.clone(), target.native_window));
         let started = Instant::now();
-        let outcome = capture::paste(&target, &value, true);
+        let outcome = capture::paste(&target, &value, true, capture::Ticket::current());
         let took = started.elapsed().as_millis() as u64;
         let raced = racer.map(|racer| racer.join().unwrap_or(false));
         match outcome {
@@ -244,7 +244,12 @@ impl Bench {
             original: &applied.original,
             pasted: &applied.pasted,
         };
-        match pasted::undo(&target, UndoStrategy::Keystroke, true) {
+        match pasted::undo(
+            &target,
+            UndoStrategy::Keystroke,
+            true,
+            capture::Ticket::current(),
+        ) {
             Ok(confirmed) => json!({"ok": true, "confirmed": confirmed}),
             Err(pasted::UndoFailure::Refused(error)) => {
                 let mut answer = refused(&error);
@@ -283,7 +288,12 @@ impl Bench {
             return json!({"ok": false, "message": "no target"});
         };
         host::faults::cut_next_chord(command["taken"].as_u64().unwrap_or(1) as usize);
-        let outcome = capture::paste(&target, text_arg(command, "value"), true);
+        let outcome = capture::paste(
+            &target,
+            text_arg(command, "value"),
+            true,
+            capture::Ticket::current(),
+        );
         std::thread::sleep(Duration::from_millis(150));
         let mut answer = match outcome {
             Ok(delivery) => json!({"ok": true, "confirmed": delivery.confirmed}),
@@ -295,10 +305,11 @@ impl Bench {
     }
 
     /// NATIVE-006, the order of `force_close` around a delivery: the delivery holds the state
-    /// lock through `capture::paste` (as `schedule_auto_delivery` does) while UI Automation
-    /// hangs for `stallMs`; `closeAfterMs` later the emergency exit asks for the same lock and
-    /// forgets the state (`Inner::close_now`). The bubble itself is hidden at once by handle in
-    /// the application; there is none here. Answers when each step happened.
+    /// lock through `capture::paste` (as `schedule_auto_delivery` does, with the session's ticket
+    /// taken before) while UI Automation hangs for `stallMs`; `closeAfterMs` later the emergency
+    /// exit revokes the deliveries, then asks for the same lock and forgets the state
+    /// (`Inner::close_now`). The bubble itself is hidden at once by handle in the application;
+    /// there is none here. Answers when each step happened.
     fn close_during_paste(&mut self, command: &Value) -> Value {
         let Some(target) = self.target.take() else {
             return json!({"ok": false, "message": "no target"});
@@ -309,18 +320,21 @@ impl Bench {
         let inner = std::sync::Arc::new(std::sync::Mutex::new(crate::Inner::new(
             crate::types::Settings::default(),
         )));
+        let ticket = capture::Ticket::current();
         let started = Instant::now();
         let delivery = {
             let inner = inner.clone();
             std::thread::spawn(move || {
                 let _held = inner.lock().unwrap_or_else(|p| p.into_inner());
                 capture::faults::stall_next_uia(stall);
-                let outcome = capture::paste(&target, &value, true);
+                let outcome = capture::paste(&target, &value, true, ticket);
                 (outcome, started.elapsed())
             })
         };
         std::thread::sleep(close_after);
         let requested = started.elapsed();
+        // As `force_close`: revoked first, without the lock the delivery holds.
+        capture::revoke_deliveries();
         let was = match inner.lock() {
             Ok(mut i) => i.close_now(),
             Err(_) => "state unavailable",

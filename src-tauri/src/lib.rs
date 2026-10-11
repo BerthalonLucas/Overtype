@@ -102,6 +102,9 @@ enum Repeat {
 struct Inner {
     settings: Settings,
     capture: Option<StoredCapture>,
+    /// The right of the capture's session to paste and undo (NATIVE-006), taken when it is
+    /// stored: the emergency exit revokes it without the lock, a paste in flight reads it again.
+    delivery: capture::Ticket,
     menu: Option<MenuSession>,
     menu_press: Option<MenuPress>,
     pending_capture: Option<Capture>,
@@ -304,6 +307,7 @@ impl Inner {
         Self {
             settings,
             capture: None,
+            delivery: capture::Ticket::current(),
             menu: None,
             menu_press: None,
             pending_capture: None,
@@ -1178,6 +1182,7 @@ fn store_capture(
             None
         };
         i.capture = Some(captured);
+        i.delivery = capture::Ticket::current();
         i.menu = menu;
         i.execution = execution;
         i.visible = true;
@@ -2345,7 +2350,7 @@ fn schedule_auto_delivery(app: &AppHandle) {
                     Ok(target)
                 }
             })
-            .and_then(|target| capture::paste(target, &result.translated_text, true));
+            .and_then(|target| capture::paste(target, &result.translated_text, true, i.delivery));
         // Under the Îlot (lot 9): the pasted text is found at once, still under the lock (no
         // new capture in between), for the pill's place, the marks and Undo.
         let applied = match (&outcome, &target) {
@@ -2780,6 +2785,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             return Err("Ce résultat n’est plus actif.".into());
         }
         let strategy = i.settings.undo_strategy;
+        let delivery = i.delivery;
         let Some(applied) = i.applied.as_mut().filter(|a| a.request_id == request_id) else {
             return Err("Ce résultat n’est plus actif.".into());
         };
@@ -2814,7 +2820,7 @@ async fn undo_result(app: AppHandle, request_id: String) -> Result<UndoOutcome, 
             original: &applied.original,
             pasted: &applied.pasted,
         };
-        let undone = pasted::undo(&target, strategy, true);
+        let undone = pasted::undo(&target, strategy, true, delivery);
         i.touch();
         drop(i);
         let outcome = match undone {
@@ -2897,7 +2903,9 @@ async fn replace_result(
             );
         }
         // Held through the paste, as for the automatic one: nothing commits in between.
-        let pasted = target.and_then(|target| capture::paste(&target, &r.translated_text, true));
+        let ticket = i.delivery;
+        let pasted =
+            target.and_then(|target| capture::paste(&target, &r.translated_text, true, ticket));
         i.touch();
         drop(i);
         match &pasted {
@@ -3023,6 +3031,9 @@ fn force_close(app: &AppHandle, why: &'static str) {
         host::hide_handle(overlay);
     };
     silence();
+    // NATIVE-006: before the lock is asked for. A paste that holds it sends no Ctrl+V after this
+    // (it reads its session's ticket again right before the chord).
+    capture::revoke_deliveries();
     halo::hide(app);
     backdrop::hide(app, "overlay");
     let handle = app.clone();

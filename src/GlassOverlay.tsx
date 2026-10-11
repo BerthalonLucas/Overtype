@@ -22,7 +22,6 @@ import {
   dimming,
   frameSide,
   glass,
-  halo,
   readerMetrics,
   readingBudget,
   remainingAfterLeave,
@@ -30,6 +29,7 @@ import {
   type IlotSide,
   type ShortMetrics,
 } from './layout';
+import { hostOf } from './connection/endpoint';
 import { breakable } from './text';
 import { AnimatedIcon, BubbleMenu, BubbleMenuTrigger, Icon, IconButton } from './ui';
 import { t as tNow, useT } from './i18n';
@@ -417,8 +417,6 @@ function GlassSession({ controller }: { controller: TranslationController }) {
   const servers = settings?.servers ?? [];
   const currentServer = servers.findIndex((server) => server.id === (state.serverId ?? settings?.defaultServerId));
   const nextServer = servers.length > 1 ? servers[(Math.max(currentServer, 0) + 1) % servers.length] : null;
-  const serverLabel = (server: { id: string; name: string; endpoint: string }) =>
-    server.name || server.endpoint.replace(/^https?:\/\//, '') || server.id;
   // Under the Îlot the working pill enters from the selection's side, as the lab's surfaces do
   // (Surface.jsx:46, Simulator.jsx:68): down from it when the glass hangs below the selection, up
   // toward it above, up from the bottom edge (review of bc57857, finding 8). The side is read once
@@ -861,7 +859,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
           ...(nextServer
             ? [
                 {
-                  label: t('menu.rerun', { server: serverLabel(nextServer) }),
+                  label: t('menu.rerun', { server: nextServer.name || hostOf(nextServer.endpoint) || nextServer.id }),
                   disabled: streaming || replacing || Boolean(state.capture?.replay),
                   run: act(() => {
                     if (state.capture) start(state.capture, { serverId: nextServer.id });
@@ -941,7 +939,7 @@ function GlassSession({ controller }: { controller: TranslationController }) {
                   </IconButton>
                 )}
                 <BubbleMenuTrigger onClick={() => setMenuOpen((value) => !value)} pressed={menuVisible} />
-                <IconButton label={t('glass.close')} className="pill-close" onClick={cancelAndDismiss}>
+                <IconButton label={t('glass.close')} onClick={cancelAndDismiss}>
                   <Icon name="close" size={14} />
                 </IconButton>
               </motion.div>

@@ -14,9 +14,7 @@ body.flowtranslate-setup { min-height: 0; height: 100vh; overflow: hidden; backg
   position: relative; flex: none; overflow: hidden; isolation: isolate; --ft-titlebar-h: 32px;
   max-width: 100vw; max-height: 100vh;
   border-radius: var(--ft-r-float); color: var(--ft-text); font-family: var(--ft-font); font-size: var(--ft-body-size);
-  background: var(--ft-float-grain), var(--ft-float-tint);
-  -webkit-backdrop-filter: var(--ft-float-blur); backdrop-filter: var(--ft-float-blur);
-  box-shadow: var(--ft-float-edge), var(--ft-float-rim), var(--ft-float-shadow);
+  /* Its glass: .ft-glass (src/components/base.css). */
   will-change: transform, opacity;
 }
 /* Native: the whole page. Windows draws the frost behind a transparent page (the tint and the

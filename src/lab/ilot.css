@@ -7,7 +7,7 @@
 .ilot-demo-anchor { position: absolute; left: 150px; top: calc(100% + 6px); }
 .ilot-demo.is-bottom .ilot-demo-anchor { top: auto; bottom: calc(100% + 6px); }
 /* Stand-in for the lot 8 orb: a still dot in the middle of the pill. */
-.ilot-demo-orb { display: block; width: 14px; height: 14px; border-radius: 50%; background: conic-gradient(#BC82F3, #F5B9EA, #8D9FFF, #AA6EEE, #FF6778, #FFBA71, #C686FF, #BC82F3); }
+.ilot-demo-orb { display: block; width: 14px; height: 14px; border-radius: 50%; background: conic-gradient(var(--brand-stops-rich)); }
 .ilot-demo-bar { position: fixed; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; color: rgb(var(--ink-rgb) / .8); }
 .ilot-demo-bar output { flex: 1 1 180px; }
 .ilot-demo-bar button { padding: 4px 9px; border: 0; border-radius: 7px; color: rgb(var(--ink-rgb)); background: rgb(var(--ink-rgb) / .08); font-size: 12px; }

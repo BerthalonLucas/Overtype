@@ -30,7 +30,7 @@ export function PhaseCaption({ index, hidden }: { index: number; hidden?: boolea
               <b>{index + 1}</b>
               <i>/ {phaseIds.length}</i>
             </span>
-            <span className="dm-caption-text">{t(captionKey(id))}</span>
+            <span>{t(captionKey(id))}</span>
           </motion.div>
         )}
       </AnimatePresence>

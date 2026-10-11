@@ -10,7 +10,7 @@ import {
   reducedFadeMs,
   springTransition,
 } from './tokens';
-import { contentPresence, stateTransition, surfacePresence } from './presence';
+import { contentPresence, surfacePresence } from './presence';
 
 describe('motion presets (design-lab/src/data.js:80-81)', () => {
   it('keeps every value of the lab presets, not only the bounce', () => {
@@ -105,12 +105,6 @@ describe('presence', () => {
         expect(reducedFadeMs).toBeLessThanOrEqual(150);
       }
     }
-    expect(stateTransition(motionPresets.smooth, true)).toEqual({ duration: 0 });
-    expect(stateTransition(motionPresets.smooth, false)).toEqual({
-      type: 'spring',
-      visualDuration: 0.45 / 1.2,
-      bounce: 0,
-    });
   });
 
   it('cross-fades content: the new one after min(90, content / 2), the old one in 0.6 × content', () => {

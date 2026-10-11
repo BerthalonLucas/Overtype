@@ -9,10 +9,8 @@ import { surfaceRadius } from './motion/surface';
 export const glass = {
   shortWidth: 380,
   radius: 28,
-  pillHeight: 28,
   pillInset: 16,
   overlap: 14,
-  menuWidth: 196,
   menuTop: 20,
   // Text paddings: top, side, bottom (short glass / reader band).
   shortPadding: { top: 16, side: 22, bottom: 13 },
@@ -25,7 +23,7 @@ export const halo = { x: 32, top: 20, bottom: 44, bottomForm: 16 };
 // The tallest menu: six entries (Original, Remplacer or Réessayer, Relancer, Réglages,
 // Fermer, one spare) of 32.9 px each, 4 px padding and a 1 px border each side, a 1 px
 // separator with 3 px margins. The reserve keeps room for a seventh entry.
-export const menu = { width: 196, reserve: 236 };
+export const menu = { reserve: 236 };
 
 // Font size / line height of each form, per preset (Réglages « Taille du texte »).
 export const presets: Record<TextSize, { short: [number, number]; reader: [number, number] }> = {

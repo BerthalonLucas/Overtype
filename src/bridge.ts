@@ -9,9 +9,10 @@ import {
   localizeDefaults,
 } from './actionDefaults';
 import { resetFrom } from './settings/reset';
+import { emptyServer } from './settings/servers';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
-import { listen as tauriListen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow, monitorFromPoint } from '@tauri-apps/api/window';
 import {
   connectionCommand,
   isConnectionCommand,
@@ -32,7 +33,6 @@ import type {
   ProbeResult,
   Rect,
   Refusal,
-  Screen,
   Server,
   Settings,
   SettingsField,
@@ -78,7 +78,6 @@ type EventName =
 type Handler<T> = (payload: T) => void;
 
 // A fresh install, as Rust's Settings::default(): one server, nothing set up, the setup to do.
-const emptyServer: Server = { id: 's1', name: '', endpoint: '', apiKey: '', noKey: false, model: '' };
 const defaultSettings: Settings = {
   defaultActionId,
   actions: structuredClone(defaultActions),
@@ -98,7 +97,7 @@ const defaultSettings: Settings = {
   pillPlacement: 'below',
   glassMaterial: 'glass',
   menuActionIds: [...defaultMenuActionIds],
-  servers: [structuredClone(emptyServer)],
+  servers: [emptyServer('s1')],
   defaultServerId: 's1',
   setupDone: false,
   changedWordsStyle: 'encre',
@@ -110,7 +109,7 @@ function previewServers(search: string): Pick<Settings, 'servers' | 'defaultServ
   const params = new URLSearchParams(search);
   const fresh = params.get('window') === 'setup' && params.get('replay') !== '1' && params.get('stage') !== 'demo';
   const asked = params.get('servers') ?? (fresh ? 'empty' : 'one');
-  if (asked === 'empty') return { servers: [structuredClone(emptyServer)], defaultServerId: 's1', setupDone: false };
+  if (asked === 'empty') return { servers: [emptyServer('s1')], defaultServerId: 's1', setupDone: false };
   const first: Server = {
     id: 's1',
     name: '',
@@ -257,7 +256,6 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
   }
   // The preview registers every chord: its proposal is Rust's first.
   if (name === 'suggest_shortcut') return 'Ctrl+Alt+Shift+Space' as T;
-  if (name === 'capture_text') return structuredClone(demoCapture) as T;
   if (name === 'frontend_ready') return null as T;
   // The preview never updates; `?update=0.9.0` shows a version waiting.
   if (name === 'update_status' || name === 'check_update')
@@ -401,10 +399,7 @@ async function command<T>(name: string, args?: Record<string, unknown>): Promise
 // receive the settings with their API keys meant for the Settings window, and the Settings
 // window the keyless copy meant for the overlay (which it could then save back, losing the keys).
 async function event<T>(name: EventName, handler: Handler<T>): Promise<Unlisten> {
-  if (native)
-    return tauriListen<T>(name, (e) => handler(e.payload), {
-      target: { kind: 'WebviewWindow', label: getCurrentWebviewWindow().label },
-    });
+  if (native) return getCurrentWebviewWindow().listen<T>(name, (e) => handler(e.payload));
   const set = demoListeners.get(name) ?? new Set();
   set.add(handler as (payload: never) => void);
   demoListeners.set(name, set);
@@ -415,25 +410,21 @@ export const bridge = {
   native,
   getSettings: () => command<Settings>('get_settings'),
   saveSettings: (settings: Settings) => command<void>('save_settings', { settings }),
-  captureText: () => command<Capture>('capture_text'),
   frontendReady: () => command<Capture | null>('frontend_ready'),
   closeSettings: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       return getCurrentWindow().close();
     }
     location.assign('/');
   },
   resizeSettingsCorner: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().startResizeDragging('SouthEast');
     }
   },
   // The settings window's title bar text (taskbar, Alt+Tab) follows the interface language.
   setSettingsTitle: async (title: string) => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().setTitle(title);
     } else document.title = title;
   },
@@ -443,7 +434,6 @@ export const bridge = {
   windowShown: async (): Promise<boolean> => {
     if (!native) return true;
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       return await getCurrentWindow().isVisible();
     } catch {
       return true;
@@ -509,13 +499,11 @@ export const bridge = {
   // The framed windows without decorations (settings, setup): drag by their own title bar, minimise.
   dragWindow: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().startDragging();
     }
   },
   minimizeWindow: async () => {
     if (native) {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().minimize();
     }
   },
@@ -537,7 +525,6 @@ export const bridge = {
   // so the Îlot knows on which side of the selection it opened; null outside the native app.
   windowPosition: async (): Promise<{ x: number; y: number } | null> => {
     if (!native) return null;
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const position = await getCurrentWindow().innerPosition();
     return { x: position.x, y: position.y };
   },
@@ -546,7 +533,6 @@ export const bridge = {
   // it (src/layout.ts ilotShift). null outside the native app, or off every screen.
   workAreaAt: async (x: number, y: number): Promise<Rect | null> => {
     if (!native) return null;
-    const { monitorFromPoint } = await import('@tauri-apps/api/window');
     const monitor = await monitorFromPoint(x, y);
     if (!monitor) return null;
     const { position, size } = monitor.workArea;
@@ -587,10 +573,6 @@ export const bridge = {
   // Browser preview only: what Rust emits when the shortcut finds nothing to translate.
   demoNotice: (message: string) => {
     if (!native) emit('capture-notice', { message });
-  },
-  // Browser preview only: what Rust emits when the cursor changes screen under a bottom form.
-  demoWorkArea: (screen: Screen) => {
-    if (!native) emit('work-area', screen);
   },
   // Lot 10: the state of every binding (a chord another application holds is 'taken').
   shortcutStatus: () => command<ShortcutStatus[]>('shortcut_status'),

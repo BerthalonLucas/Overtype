@@ -316,7 +316,14 @@ test('the grid: order from the keyboard, letters checked in line, six actions at
     'Shorten',
     'Write email',
   ]);
-  await expect(page.locator('.st-ilot-label')).toHaveText(['Fix', 'Translate', 'Pro', 'Shorten', 'Email', 'Ask']);
+  await expect(page.locator('.st-ilot-stage .ilot-tile-label')).toHaveText([
+    'Fix',
+    'Translate',
+    'Pro',
+    'Shorten',
+    'Email',
+    'Ask',
+  ]);
   await page.getByRole('button', { name: 'Move Translate up', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect
@@ -356,7 +363,7 @@ test('the grid: order from the keyboard, letters checked in line, six actions at
     .poll(() => saved(page))
     .toMatchObject({ menuActionIds: ['correct', 'translate', 'professionalize', 'email'] });
   expect((await saved(page))?.actions.find((a) => a.id === 'shorten')).not.toHaveProperty('key');
-  await expect(page.locator('.st-ilot-label')).toHaveText(['Fix', 'Translate', 'Pro', 'Email', 'Ask']);
+  await expect(page.locator('.st-ilot-stage .ilot-tile-label')).toHaveText(['Fix', 'Translate', 'Pro', 'Email', 'Ask']);
   await page.getByRole('switch', { name: 'Shorten in the menu', exact: true }).click();
   await expect
     .poll(() => saved(page))
@@ -376,7 +383,7 @@ test('the grid: order from the keyboard, letters checked in line, six actions at
   const last = await saved(page);
   expect(last?.menuActionIds).toHaveLength(6);
   expect(last?.actions.find((a) => a.id === last.menuActionIds[5])?.key).toBe('N');
-  await expect(page.locator('.st-ilot-tile')).toHaveCount(6);
+  await expect(page.locator('.st-ilot-stage .ilot-tile')).toHaveCount(6);
   await shot(page, 'e2e-actions-full');
 });
 
